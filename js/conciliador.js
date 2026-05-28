@@ -1492,7 +1492,11 @@ function exportarRefacturado() {
 // FISERV Y GETPOS SIN CRUCE
 // ══════════════════════════════════════════════════════════════════
 function renderNoCruzadasFis() {
-  const rows = window._FIS_NO_CRUZADAS || [];
+  // Recalcular dinámicamente para reflejar correcciones manuales aplicadas
+  const usedFis = new Set(RESULTADO.filter(r => r.proc && r.procEncontrada === 'FISERV').map(r => r.proc));
+  const rows = _FIS_NORM.length
+    ? _FIS_NORM.filter(r => !usedFis.has(r))
+    : (window._FIS_NO_CRUZADAS || []);
   const tbl  = document.getElementById('tbl-dif-fis');
   const stats= document.getElementById('dif-fis-stats');
   const cnt  = document.getElementById('cnt-dif-fis');
@@ -1520,7 +1524,11 @@ function renderNoCruzadasFis() {
 }
 
 function renderNoCruzadasGp() {
-  const rows = window._GP_NO_CRUZADAS || [];
+  // Recalcular dinámicamente para reflejar correcciones manuales aplicadas
+  const usedGp = new Set(RESULTADO.filter(r => r.proc && r.procEncontrada === 'GETPOS').map(r => r.proc));
+  const rows = _GP_NORM.length
+    ? _GP_NORM.filter(r => !usedGp.has(r))
+    : (window._GP_NO_CRUZADAS || []);
   const tbl  = document.getElementById('tbl-dif-gp');
   const stats= document.getElementById('dif-gp-stats');
   const cnt  = document.getElementById('cnt-dif-gp');
