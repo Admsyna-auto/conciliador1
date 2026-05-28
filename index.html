@@ -756,7 +756,10 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       <div class="cor-hdr-bar" style="border-left:3px solid var(--acc)">
         <span class="cor-hdr-title" style="color:var(--acc)">FISERV sin cruce con Skylab</span>
         <span class="cor-stats" id="dif-fis-stats"></span>
-        <button class="dl-btn dl-fis" style="margin-left:auto" onclick="exportarNoCruzadasFis()">⬇ Exportar</button>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button class="dl-btn" style="background:#1e3a5f;color:#93c5fd;border:1px solid #2d5a8e" onclick="exportarNoCruzadasFis()" title="Sin match al momento del cruce automático">⬇ Cruce inicial</button>
+          <button class="dl-btn dl-fis" onclick="exportarNoCruzadasFisConciliado()" title="Sin match descontando correcciones manuales">⬇ Cruce conciliado</button>
+        </div>
       </div>
       <div class="tbl-wrap"><table id="tbl-dif-fis"><thead></thead><tbody></tbody></table></div>
     </div>
@@ -764,7 +767,10 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       <div class="cor-hdr-bar" style="border-left:3px solid var(--grn)">
         <span class="cor-hdr-title" style="color:var(--grn)">GETPOS sin cruce con Skylab</span>
         <span class="cor-stats" id="dif-gp-stats"></span>
-        <button class="dl-btn dl-gp" style="margin-left:auto" onclick="exportarNoCruzadasGp()">⬇ Exportar</button>
+        <div style="margin-left:auto;display:flex;gap:6px">
+          <button class="dl-btn" style="background:#14342b;color:#6ee7b7;border:1px solid #1e5c45" onclick="exportarNoCruzadasGp()" title="Sin match al momento del cruce automático">⬇ Cruce inicial</button>
+          <button class="dl-btn dl-gp" onclick="exportarNoCruzadasGpConciliado()" title="Sin match descontando correcciones manuales">⬇ Cruce conciliado</button>
+        </div>
       </div>
       <div class="tbl-wrap"><table id="tbl-dif-gp"><thead></thead><tbody></tbody></table></div>
     </div>

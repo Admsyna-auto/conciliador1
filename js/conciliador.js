@@ -1554,17 +1554,47 @@ function renderNoCruzadasGp() {
 }
 
 function exportarNoCruzadasFis() {
+  // Cruce inicial: estado al momento del cruce automático (sin correcciones manuales)
   const rows = window._FIS_NO_CRUZADAS || [];
+  if (!rows.length) { alert('No hay datos del cruce inicial. Ejecutá el cruce primero.'); return; }
   const HDR = ['Fecha','Terminal','Sucursal','Tarjeta','Cuotas','Monto','Lote','Ticket','Autorización','Cód.Comercio'];
   const data = rows.map(r => [r.fecha, r.equipo||'', r.suc||'', r.tarjeta||'', r.cuotas||'',
     r.monto, r.lote||'', r.ticket||'', r.aut||'', r.comFis||'']);
-  _exportXlsx([HDR,...data], 'FISERV Sin Cruce', `FISERV_SinCruce_${hoy()}.xlsx`);
+  _exportXlsx([HDR,...data], 'FISERV Sin Cruce Inicial', `FISERV_SinCruce_Inicial_${hoy()}.xlsx`);
+}
+
+function exportarNoCruzadasFisConciliado() {
+  // Cruce conciliado: descuenta las correcciones manuales aplicadas
+  const usedFis = new Set(RESULTADO.filter(r => r.proc && r.procEncontrada === 'FISERV').map(r => r.proc));
+  const rows = _FIS_NORM.length
+    ? _FIS_NORM.filter(r => !usedFis.has(r))
+    : (window._FIS_NO_CRUZADAS || []);
+  if (!rows.length) { alert('No hay operaciones FISERV sin cruce.'); return; }
+  const HDR = ['Fecha','Terminal','Sucursal','Tarjeta','Cuotas','Monto','Lote','Ticket','Autorización','Cód.Comercio'];
+  const data = rows.map(r => [r.fecha, r.equipo||'', r.suc||'', r.tarjeta||'', r.cuotas||'',
+    r.monto, r.lote||'', r.ticket||'', r.aut||'', r.comFis||'']);
+  _exportXlsx([HDR,...data], 'FISERV Sin Cruce Conciliado', `FISERV_SinCruce_Conciliado_${hoy()}.xlsx`);
 }
 
 function exportarNoCruzadasGp() {
+  // Cruce inicial: estado al momento del cruce automático (sin correcciones manuales)
   const rows = window._GP_NO_CRUZADAS || [];
+  if (!rows.length) { alert('No hay datos del cruce inicial. Ejecutá el cruce primero.'); return; }
   const HDR = ['Fecha','Establecimiento','Sucursal','Marca','Plan','Monto','Cód.Aut.','Nro.Cupón'];
   const data = rows.map(r => [r.fecha, r.nombre||'', r.suc||'', r.marca||'', r.plan||'',
     r.monto, r.aut||'', r.cupon||'']);
-  _exportXlsx([HDR,...data], 'GETPOS Sin Cruce', `GETPOS_SinCruce_${hoy()}.xlsx`);
+  _exportXlsx([HDR,...data], 'GETPOS Sin Cruce Inicial', `GETPOS_SinCruce_Inicial_${hoy()}.xlsx`);
+}
+
+function exportarNoCruzadasGpConciliado() {
+  // Cruce conciliado: descuenta las correcciones manuales aplicadas
+  const usedGp = new Set(RESULTADO.filter(r => r.proc && r.procEncontrada === 'GETPOS').map(r => r.proc));
+  const rows = _GP_NORM.length
+    ? _GP_NORM.filter(r => !usedGp.has(r))
+    : (window._GP_NO_CRUZADAS || []);
+  if (!rows.length) { alert('No hay operaciones GETPOS sin cruce.'); return; }
+  const HDR = ['Fecha','Establecimiento','Sucursal','Marca','Plan','Monto','Cód.Aut.','Nro.Cupón'];
+  const data = rows.map(r => [r.fecha, r.nombre||'', r.suc||'', r.marca||'', r.plan||'',
+    r.monto, r.aut||'', r.cupon||'']);
+  _exportXlsx([HDR,...data], 'GETPOS Sin Cruce Conciliado', `GETPOS_SinCruce_Conciliado_${hoy()}.xlsx`);
 }
