@@ -162,6 +162,14 @@ function renderModuloDiferencias() {
     </div>`;
 
   renderTablaDif();
+
+  // Mostrar tab strip y actualizar contadores de no cruzadas
+  const strip = document.getElementById('tab-strip-dif');
+  if (strip) strip.style.display = 'flex';
+  const cntFis = document.getElementById('cnt-dif-fis');
+  if (cntFis) cntFis.textContent = (window._FIS_NO_CRUZADAS || []).length;
+  const cntGp = document.getElementById('cnt-dif-gp');
+  if (cntGp) cntGp.textContent = (window._GP_NO_CRUZADAS || []).length;
 }
 
 function renderTablaDif() {
