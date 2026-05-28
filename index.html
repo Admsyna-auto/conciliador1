@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Conciliador · Tarjetas</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Syne:wght@400;600;700;800&display=swap');
+
+/* ══════════════════════════════════════════════════════
+   TOKENS
+══════════════════════════════════════════════════════ */
+:root {
+  --bg:#050810;--s1:#0b0f1e;--s2:#111827;--s3:#1a2235;--s4:#202d42;
+  --b1:#1e2d45;--b2:#253552;--b3:#2d4166;
+  --acc:#4f8ef7;--cyn:#38bdf8;--grn:#34d399;
+  --yel:#fbbf24;--red:#f87171;--org:#fb923c;--vio:#a78bfa;
+  --txt:#e2e8f0;--m1:#8ba3c4;--m2:#566882;
+  --mono:'JetBrains Mono',monospace;
+  --head:'Syne',sans-serif;
+  --r4:4px;--r6:6px;--r8:8px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--txt);font-family:var(--mono);
+  height:100vh;display:flex;flex-direction:column;overflow:hidden}
+
+/* ══ TOPBAR ══════════════════════════════════════════ */
+.topbar{
+  height:46px;background:var(--s1);border-bottom:1px solid var(--b1);
+  display:flex;align-items:center;padding:0 20px;gap:14px;flex-shrink:0;
+}
+.brand{font-family:var(--head);font-weight:800;font-size:14px;letter-spacing:-.5px;
+  background:linear-gradient(135deg,var(--acc),var(--cyn));
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.topbar-sep{width:1px;height:18px;background:var(--b2)}
+.topbar-sub{font-size:9px;color:var(--m2);letter-spacing:1px;text-transform:uppercase}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+#save-indicator{font-size:9px;font-family:var(--mono);min-width:90px;text-align:right}
+.topbar-btn{
+  background:none;border:1px solid var(--b2);border-radius:var(--r4);
+  color:var(--m1);font-family:var(--mono);font-size:9px;padding:4px 10px;
+  cursor:pointer;transition:border-color .15s,color .15s;letter-spacing:.3px;
+}
+.topbar-btn:hover{border-color:var(--acc);color:var(--acc)}
+.topbar-btn.danger:hover{border-color:var(--red);color:var(--red)}
+#session-name{
+  font-size:10px;color:var(--m1);background:none;border:none;
+  border-bottom:1px solid transparent;padding:2px 4px;
+  font-family:var(--mono);cursor:pointer;max-width:200px;
+}
+#session-name:hover,#session-name:focus{
+  border-color:var(--b3);outline:none;color:var(--txt);
+}
+
+/* ══ MÓDULOS (tabs principales) ═════════════════════ */
+.modstrip{
+  background:var(--s1);border-bottom:1px solid var(--b1);
+  display:flex;padding:0 20px;gap:0;flex-shrink:0;
+}
+.mod-btn{
+  padding:10px 18px;background:none;border:none;border-bottom:3px solid transparent;
+  color:var(--m2);font-family:var(--head);font-size:11px;font-weight:600;
+  cursor:pointer;letter-spacing:.3px;transition:color .15s,border-color .15s;
+  margin-bottom:-1px;text-transform:uppercase;
+}
+.mod-btn.active{color:var(--cyn);border-color:var(--cyn)}
+.mod-btn:hover{color:var(--txt)}
+.mod-btn .cnt{
+  margin-left:6px;background:var(--b1);color:var(--m2);
+  padding:1px 6px;border-radius:3px;font-size:8px;font-family:var(--mono);
+}
+.mod-btn.active .cnt{background:rgba(56,189,248,.15);color:var(--cyn)}
+
+/* ══ BODY (área de trabajo) ══════════════════════════ */
+.app-body{display:flex;flex:1;overflow:hidden;min-height:0}
+
+/* ══ SIDEBAR ══════════════════════════════════════════ */
+.sidebar{
+  width:240px;flex-shrink:0;background:var(--s1);border-right:1px solid var(--b1);
+  display:flex;flex-direction:column;overflow-y:auto;overflow-x:hidden;
+}
+.sb-sec{border-bottom:1px solid var(--b1);padding:12px 13px 10px}
+.sb-lbl{font-size:8px;color:var(--m2);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:8px}
+
+/* FILE CARDS */
+.fc{
+  background:var(--s2);border:1px solid var(--b1);border-radius:var(--r6);
+  margin-bottom:6px;transition:border-color .15s;
+}
+.fc.ok{border-color:var(--grn)}
+.fc.opt{border-style:dashed}
+.fc.opt.ok{border-style:solid;border-color:var(--cyn)}
+.fc label{display:block;cursor:pointer;padding:9px 11px}
+.fc-top{display:flex;align-items:center;gap:7px;margin-bottom:2px}
+.fc-dot{width:18px;height:18px;border-radius:4px;display:flex;align-items:center;
+  justify-content:center;font-size:9px;font-weight:700;flex-shrink:0}
+.d-sky{background:#0f2544;color:var(--cyn)}.d-fis{background:#0f1e44;color:var(--acc)}
+.d-gp{background:#0f2d20;color:var(--grn)}.d-ter{background:#1a1f2e;color:var(--m1)}
+.d-enu{background:#1e1440;color:var(--vio)}.d-baj{background:#2d1a0f;color:var(--org)}
+.fc-name{font-size:10px;font-weight:600}
+.fc-req{font-size:7px;padding:1px 5px;border-radius:3px;background:var(--b1);
+  color:var(--m2);margin-left:auto}
+.fc-req.opt{color:var(--cyn);background:rgba(56,189,248,.1)}
+.fc-st{font-size:8px;color:var(--m2);padding-left:25px;margin-top:1px}
+.fc-st.ok{color:var(--grn)}
+input[type=file]{display:none}
+
+/* RUN */
+.run-btn{
+  margin:10px 12px 0;padding:10px;
+  background:linear-gradient(135deg,var(--acc),#2563eb);
+  color:#fff;border:none;border-radius:var(--r6);
+  font-family:var(--head);font-size:11px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;gap:6px;
+  transition:opacity .2s;letter-spacing:.3px;
+}
+.run-btn:hover:not(:disabled){opacity:.88}
+.run-btn:disabled{opacity:.3;cursor:not-allowed}
+.run-btn.running{background:linear-gradient(135deg,#1f2937,#111827);
+  animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+.prog{height:2px;background:var(--b1);margin:7px 12px 0;
+  border-radius:1px;overflow:hidden;display:none}
+.prog-bar{height:100%;background:linear-gradient(90deg,var(--acc),var(--cyn));
+  border-radius:1px;width:0%;transition:width .4s ease}
+
+/* PARAMS + EQUIV */
+.param{background:var(--s2);border:1px solid var(--b1);border-radius:var(--r6);
+  padding:8px 11px;font-size:8px;color:var(--m1);line-height:2}
+.param-row{display:flex;justify-content:space-between}
+.param-val{color:var(--cyn)}
+
+/* Equivalencias en sidebar */
+.equiv-row{display:grid;grid-template-columns:1fr 30px 1fr 24px;
+  gap:4px;align-items:center;margin-bottom:5px}
+.equiv-inp{background:var(--s3);border:1px solid var(--b2);border-radius:4px;
+  color:var(--txt);font-family:var(--mono);font-size:8px;padding:4px 6px;width:100%}
+.equiv-inp:focus{outline:none;border-color:var(--acc)}
+.equiv-arrow{font-size:9px;color:var(--m2);text-align:center}
+.equiv-del{background:none;border:1px solid var(--b2);border-radius:3px;
+  color:var(--m2);font-size:10px;cursor:pointer;width:20px;height:20px;
+  display:flex;align-items:center;justify-content:center}
+.equiv-del:hover{border-color:var(--red);color:var(--red)}
+.sb-add-btn{width:100%;padding:6px;background:var(--s3);border:1px dashed var(--b2);
+  border-radius:5px;color:var(--m2);font-family:var(--mono);font-size:8px;
+  cursor:pointer;transition:all .15s}
+.sb-add-btn:hover{border-color:var(--acc);color:var(--acc)}
+.sb-save-btn{width:100%;margin-top:5px;padding:7px;
+  background:linear-gradient(135deg,var(--acc),#2563eb);
+  color:#fff;border:none;border-radius:5px;font-family:var(--mono);
+  font-size:8px;font-weight:700;cursor:pointer;transition:opacity .15s}
+.sb-save-btn:hover{opacity:.85}
+
+/* ══ MAIN CONTENT ════════════════════════════════════ */
+.main-content{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
+
+/* ══ MÓDULO PANEL ════════════════════════════════════ */
+.mod-panel{display:none;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.mod-panel.active{display:flex}
+
+/* ══ TABS INTERNOS ═══════════════════════════════════ */
+.tab-strip{
+  background:var(--s1);border-bottom:1px solid var(--b1);
+  display:flex;padding:0 18px;gap:2px;flex-shrink:0;
+  overflow-x:auto;overflow-y:hidden;
+}
+.tab-strip::-webkit-scrollbar{height:2px}
+.tab-strip::-webkit-scrollbar-thumb{background:var(--b2)}
+.tb{
+  padding:9px 14px;background:none;border:none;
+  border-bottom:2px solid transparent;color:var(--m2);
+  font-family:var(--mono);font-size:9px;cursor:pointer;
+  margin-bottom:-1px;transition:color .15s,border-color .15s;
+  text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;
+}
+.tb.active{color:var(--cyn);border-color:var(--cyn)}
+.tb:hover{color:var(--txt)}
+.tb .cnt{margin-left:4px;background:var(--b1);color:var(--m2);
+  padding:1px 5px;border-radius:3px;font-size:7px}
+.tb.active .cnt{background:rgba(56,189,248,.15);color:var(--cyn)}
+.tab-body{display:none;flex:1;min-height:0;overflow:hidden}
+.tab-body.active{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+
+/* ══ DASHBOARD ═══════════════════════════════════════ */
+.dashboard{
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:8px;padding:12px 18px;
+  background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0;
+}
+.kpi{background:var(--s2);border:1px solid var(--b1);border-radius:var(--r8);padding:10px 12px}
+.kpi-l{font-size:7.5px;color:var(--m2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:4px}
+.kpi-v{font-size:20px;font-weight:700;font-family:var(--head);line-height:1}
+.kpi-v.grn{color:var(--grn)}.kpi-v.red{color:var(--red)}.kpi-v.yel{color:var(--yel)}
+.kpi-v.org{color:var(--org)}.kpi-v.vio{color:var(--vio)}.kpi-v.cyn{color:var(--cyn)}
+.kpi-sub{font-size:8px;color:var(--m2);margin-top:2px}
+
+/* ══ LOG ═════════════════════════════════════════════ */
+.log-hdr{
+  padding:8px 18px;border-bottom:1px solid var(--b1);
+  display:flex;align-items:center;gap:7px;
+  font-size:8px;color:var(--m2);text-transform:uppercase;
+  letter-spacing:1px;background:var(--s1);flex-shrink:0;
+}
+.dot{width:6px;height:6px;border-radius:50%;background:var(--acc)}
+.dot.run{animation:blink 1s ease-in-out infinite}
+.dot.ok{background:var(--grn)}.dot.err{background:var(--red)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.1}}
+.log-wrap{flex:1;overflow-y:auto;overflow-x:hidden;padding:14px 18px;min-height:0}
+.log-line{font-size:10.5px;line-height:1.9;color:var(--m2)}
+.log-line.info{color:var(--txt)}.log-line.ok{color:var(--grn)}
+.log-line.warn{color:var(--yel)}.log-line.err{color:var(--red)}
+
+/* ══ TABLE ═══════════════════════════════════════════ */
+.tbl-wrap{flex:1;overflow:auto;min-height:0}
+table{width:100%;border-collapse:collapse;font-size:10px}
+thead{position:sticky;top:0;z-index:5}
+thead th{
+  background:#06090f;color:var(--m2);font-weight:500;
+  font-size:8.5px;text-transform:uppercase;letter-spacing:.5px;
+  padding:8px 11px;text-align:left;border-bottom:1px solid var(--b1);
+  white-space:nowrap;
+}
+tbody td{padding:7px 11px;border-bottom:1px solid #0d1422;white-space:nowrap}
+tbody tr:hover td{background:var(--s3)}
+
+/* STATUS */
+.st{display:inline-block;padding:2px 6px;border-radius:3px;font-size:8px;font-weight:600;letter-spacing:.2px}
+.st-ok{background:rgba(52,211,153,.1);color:var(--grn);border:1px solid rgba(52,211,153,.2)}
+.st-ok2{background:rgba(56,189,248,.08);color:var(--cyn);border:1px solid rgba(56,189,248,.2)}
+.st-mal{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2)}
+.st-com{background:rgba(251,146,60,.1);color:var(--org);border:1px solid rgba(251,146,60,.2)}
+.st-gp{background:rgba(167,139,250,.1);color:var(--vio);border:1px solid rgba(167,139,250,.2)}
+.st-fis{background:rgba(79,142,247,.1);color:var(--acc);border:1px solid rgba(79,142,247,.2)}
+.st-anul{background:rgba(56,189,248,.08);color:var(--cyn);border:1px solid rgba(56,189,248,.15)}
+.st-sin{background:rgba(107,114,128,.1);color:#9ca3af;border:1px solid rgba(107,114,128,.2)}
+.st-int{background:rgba(52,211,153,.06);color:#6ee7b7;border:1px solid rgba(52,211,153,.15)}
+.met{font-size:8px;color:var(--m2);font-family:var(--mono)}
+.num{text-align:right;font-family:var(--mono)}
+.num-pos{color:var(--red)}.num-neg{color:var(--grn)}
+tr.row-ok td{background:rgba(52,211,153,.02)}
+tr.row-ok2 td{background:rgba(56,189,248,.02)}
+tr.row-sin td{background:rgba(107,114,128,.04)}
+tr.row-anul td{background:rgba(56,189,248,.04)}
+tr.row-mal td{background:rgba(248,113,113,.04)}
+tr.row-com td{background:rgba(251,146,60,.04)}
+tr.row-int td{background:rgba(52,211,153,.02)}
+
+/* ══ FILTROS ═════════════════════════════════════════ */
+.filter-bar{
+  display:flex;gap:7px;align-items:center;flex-wrap:wrap;
+  padding:9px 18px;border-bottom:1px solid var(--b1);
+  background:var(--s1);flex-shrink:0;
+}
+.filter-lbl{font-size:8px;color:var(--m2);text-transform:uppercase;
+  letter-spacing:.8px;white-space:nowrap}
+.filter-sel{
+  background:var(--s3);border:1px solid var(--b2);border-radius:4px;
+  color:var(--txt);font-family:var(--mono);font-size:9px;padding:4px 8px;
+  cursor:pointer;
+}
+.filter-sel:focus{outline:none;border-color:var(--acc)}
+.filter-inp{
+  background:var(--s3);border:1px solid var(--b2);border-radius:4px;
+  color:var(--txt);font-family:var(--mono);font-size:9px;padding:4px 8px;
+  width:150px;
+}
+.filter-inp:focus{outline:none;border-color:var(--acc)}
+.filter-inp::placeholder{color:var(--m2)}
+.filter-stats{margin-left:auto;font-size:9px;color:var(--m2);white-space:nowrap}
+.filter-stats b{color:var(--txt)}
+.btn-clear{
+  background:none;border:1px solid var(--b2);border-radius:4px;
+  color:var(--m2);font-family:var(--mono);font-size:8px;padding:4px 9px;
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.btn-clear:hover{border-color:var(--acc);color:var(--acc)}
+.btn-action{
+  background:var(--s3);border:1px solid var(--b2);border-radius:4px;
+  color:var(--m1);font-family:var(--mono);font-size:8px;padding:4px 10px;
+  cursor:pointer;transition:all .15s;white-space:nowrap;
+}
+.btn-action:hover{border-color:var(--grn);color:var(--grn)}
+
+/* ══ CORRECCIÓN MANUAL ═══════════════════════════════ */
+.fix-panel{flex:1;overflow-y:auto;overflow-x:hidden;padding:0 18px 18px;min-height:0}
+.fix-info{
+  background:var(--s2);border:1px solid var(--b1);border-left:3px solid var(--acc);
+  border-radius:var(--r6);padding:10px 14px;margin:12px 0 10px;
+  font-size:9.5px;color:var(--m1);line-height:1.8;
+}
+.fix-info b{color:var(--txt)}
+.fix-hdr{
+  display:grid;grid-template-columns:1.2fr 1.1fr 1fr 120px 90px 145px 70px;
+  gap:6px;padding:7px 0 8px;
+  font-size:8px;color:var(--m2);text-transform:uppercase;letter-spacing:.6px;
+  border-bottom:1px solid var(--b2);margin-bottom:2px;
+}
+.fix-row{
+  display:grid;grid-template-columns:1.2fr 1.1fr 1fr 120px 90px 145px 70px;
+  gap:6px;align-items:center;padding:9px 0;
+  border-bottom:1px solid var(--b1);
+}
+.fix-row:hover{background:rgba(30,45,69,.4);margin:0 -8px;padding:9px 8px;border-radius:5px}
+.fix-cell-lbl{font-size:7.5px;color:var(--m2);margin-bottom:2px}
+.fix-cell-val{font-size:10px;color:var(--txt)}
+.fix-cell-sub{font-size:8px;color:var(--m2);margin-top:1px;
+  overflow:hidden;text-overflow:ellipsis;max-width:200px;white-space:nowrap}
+.fix-monto{color:var(--yel);font-weight:600}
+.fix-inp{
+  width:100%;background:var(--s3);border:1px solid var(--b2);
+  border-radius:4px;color:var(--txt);font-family:var(--mono);
+  font-size:9px;padding:5px 7px;
+}
+.fix-inp:focus{outline:none;border-color:var(--acc)}
+.fix-sel{
+  width:100%;background:var(--s3);border:1px solid var(--b2);
+  border-radius:4px;color:var(--txt);font-family:var(--mono);
+  font-size:9px;padding:5px 7px;cursor:pointer;
+}
+.fix-sel:focus{outline:none;border-color:var(--acc)}
+.fix-apply{
+  width:100%;padding:5px 10px;background:var(--acc);color:#fff;
+  border:none;border-radius:4px;font-family:var(--mono);font-size:8px;
+  font-weight:600;cursor:pointer;transition:background .15s;
+}
+.fix-apply:hover{background:#3b82f6}
+.fix-apply.applied{background:var(--grn)}
+.fix-empty{padding:40px;text-align:center;color:var(--m2);font-size:10px}
+
+/* ══ LOG AUDITORÍA ═══════════════════════════════════ */
+.audit-entry{
+  background:var(--s2);border:1px solid var(--b1);border-radius:var(--r6);
+  padding:10px 14px;margin-bottom:8px;
+}
+.audit-hdr{display:flex;gap:12px;align-items:center;margin-bottom:6px}
+.audit-ts{font-size:8px;color:var(--m2)}
+.audit-user{font-size:9px;color:var(--cyn);font-weight:600}
+.audit-op{font-size:9px;color:var(--txt)}
+.audit-diff{display:flex;gap:8px;align-items:center;font-size:9px}
+.audit-field{color:var(--m1);font-size:8px}
+.audit-before{color:var(--red);text-decoration:line-through}
+.audit-after{color:var(--grn)}
+.audit-motivo{font-size:8px;color:var(--m2);margin-top:4px;font-style:italic}
+
+/* ══ TABLAS MAESTRAS ═════════════════════════════════ */
+.tm-layout{display:flex;flex:1;min-height:0;overflow:hidden}
+.tm-sidebar{
+  width:160px;flex-shrink:0;background:var(--s2);border-right:1px solid var(--b1);
+  display:flex;flex-direction:column;padding:10px 8px;gap:3px;overflow-y:auto;
+}
+.tm-nav-btn{
+  padding:7px 10px;background:none;border:none;border-radius:4px;
+  color:var(--m2);font-family:var(--mono);font-size:9px;cursor:pointer;
+  text-align:left;transition:background .12s,color .12s;
+}
+.tm-nav-btn:hover{background:var(--s3);color:var(--txt)}
+.tm-nav-btn.active{background:var(--s3);color:var(--cyn)}
+.tm-body{flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0}
+.tm-panel{display:flex;flex-direction:column;flex:1;min-height:0}
+.tm-panel-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 16px;border-bottom:1px solid var(--b1);
+  background:var(--s1);flex-shrink:0;
+}
+.tm-panel-title{font-family:var(--head);font-size:12px;font-weight:700;color:var(--txt)}
+.tm-panel-actions{display:flex;gap:6px;align-items:center}
+.tm-add-btn,.tm-export-btn,.tm-import-btn,.tm-save-btn{
+  padding:5px 12px;border-radius:4px;font-family:var(--mono);font-size:8px;
+  font-weight:600;cursor:pointer;letter-spacing:.3px;transition:all .15s;
+}
+.tm-add-btn{background:var(--acc);color:#fff;border:none}
+.tm-add-btn:hover{background:#3b82f6}
+.tm-export-btn,.tm-import-btn{background:var(--s3);border:1px solid var(--b2);color:var(--m1)}
+.tm-export-btn:hover,.tm-import-btn:hover{border-color:var(--acc);color:var(--acc)}
+.tm-save-btn{background:var(--grn);color:#000;border:none}
+.tm-save-btn:hover{opacity:.85}
+.tm-discard-btn{background:var(--s3);border:1px solid var(--b2);color:var(--org);border-radius:4px;
+  padding:5px 12px;font-family:var(--mono);font-size:8px;font-weight:600;cursor:pointer;transition:all .15s}
+.tm-discard-btn:hover{border-color:var(--org);background:rgba(251,146,60,.1)}
+.tm-del-btn{
+  background:none;border:1px solid var(--b2);border-radius:3px;
+  color:var(--m2);font-size:11px;cursor:pointer;
+  width:22px;height:22px;display:flex;align-items:center;justify-content:center;
+}
+.tm-del-btn:hover{border-color:var(--red);color:var(--red)}
+.tm-table-wrap{flex:1;overflow:auto;min-height:0}
+.tm-table{width:100%;border-collapse:collapse;font-size:10px}
+.tm-table thead th{
+  background:#06090f;color:var(--m2);font-weight:500;font-size:8px;
+  text-transform:uppercase;letter-spacing:.5px;padding:8px 10px;
+  text-align:left;border-bottom:1px solid var(--b1);white-space:nowrap;position:sticky;top:0;
+}
+.tm-table tbody td{padding:5px 10px;border-bottom:1px solid var(--b1)}
+.tm-table tbody tr:hover td{background:var(--s3)}
+.tm-inp{
+  background:transparent;border:1px solid transparent;border-radius:3px;
+  color:var(--txt);font-family:var(--mono);font-size:9.5px;padding:3px 6px;
+  width:100%;transition:border-color .12s,background .12s;
+}
+.tm-inp:hover{background:var(--s3);border-color:var(--b2)}
+.tm-inp:focus{outline:none;background:var(--s3);border-color:var(--acc)}
+.tm-footer{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 16px;border-top:1px solid var(--b1);
+  background:var(--s1);flex-shrink:0;
+}
+.tm-count{font-size:9px;color:var(--m2)}
+
+/* ══ DIFERENCIAS ═════════════════════════════════════ */
+.dif-layout{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.dif-kpis{
+  display:grid;grid-template-columns:repeat(5,1fr);gap:8px;
+  padding:12px 18px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0;
+}
+.dif-kpi{background:var(--s2);border:1px solid var(--b1);border-radius:var(--r8);padding:10px 12px}
+.dif-kpi-lbl{font-size:8px;color:var(--m2);text-transform:uppercase;letter-spacing:.7px;margin-bottom:4px}
+.dif-kpi-val{font-size:18px;font-weight:700;font-family:var(--head)}
+.dif-kpi-val.cyn{color:var(--cyn)}.dif-kpi-val.yel{color:var(--yel)}
+.dif-kpi-val.grn{color:var(--grn)}.dif-kpi-val.red{color:var(--red)}
+.dif-filters{
+  display:flex;gap:7px;align-items:center;flex-wrap:wrap;
+  padding:9px 18px;border-bottom:1px solid var(--b1);
+  background:var(--s1);flex-shrink:0;
+}
+.badge-accion{
+  font-size:8px;padding:2px 6px;border-radius:3px;font-weight:600;
+}
+.badge-red{background:rgba(248,113,113,.1);color:var(--red);border:1px solid rgba(248,113,113,.2)}
+.badge-grn{background:rgba(52,211,153,.1);color:var(--grn);border:1px solid rgba(52,211,153,.2)}
+.badge-yel{background:rgba(251,191,36,.1);color:var(--yel);border:1px solid rgba(251,191,36,.2)}
+
+/* ══ SESIONES MODAL ══════════════════════════════════ */
+.modal-overlay{
+  display:none;position:fixed;inset:0;background:rgba(5,8,16,.85);
+  z-index:1000;align-items:center;justify-content:center;
+}
+.modal-overlay.open{display:flex}
+.modal{
+  background:var(--s2);border:1px solid var(--b2);border-radius:10px;
+  padding:24px;width:480px;max-height:70vh;overflow-y:auto;
+}
+.modal-title{font-family:var(--head);font-size:14px;font-weight:700;
+  margin-bottom:16px;color:var(--txt)}
+.ses-item{
+  display:flex;align-items:center;gap:10px;padding:10px 12px;
+  background:var(--s3);border:1px solid var(--b1);border-radius:6px;
+  margin-bottom:7px;
+}
+.ses-info{flex:1}
+.ses-name{font-size:11px;font-weight:600;color:var(--txt)}
+.ses-meta{font-size:9px;color:var(--m2);margin-top:2px}
+.ses-load{padding:5px 12px;background:var(--acc);color:#fff;border:none;
+  border-radius:4px;font-family:var(--mono);font-size:8px;cursor:pointer}
+.ses-del{padding:5px 10px;background:none;border:1px solid var(--b2);
+  color:var(--m2);border-radius:4px;font-family:var(--mono);font-size:8px;cursor:pointer}
+.ses-del:hover{border-color:var(--red);color:var(--red)}
+.modal-close{
+  width:100%;margin-top:12px;padding:9px;background:var(--s3);
+  border:1px solid var(--b2);border-radius:6px;color:var(--m1);
+  font-family:var(--mono);font-size:9px;cursor:pointer;
+}
+.modal-close:hover{border-color:var(--acc);color:var(--acc)}
+
+/* ══ DOWNBAR ═════════════════════════════════════════ */
+.dl-bar{
+  background:var(--s1);border-top:1px solid var(--b1);
+  padding:8px 18px;display:none;align-items:center;gap:10px;flex-shrink:0;
+}
+.dl-bar.show{display:flex}
+.dl-info{font-size:9px;color:var(--m1);flex:1}
+.dl-info b{color:var(--txt)}
+.dl-btns{display:flex;gap:6px;flex-wrap:wrap}
+.dl-btn{
+  padding:6px 14px;border-radius:4px;border:none;
+  font-family:var(--mono);font-size:8px;font-weight:600;
+  cursor:pointer;transition:opacity .15s;letter-spacing:.3px;
+}
+.dl-btn:hover{opacity:.85}
+.dl-fis{background:#1d4ed8;color:#fff}
+.dl-gp{background:#065f46;color:#fff}
+.dl-full{background:var(--s3);color:var(--txt);border:1px solid var(--b2)}
+.dl-log{background:#3b0764;color:#c4b5fd}
+.dl-sin{background:#422006;color:#fed7aa}
+.dl-res{background:#14532d;color:#86efac}
+
+/* ══ SCROLLBARS ══════════════════════════════════════ */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--b2);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--b3)}
+</style>
+</head>
+<body>
+
+<!-- ══ TOPBAR ══════════════════════════════════════════ -->
+<div class="topbar">
+  <span class="brand">CONCILIADOR</span>
+  <div class="topbar-sep"></div>
+  <span class="topbar-sub">Tarjetas · Offline</span>
+  <input id="session-name" value="Nueva sesión" title="Clic para renombrar"
+    onchange="SESSION.nombre=this.value;scheduleAutoSave()">
+  <span id="save-indicator"></span>
+  <div class="topbar-right">
+    <button class="topbar-btn" onclick="abrirModalSesiones()">📂 Sesiones</button>
+    <button class="topbar-btn" onclick="exportarSesion()">⬇ Exportar sesión</button>
+    <label class="topbar-btn" style="cursor:pointer">
+      ⬆ Importar sesión
+      <input type="file" accept=".json" style="display:none"
+        onchange="importarYRestaurar(this)">
+    </label>
+    <button class="topbar-btn danger" onclick="nuevaSesion()">+ Nueva</button>
+  </div>
+</div>
+
+<!-- ══ MÓDULOS PRINCIPALES ════════════════════════════ -->
+<div class="modstrip">
+  <button class="mod-btn active" id="mbtn-cruce"    onclick="showMod('cruce',this)">
+    1 · Cruce automático <span class="cnt" id="mcnt-cruce">—</span>
+  </button>
+  <button class="mod-btn" id="mbtn-revision"  onclick="showMod('revision',this)">
+    2 · Revisión manual <span class="cnt" id="mcnt-revision">0</span>
+  </button>
+  <button class="mod-btn" id="mbtn-diferencias" onclick="showMod('diferencias',this)">
+    3 · Diferencias <span class="cnt" id="mcnt-diferencias">0</span>
+  </button>
+  <button class="mod-btn" id="mbtn-tm"        onclick="showMod('tm',this)">
+    4 · Tablas maestras
+  </button>
+</div>
+
+<div class="app-body">
+
+<!-- ══ SIDEBAR ══════════════════════════════════════── -->
+<div class="sidebar">
+  <div class="sb-sec">
+    <div class="sb-lbl">Archivos transaccionales</div>
+    <div class="fc" id="fc-sky"><label for="i-sky">
+      <div class="fc-top"><div class="fc-dot d-sky">S</div>
+        <span class="fc-name">Skylab</span><span class="fc-req">REQ</span></div>
+      <div class="fc-st" id="st-sky">Sin archivo</div>
+    </label><input type="file" id="i-sky" accept=".xlsx,.xls" onchange="loadFile(this,'sky')"></div>
+
+    <div class="fc" id="fc-fis"><label for="i-fis">
+      <div class="fc-top"><div class="fc-dot d-fis">F</div>
+        <span class="fc-name">FISERV</span><span class="fc-req">REQ</span></div>
+      <div class="fc-st" id="st-fis">Sin archivo</div>
+    </label><input type="file" id="i-fis" accept=".xlsx,.xls" onchange="loadFile(this,'fis')"></div>
+
+    <div class="fc" id="fc-gp"><label for="i-gp">
+      <div class="fc-top"><div class="fc-dot d-gp">G</div>
+        <span class="fc-name">GETPOS</span><span class="fc-req">REQ</span></div>
+      <div class="fc-st" id="st-gp">Sin archivo</div>
+    </label><input type="file" id="i-gp" accept=".xlsx,.xls" onchange="loadFile(this,'gp')"></div>
+  </div>
+
+  <div class="sb-sec">
+    <div class="sb-lbl">Referencia</div>
+    <div class="fc" id="fc-ter"><label for="i-ter">
+      <div class="fc-top"><div class="fc-dot d-ter">T</div>
+        <span class="fc-name">Terminales</span><span class="fc-req">REQ</span></div>
+      <div class="fc-st" id="st-ter">Sin archivo</div>
+    </label><input type="file" id="i-ter" accept=".xlsx,.xls" onchange="loadFile(this,'ter')"></div>
+
+    <div class="fc opt" id="fc-enu"><label for="i-enu">
+      <div class="fc-top"><div class="fc-dot d-enu">R</div>
+        <span class="fc-name">Enrutamiento</span><span class="fc-req opt">OPC</span></div>
+      <div class="fc-st" id="st-enu">Opcional</div>
+    </label><input type="file" id="i-enu" accept=".xlsx,.xls" onchange="loadFile(this,'enu')"></div>
+
+    <div class="fc opt" id="fc-baj"><label for="i-baj">
+      <div class="fc-top"><div class="fc-dot d-baj">B</div>
+        <span class="fc-name">Bajada comercial</span><span class="fc-req opt">OPC</span></div>
+      <div class="fc-st" id="st-baj">Opcional</div>
+    </label><input type="file" id="i-baj" accept=".xlsx,.xls" onchange="loadFile(this,'baj')"></div>
+  </div>
+
+
+
+  <div class="sb-sec">
+    <div class="sb-lbl">Sesión actual</div>
+    <div class="param">
+      <div class="param-row"><span>Usuario</span>
+        <input id="param-usuario" value="Usuario" style="background:none;border:none;
+          color:var(--cyn);font-family:var(--mono);font-size:9px;text-align:right;width:90px"
+          onchange="SESSION.usuario=this.value;scheduleAutoSave()">
+      </div>
+      <div class="param-row"><span>Período desde</span>
+        <input type="date" id="param-desde" style="background:none;border:none;
+          color:var(--cyn);font-family:var(--mono);font-size:9px;text-align:right;width:100px"
+          onchange="SESSION.periodoDesde=this.value;scheduleAutoSave()">
+      </div>
+      <div class="param-row"><span>Período hasta</span>
+        <input type="date" id="param-hasta" style="background:none;border:none;
+          color:var(--cyn);font-family:var(--mono);font-size:9px;text-align:right;width:100px"
+          onchange="SESSION.periodoHasta=this.value;scheduleAutoSave()">
+      </div>
+    </div>
+  </div>
+
+  <button class="run-btn" id="run-btn" disabled onclick="conciliar()">
+    <span id="run-icon">▶</span> <span id="run-lbl">Conciliar</span>
+  </button>
+  <div class="prog" id="prog"><div class="prog-bar" id="prog-bar"></div></div>
+  <div style="height:14px"></div>
+</div>
+
+<!-- ══ MAIN CONTENT ═══════════════════════════════════ -->
+<div class="main-content">
+
+  <!-- ── MÓDULO 1: CRUCE ─────────────────────────────── -->
+  <div class="mod-panel active" id="mod-cruce">
+    <div class="tab-strip" id="tab-strip-cruce" style="display:none">
+      <button class="tb active" onclick="showTab('t-log','tab-strip-cruce',this)">Log</button>
+      <button class="tb" onclick="showTab('t-all','tab-strip-cruce',this)">Completo <span class="cnt" id="cnt-all">0</span></button>
+      <button class="tb" onclick="showTab('t-sin','tab-strip-cruce',this)">Sin Match <span class="cnt" id="cnt-sin">0</span></button>
+      <button class="tb" onclick="showTab('t-mal','tab-strip-cruce',this)">Mal Facturadas <span class="cnt" id="cnt-mal">0</span></button>
+      <button class="tb" onclick="showTab('t-com','tab-strip-cruce',this)">Com. Errado <span class="cnt" id="cnt-com">0</span></button>
+      <button class="tb" onclick="showTab('t-anul','tab-strip-cruce',this)">Anul.S/Cobro <span class="cnt" id="cnt-anul">0</span></button>
+      <button class="tb" onclick="showTab('t-dev','tab-strip-cruce',this)">Devoluciones <span class="cnt" id="cnt-dev">0</span></button>
+      <button class="tb" onclick="showTab('t-cor','tab-strip-cruce',this)">Correcciones <span class="cnt" id="cnt-cor">0</span></button>
+      <button class="tb" style="color:var(--org)" onclick="showTab('t-urg','tab-strip-cruce',this)">⚠ Rev. Urgente <span class="cnt" id="cnt-urg">0</span></button>
+      <button class="tb" style="color:var(--vio)" onclick="showTab('t-ref','tab-strip-cruce',this)">↺ Refacturado <span class="cnt" id="cnt-ref">0</span></button>
+    </div>
+
+    <!-- EMPTY -->
+    <div class="tab-body active" id="t-empty">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+        height:100%;gap:14px;color:var(--m2);text-align:center;padding:40px">
+        <div style="font-size:42px;opacity:.15">◈</div>
+        <div style="font-family:var(--head);font-size:16px;font-weight:700;color:var(--txt);opacity:.4">Listo para conciliar</div>
+        <p style="font-size:10px;max-width:380px;line-height:1.8">
+          Cargá los archivos requeridos y ejecutá el cruce.<br>
+          Los datos <b>nunca salen de tu computadora</b>.
+        </p>
+      </div>
+    </div>
+
+    <!-- LOG -->
+    <div class="tab-body" id="t-log">
+      <div class="log-hdr"><div class="dot" id="log-dot"></div><span id="log-title">En espera</span></div>
+      <div class="log-wrap" id="log-wrap"></div>
+    </div>
+
+    <!-- DASHBOARD + TABLA COMPLETA -->
+    <div class="tab-body" id="t-all">
+      <div class="dashboard" id="dashboard" style="display:none">
+        <div class="kpi"><div class="kpi-l">Total ops</div><div class="kpi-v cyn" id="k-total">—</div></div>
+        <div class="kpi"><div class="kpi-l">OK conciliadas</div><div class="kpi-v grn" id="k-ok">—</div></div>
+        <div class="kpi"><div class="kpi-l">OK (equiv.)</div><div class="kpi-v" style="color:#67e8f9" id="k-ok2">—</div></div>
+        <div class="kpi"><div class="kpi-l">Sin Match</div><div class="kpi-v" style="color:#9ca3af" id="k-sin">—</div></div>
+        <div class="kpi"><div class="kpi-l">Mal facturadas</div><div class="kpi-v red" id="k-mal">—</div></div>
+        <div class="kpi"><div class="kpi-l">Com. errado</div><div class="kpi-v org" id="k-com">—</div></div>
+        <div class="kpi"><div class="kpi-l">Integradas</div><div class="kpi-v" style="color:#6ee7b7" id="k-int">—</div></div>
+        <div class="kpi" style="grid-column:1/-1;padding:6px 12px;display:flex;gap:20px;border-top:1px solid var(--b1)">
+          <span style="font-size:9px;color:var(--m2)">Rev. Urgente: <b style="color:var(--org)" id="k-urg">0</b></span>
+          <span style="font-size:9px;color:var(--m2)">Refacturado: <b style="color:var(--vio)" id="k-ref">0</b></span>
+        </div>
+      </div>
+      <div class="tbl-wrap"><table id="tbl-all"><thead></thead><tbody></tbody></table></div>
+    </div>
+
+    <div class="tab-body" id="t-sin"><div class="tbl-wrap"><table id="tbl-sin"><thead></thead><tbody></tbody></table></div></div>
+    <div class="tab-body" id="t-mal"><div class="tbl-wrap"><table id="tbl-mal"><thead></thead><tbody></tbody></table></div></div>
+    <div class="tab-body" id="t-com"><div class="tbl-wrap"><table id="tbl-com"><thead></thead><tbody></tbody></table></div></div>
+    <div class="tab-body" id="t-anul"><div class="tbl-wrap"><table id="tbl-anul"><thead></thead><tbody></tbody></table></div></div>
+    <div class="tab-body" id="t-dev"><div class="tbl-wrap"><table id="tbl-dev"><thead></thead><tbody></tbody></table></div></div>
+
+    <!-- CORRECCIONES MANUALES -->
+    <div class="tab-body" id="t-cor">
+      <div class="cor-hdr-bar">
+        <span class="cor-hdr-title">Correcciones manuales</span>
+        <span class="cor-stats" id="cor-stats"></span>
+        <button class="btn-reprocesar" id="btn-reproc" onclick="reprocesarTodasCorrecciones()" disabled>
+          ↺ Re-procesar todas
+        </button>
+      </div>
+      <div class="cor-table-wrap">
+        <table id="tbl-cor"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <!-- REVISIÓN URGENTE -->
+    <div class="tab-body" id="t-urg">
+      <div class="cor-hdr-bar" style="border-left:3px solid var(--org)">
+        <span class="cor-hdr-title" style="color:var(--org)">⚠ Revisión Urgente</span>
+        <span class="cor-stats" id="urg-stats"></span>
+        <button class="dl-btn" style="background:var(--org);margin-left:auto"
+          onclick="exportarUrgente()">⬇ Exportar</button>
+      </div>
+      <div class="tbl-wrap">
+        <table id="tbl-urg"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <!-- REFACTURADO -->
+    <div class="tab-body" id="t-ref">
+      <div class="cor-hdr-bar" style="border-left:3px solid var(--vio)">
+        <span class="cor-hdr-title" style="color:var(--vio)">↺ Refacturado</span>
+        <span class="cor-stats" id="ref-stats"></span>
+        <button class="dl-btn" style="background:#7c3aed;margin-left:auto"
+          onclick="exportarRefacturado()">⬇ Exportar</button>
+      </div>
+      <div class="tbl-wrap">
+        <table id="tbl-ref"><thead></thead><tbody></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── MÓDULO 2: REVISIÓN MANUAL ──────────────────── -->
+  <div class="mod-panel" id="mod-revision">
+    <div class="filter-bar">
+      <span class="filter-lbl">Filtrar</span>
+      <select class="filter-sel" id="flt-suc"    onchange="aplicarFiltros()"><option value="">Todas las suc.</option></select>
+      <select class="filter-sel" id="flt-tar"    onchange="aplicarFiltros()"><option value="">Todas las tarjetas</option></select>
+      <select class="filter-sel" id="flt-proc"   onchange="aplicarFiltros()">
+        <option value="">Ambas proc.</option>
+        <option value="FISERV">FISERV</option>
+        <option value="GETPOS">GETPOS</option>
+      </select>
+      <select class="filter-sel" id="flt-fecha"  onchange="aplicarFiltros()"><option value="">Todas las fechas</option></select>
+      <select class="filter-sel" id="flt-vend"   onchange="aplicarFiltros()"><option value="">Todos los vendedores</option></select>
+      <input  class="filter-inp" id="flt-search" placeholder="Cupón, monto, asiento..." oninput="aplicarFiltros()">
+      <button class="btn-clear"  onclick="limpiarFiltros()">✕ Limpiar</button>
+      <span class="filter-stats" id="fix-stats"></span>
+    </div>
+    <div class="fix-info" style="margin:10px 18px 0">
+      <b>Corrección manual de operaciones Sin Match</b> — Completá el cupón o código de autorización de la procesadora.
+      Cada corrección queda registrada en el <b>log de auditoría</b>.
+    </div>
+    <div class="fix-panel" id="fix-panel">
+      <div id="fix-content"></div>
+    </div>
+  </div>
+
+  <!-- ── MÓDULO 3: DIFERENCIAS ──────────────────────── -->
+  <div class="mod-panel" id="mod-diferencias">
+    <div class="tab-strip" id="tab-strip-dif" style="display:none">
+      <button class="tb active" onclick="showTab('t-dif-main','tab-strip-dif',this)">Diferencias de tasa</button>
+      <button class="tb" onclick="showTab('t-dif-fis','tab-strip-dif',this)">
+        FISERV sin cruce <span class="cnt" id="cnt-dif-fis">0</span>
+      </button>
+      <button class="tb" onclick="showTab('t-dif-gp','tab-strip-dif',this)">
+        GETPOS sin cruce <span class="cnt" id="cnt-dif-gp">0</span>
+      </button>
+    </div>
+    <div class="tab-body active" id="t-dif-main" style="display:flex;flex-direction:column;flex:1;min-height:0">
+    <div id="mod-dif" style="display:flex;flex-direction:column;flex:1;min-height:0">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+        height:100%;gap:12px;color:var(--m2);text-align:center">
+        <div style="font-size:10px">Ejecutá el cruce primero para calcular diferencias.</div>
+      </div>
+    </div>
+    </div><!-- t-dif-main -->
+    <div class="tab-body" id="t-dif-fis" style="flex-direction:column;flex:1;min-height:0">
+      <div class="cor-hdr-bar" style="border-left:3px solid var(--acc)">
+        <span class="cor-hdr-title" style="color:var(--acc)">FISERV sin cruce con Skylab</span>
+        <span class="cor-stats" id="dif-fis-stats"></span>
+        <button class="dl-btn dl-fis" style="margin-left:auto" onclick="exportarNoCruzadasFis()">⬇ Exportar</button>
+      </div>
+      <div class="tbl-wrap"><table id="tbl-dif-fis"><thead></thead><tbody></tbody></table></div>
+    </div>
+    <div class="tab-body" id="t-dif-gp" style="flex-direction:column;flex:1;min-height:0">
+      <div class="cor-hdr-bar" style="border-left:3px solid var(--grn)">
+        <span class="cor-hdr-title" style="color:var(--grn)">GETPOS sin cruce con Skylab</span>
+        <span class="cor-stats" id="dif-gp-stats"></span>
+        <button class="dl-btn dl-gp" style="margin-left:auto" onclick="exportarNoCruzadasGp()">⬇ Exportar</button>
+      </div>
+      <div class="tbl-wrap"><table id="tbl-dif-gp"><thead></thead><tbody></tbody></table></div>
+    </div>
+  </div>
+
+  <!-- ── MÓDULO 4: TABLAS MAESTRAS ──────────────────── -->
+  <div class="mod-panel" id="mod-tm">
+    <div id="mod-tm-inner" style="display:flex;flex:1;min-height:0;overflow:hidden">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+        height:100%;gap:12px;color:var(--m2);text-align:center;width:100%">
+        <div style="font-size:10px">Cargando tablas maestras...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── LOG AUDITORÍA (pestaña en revisión) ─────────── -->
+
+  <!-- DOWNBAR -->
+  <div class="dl-bar" id="dl-bar">
+    <div class="dl-info"><b id="dl-resumen">—</b></div>
+    <div class="dl-btns">
+      <button class="dl-btn dl-fis"  id="dl-fis">⬇ FISERV</button>
+      <button class="dl-btn dl-gp"   id="dl-gp">⬇ GETPOS</button>
+      <button class="dl-btn dl-full" id="dl-full">⬇ Completo</button>
+      <button class="dl-btn dl-log"  id="dl-log">⬇ Log Aud.</button>
+      <button class="dl-btn dl-sin"  id="dl-sin-btn">⬇ Sin Match</button>
+      <button class="dl-btn dl-res"  id="dl-res">⬇ Resúmenes</button>
+    </div>
+  </div>
+
+</div><!-- .main-content -->
+</div><!-- .app-body -->
+
+<!-- ══ MODAL SESIONES ════════════════════════════════ -->
+<div class="modal-overlay" id="modal-sesiones">
+  <div class="modal">
+    <div class="modal-title">Sesiones guardadas</div>
+    <div id="modal-ses-list"><div style="color:var(--m2);font-size:10px">Cargando...</div></div>
+    <button class="modal-close" onclick="cerrarModal()">Cerrar</button>
+  </div>
+</div>
+
+<!-- ══ SCRIPTS ═══════════════════════════════════════ -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="js/state.js"></script>
+<script src="js/tablas-maestras.js"></script>
+<script src="js/diferencias.js"></script>
+<script src="js/conciliador.js"></script>
+<script>
+
+// ══ MÓDULOS ════════════════════════════════════════════
+function showMod(mod, btn) {
+  document.querySelectorAll('.mod-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.mod-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`mod-${mod}`)?.classList.add('active');
+  if (btn) btn.classList.add('active');
+
+  if (mod === 'tm')          { renderModuloTM(); }
+  if (mod === 'diferencias') { if (RESULTADO.length) renderModuloDiferencias(); }
+  if (mod === 'revision')    { if (RESULTADO.length) { poblarFiltros(); renderFilas(); } }
+  if (mod === 'cruce' && RESULTADO.length) { renderTablaUrgente(); renderTablaRefacturado(); }
+}
+
+// ══ SIDEBAR EQUIV ══════════════════════════════════════
+function renderSbEquiv() {
+  const cont = document.getElementById('sb-equiv-rows');
+  if (!cont) return;
+  const entries = Object.entries(TM.equivalencias || {});
+  cont.innerHTML = entries.map(([k, v], i) => {
+    const [com, suc] = k.split('|');
+    return `<div class="equiv-row">
+      <input class="equiv-inp" id="se-c-${i}" value="${com}" placeholder="Com.SKY">
+      <input class="equiv-inp" id="se-s-${i}" value="${suc}" placeholder="Suc" style="background:rgba(56,189,248,.06)">
+      <span class="equiv-arrow">→</span>
+      <input class="equiv-inp" id="se-v-${i}" value="${v}" placeholder="Com.FIS">
+      <button class="equiv-del" onclick="delSbEquiv(${i})">×</button>
+    </div>`;
+  }).join('');
+}
+
+function addSbEquiv() {
+  TM.equivalencias['|'] = '';
+  renderSbEquiv();
+}
+
+function delSbEquiv(i) {
+  const keys = Object.keys(TM.equivalencias);
+  if (keys[i] !== undefined) {
+    delete TM.equivalencias[keys[i]];
+    renderSbEquiv();
+  }
+}
+
+function saveSbEquiv() {
+  const rows = document.querySelectorAll('[id^="se-c-"]');
+  const nuevo = {};
+  rows.forEach((el, i) => {
+    const com = el.value.trim();
+    const suc = document.getElementById(`se-s-${i}`)?.value.trim();
+    const val = document.getElementById(`se-v-${i}`)?.value.trim();
+    if (com && val) nuevo[`${com}|${suc??''}`] = val;
+  });
+  TM.equivalencias = nuevo;
+  if (typeof EQUIV_COMERCIO !== 'undefined') {
+    Object.keys(EQUIV_COMERCIO).forEach(k => delete EQUIV_COMERCIO[k]);
+    Object.assign(EQUIV_COMERCIO, nuevo);
+  }
+  renderSbEquiv();
+  guardarTM();
+  scheduleAutoSave();
+  const btn = document.querySelector('.sb-save-btn');
+  if (btn) { btn.textContent='✓ Aplicado'; setTimeout(()=>btn.textContent='Guardar y aplicar',2000); }
+}
+
+// ══ TABS INTERNOS ════════════════════════════════════
+function showTab(id, stripId, btn) {
+  const strip = document.getElementById(stripId);
+  if (strip) {
+    strip.querySelectorAll('.tb').forEach(b => b.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+  }
+  const mod = document.querySelector('.mod-panel.active');
+  if (mod) mod.querySelectorAll('.tab-body').forEach(t => t.classList.remove('active'));
+  document.getElementById(id)?.classList.add('active');
+  // Render bajo demanda
+  if (id==='t-urg' && RESULTADO.length)  renderTablaUrgente();
+  if (id==='t-dif-fis')                   renderNoCruzadasFis();
+  if (id==='t-dif-gp')                    renderNoCruzadasGp();
+  if (id==='t-ref' && RESULTADO.length)  renderTablaRefacturado();
+  if (id==='t-cor')                       renderTablaCorrecciones();
+}
+
+// ══ SESIONES ═════════════════════════════════════════
+async function abrirModalSesiones() {
+  document.getElementById('modal-sesiones').classList.add('open');
+  const list = document.getElementById('modal-ses-list');
+  list.innerHTML = '<div style="color:var(--m2);font-size:10px">Cargando...</div>';
+  const sesiones = await listarSesiones();
+  if (!sesiones.length) {
+    list.innerHTML = '<div style="color:var(--m2);font-size:10px;padding:10px 0">No hay sesiones guardadas.</div>';
+    return;
+  }
+  list.innerHTML = sesiones
+    .sort((a,b) => new Date(b.session?.modificada||0) - new Date(a.session?.modificada||0))
+    .map(s => `
+      <div class="ses-item">
+        <div class="ses-info">
+          <div class="ses-name">${s.session?.nombre || s.id}</div>
+          <div class="ses-meta">
+            ${s.session?.usuario||''} · ${s.session?.periodoDesde||'?'} – ${s.session?.periodoHasta||'?'}
+            · ${(s.resultado||[]).length} ops · guardado ${(s.session?.modificada||'').slice(0,16).replace('T',' ')}
+          </div>
+        </div>
+        <button class="ses-load" onclick="loadSesion('${s.id}')">Cargar</button>
+        <button class="ses-del"  onclick="deleteSesion('${s.id}',this.closest('.ses-item'))">×</button>
+      </div>`).join('');
+}
+
+async function loadSesion(id) {
+  const ok = await cargarSesion(id);
+  if (ok) {
+    cerrarModal();
+    // Restaurar UI
+    document.getElementById('session-name').value = SESSION.nombre || 'Sesión';
+    document.getElementById('param-usuario').value = SESSION.usuario || 'Usuario';
+    document.getElementById('param-desde').value   = SESSION.periodoDesde || '';
+    document.getElementById('param-hasta').value   = SESSION.periodoHasta || '';
+    renderSbEquiv();
+    if (RESULTADO.length) {
+      renderTodo();
+      document.getElementById('tab-strip-cruce').style.display='flex';
+      document.getElementById('t-empty').classList.remove('active');
+      document.getElementById('t-all').classList.add('active');
+      document.getElementById('dl-bar').classList.add('show');
+      setupDownloads();
+    }
+    log(`Sesión "${SESSION.nombre}" restaurada · ${RESULTADO.length} operaciones`, 'ok');
+  } else {
+    alert('Error al cargar la sesión.');
+  }
+}
+
+async function deleteSesion(id, el) {
+  await eliminarSesion(id);
+  el?.remove();
+}
+
+function cerrarModal() {
+  document.getElementById('modal-sesiones').classList.remove('open');
+}
+
+async function importarYRestaurar(input) {
+  const file = input.files[0]; if (!file) return;
+  try {
+    await importarSesion(file);
+    document.getElementById('session-name').value = SESSION.nombre || 'Sesión importada';
+    renderSbEquiv();
+    if (RESULTADO.length) { renderTodo(); setupDownloads(); }
+    alert(`✓ Sesión "${SESSION.nombre}" importada con ${RESULTADO.length} operaciones.`);
+  } catch(e) { alert('Error importando: ' + e.message); }
+  input.value = '';
+}
+
+function nuevaSesion() {
+  if (RESULTADO.length && !confirm('¿Iniciás una nueva sesión? Se perderán los cambios no guardados.')) return;
+  RESULTADO = []; CORREGIDAS = {}; LOG_AUDIT = [];
+  SESSION = { id: 'ses_' + Date.now(), nombre:'Nueva sesión', usuario: SESSION.usuario,
+    creada: new Date().toISOString(), modificada: null, periodoDesde:'', periodoHasta:'' };
+  document.getElementById('session-name').value = SESSION.nombre;
+  document.getElementById('tab-strip-cruce').style.display = 'none';
+  document.querySelectorAll('.tab-body').forEach(t => t.classList.remove('active'));
+  document.getElementById('t-empty').classList.add('active');
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('dl-bar').classList.remove('show');
+  clearLog();
+}
+
+// ══ INIT ═════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', () => {
+  renderSbEquiv();
+  // Módulo TM
+  document.getElementById('mod-tm-inner').innerHTML = '';
+  document.getElementById('mod-tm').querySelector('div').innerHTML = '<div id="mod-tm" style="display:flex;flex:1;min-height:0;overflow:hidden"></div>';
+  setTimeout(() => {
+    const container = document.createElement('div');
+    container.id = 'mod-tm-content';
+    container.style.cssText = 'display:flex;flex:1;min-height:0;overflow:hidden';
+    const existing = document.getElementById('mod-tm');
+    if (existing) existing.innerHTML = '';
+    // Reemplazar el módulo TM con el inner container
+    const tmPanel = document.getElementById('mod-tm');
+    if (tmPanel) {
+      tmPanel.innerHTML = `<div id="mod-tm-inner2" style="display:flex;flex:1;min-height:0;overflow:hidden"></div>`;
+      // Renderizar TM en el inner
+      const inner = document.getElementById('mod-tm-inner2');
+      if (inner) inner.innerHTML = `<div class="tm-layout">
+        <div class="tm-sidebar" id="tm-sidebar-nav"></div>
+        <div class="tm-body" id="tm-body"></div>
+      </div>`;
+      // Poblar nav
+      const nav = document.getElementById('tm-sidebar-nav');
+      if (nav) nav.innerHTML = ['sucursales','vendedores','terminales','comercios','tarjetas',
+        'planes','tasas','equivalencias','motivos','estados'].map(k =>
+        `<button class="tm-nav-btn" id="tmnav-${k}" onclick="showTM('${k}')">${tmLabel(k)}</button>`
+      ).join('');
+      showTM('sucursales');
+    }
+  }, 100);
+});
+</script>
+</body>
+</html>
