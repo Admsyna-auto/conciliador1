@@ -1052,6 +1052,41 @@ function loadFile(input, key) {
   r.readAsArrayBuffer(file);
 }
 
+// ── CARGA ESPECIAL: Liquidaciones (módulo COBROS) ─────────
+function loadLiquidaciones(input) {
+  const file = input.files[0]; if (!file) return;
+  const fc = document.getElementById('fc-liq');
+  const st = document.getElementById('st-liq');
+  st.textContent = '↻ Cargando...'; st.className = 'fc-st';
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      FILES.liq = { wb, name: file.name };
+      _LIQ_NORM = parseLiquidaciones(wb);
+      fc.classList.add('ok');
+      st.textContent = `✓ ${file.name} (${_LIQ_NORM.length.toLocaleString()} liq.)`;
+      st.className = 'fc-st ok';
+      // Si el módulo cobros está activo, re-renderizar
+      if (document.getElementById('mod-cobros')?.classList.contains('active')) {
+        renderModuloCobros();
+      }
+      // Actualizar badge
+      const badge = document.getElementById('mcnt-cobros');
+      if (badge && COBROS_RESULT.length === 0 && RESULTADO.length > 0) {
+        // Ejecutar cruce silencioso para actualizar el badge
+        cruzarCobros();
+        const pend = COBROS_RESULT.filter(c => c.estado === 'PENDIENTE').length;
+        badge.textContent = pend || '—';
+      }
+    } catch(err) {
+      st.textContent = '✗ Error al leer'; st.className = 'fc-st';
+      console.error('Error cargando liquidaciones:', err);
+    }
+  };
+  r.readAsArrayBuffer(file);
+}
+
 function checkReady() {
   const ok=FILES.sky&&FILES.fis&&FILES.gp&&FILES.ter;
   document.getElementById('run-btn').disabled=!ok;

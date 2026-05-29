@@ -195,6 +195,34 @@ input[type=file]{display:none}
 .kpi-v.org{color:var(--org)}.kpi-v.vio{color:var(--vio)}.kpi-v.cyn{color:var(--cyn)}
 .kpi-sub{font-size:8px;color:var(--m2);margin-top:2px}
 
+/* ══ COBROS ══════════════════════════════════════════ */
+.cobros-wrap{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.cobros-empty{padding:60px;text-align:center;color:var(--m2);font-size:12px;line-height:2}
+.cobros-kpis{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:10px;
+  padding:14px 20px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0;
+}
+.cob-kpi{
+  background:var(--s2);border:1px solid var(--b1);border-radius:var(--r8);
+  padding:11px 14px;
+}
+.cob-kpi-lbl{font-size:8px;color:var(--m2);text-transform:uppercase;letter-spacing:.8px;margin-bottom:5px}
+.cob-kpi-n{font-size:22px;font-weight:700;font-family:var(--head);line-height:1;margin-bottom:3px}
+.cob-kpi-m{font-size:11px;font-weight:600;color:var(--txt);margin-bottom:2px}
+.cob-kpi-pct{font-size:8px;color:var(--m2)}
+.cobros-toolbar{
+  padding:8px 20px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0;
+}
+.btn-exp{
+  background:rgba(79,142,247,.1);border:1px solid rgba(79,142,247,.3);
+  border-radius:var(--r4);color:var(--acc);font-family:var(--mono);font-size:9px;
+  padding:5px 12px;cursor:pointer;transition:background .15s;white-space:nowrap;
+}
+.btn-exp:hover{background:rgba(79,142,247,.2)}
+.td-trunc{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.d-liq{background:linear-gradient(135deg,#f59e0b,#d97706) !important}
+
 /* ══ LOG ═════════════════════════════════════════════ */
 .log-hdr{
   padding:8px 18px;border-bottom:1px solid var(--b1);
@@ -575,11 +603,14 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   <button class="mod-btn" id="mbtn-diferencias" onclick="showMod('diferencias',this)">
     3 · Diferencias <span class="cnt" id="mcnt-diferencias">0</span>
   </button>
+  <button class="mod-btn" id="mbtn-cobros"    onclick="showMod('cobros',this)">
+    4 · Cobros <span class="cnt" id="mcnt-cobros">—</span>
+  </button>
   <button class="mod-btn" id="mbtn-tm"        onclick="showMod('tm',this)">
-    4 · Tablas maestras
+    5 · Tablas maestras
   </button>
   <button class="mod-btn" id="mbtn-dashboard" onclick="showMod('dashboard',this)">
-    5 · Dashboard
+    6 · Dashboard
   </button>
 </div>
 
@@ -627,6 +658,15 @@ tr.row-int td{background:rgba(52,211,153,.02)}
         <span class="fc-name">Bajada comercial</span><span class="fc-req opt">OPC</span></div>
       <div class="fc-st" id="st-baj">Opcional</div>
     </label><input type="file" id="i-baj" accept=".xlsx,.xls" onchange="loadFile(this,'baj')"></div>
+  </div>
+
+  <div class="sb-sec">
+    <div class="sb-lbl">Cobros</div>
+    <div class="fc opt" id="fc-liq"><label for="i-liq">
+      <div class="fc-top"><div class="fc-dot d-liq">L</div>
+        <span class="fc-name">Liquidaciones</span><span class="fc-req opt">OPC</span></div>
+      <div class="fc-st" id="st-liq">Opcional</div>
+    </label><input type="file" id="i-liq" accept=".xlsx,.xls" onchange="loadLiquidaciones(this)"></div>
   </div>
 
 
@@ -866,7 +906,15 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 
   </div>
 
-  <!-- ── MÓDULO 4: TABLAS MAESTRAS ──────────────────── -->
+  <!-- ── MÓDULO 4: COBROS ─────────────────────────────── -->
+  <div class="mod-panel" id="mod-cobros">
+    <div class="cobros-empty">
+      Cargá el archivo de <b style="color:var(--yel)">Liquidaciones</b> en el panel izquierdo
+      y realizá el <b style="color:var(--acc)">Cruce Automático</b> para ver el estado de cobros.
+    </div>
+  </div>
+
+  <!-- ── MÓDULO 5: TABLAS MAESTRAS ──────────────────── -->
   <div class="mod-panel" id="mod-tm">
     <div id="mod-tm-inner" style="display:flex;flex:1;min-height:0;overflow:hidden">
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
@@ -1027,6 +1075,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 <script src="js/state.js"></script>
 <script src="js/tablas-maestras.js"></script>
 <script src="js/diferencias.js"></script>
+<script src="js/cobros.js"></script>
 <script src="js/conciliador.js"></script>
 <script src="js/dashboard.js"></script>
 <script>
@@ -1042,7 +1091,8 @@ function showMod(mod, btn) {
   if (mod === 'diferencias') { if (RESULTADO.length) renderModuloDiferencias(); }
   if (mod === 'revision')    { if (RESULTADO.length) { poblarFiltros(); renderFilas(); } }
   if (mod === 'cruce' && RESULTADO.length) { renderTablaUrgente(); renderTablaRefacturado(); }
-  if (mod === 'dashboard') { renderDashboard(); }
+  if (mod === 'dashboard')   { renderDashboard(); }
+  if (mod === 'cobros')      { renderModuloCobros(); }
 }
 
 // ══ SIDEBAR EQUIV ══════════════════════════════════════

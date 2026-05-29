@@ -7,7 +7,7 @@ const DB_NAME     = 'ConciliadorDB';
 const DB_VERSION  = 1;
 
 // ── Estado de archivos cargados
-const FILES = { sky: null, fis: null, gp: null, ter: null, enu: null, baj: null };
+const FILES = { sky: null, fis: null, gp: null, ter: null, enu: null, baj: null, liq: null };
 
 // ── Resultados de conciliación
 let RESULTADO   = [];   // filas conciliadas
