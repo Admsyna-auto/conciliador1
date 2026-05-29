@@ -31,17 +31,29 @@ function normNum(v) {
 // ══════════════════════════════════════════════════════════════════
 // PARSEO LIQUIDACIONES
 // ══════════════════════════════════════════════════════════════════
-// ── Búsqueda fuzzy de columna (tolera variaciones de nombre, tildes, case) ──
-function _liqCol(r, ...names) {
-  for (const n of names) {
-    if (r[n] !== undefined && r[n] !== null) return r[n];
+// ── Normalizar nombre de columna para comparación fuzzy ──────────────
+function _normColName(s) {
+  const TILDES = { 'á':'a','é':'e','í':'i','ó':'o','ú':'u','ü':'u','ñ':'n',
+                   'Á':'a','É':'e','Í':'i','Ó':'o','Ú':'u','Ü':'u','Ñ':'n' };
+  return String(s)
+    .split('').map(c => TILDES[c] || c).join('')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+// ── Resolver qué clave real del objeto corresponde a un campo ──────────
+function _resolveKey(keys, ...candidates) {
+  // 1. Exacto
+  for (const c of candidates) {
+    if (keys.includes(c)) return c;
   }
-  const rkeys = Object.keys(r);
-  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,' ').trim();
-  for (const n of names) {
-    const nn = norm(n);
-    const found = rkeys.find(k => norm(k) === nn);
-    if (found !== undefined && r[found] !== undefined && r[found] !== null) return r[found];
+  // 2. Fuzzy (sin tildes, sin puntuación)
+  const normKeys = keys.map(k => ({ k, n: _normColName(k) }));
+  for (const c of candidates) {
+    const nc = _normColName(c);
+    const hit = normKeys.find(x => x.n === nc);
+    if (hit) return hit.k;
   }
   return null;
 }
@@ -50,59 +62,83 @@ function parseLiquidaciones(wb) {
   const ws   = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
 
-  // Log primeras columnas para diagnóstico
-  if (rows.length > 0) {
-    console.log('[LIQ] Columnas detectadas:', Object.keys(rows[0]).slice(0, 20));
-    console.log('[LIQ] Primera fila muestra:', rows[0]);
+  if (!rows.length) {
+    console.warn('[LIQ] El archivo no tiene filas.');
+    _LIQ_NORM = []; _buildLiqIdx(); return _LIQ_NORM;
   }
 
+  // ── Detectar nombres de columna UNA VEZ desde la primera fila ──────
+  const allKeys = Object.keys(rows[0]);
+  console.log('[LIQ] Columnas del archivo:', allKeys);
+
+  const K = {
+    equipo:    _resolveKey(allKeys, 'Nro Equipo', 'Equipo', 'Terminal', 'Nro de Equipo'),
+    lote:      _resolveKey(allKeys, 'Nro de Lote', 'Nro Lote', 'Lote'),
+    cupon:     _resolveKey(allKeys, 'Nro de Cupón', 'Nro de Cupon', 'Nro Cupon', 'Cupon', 'Cupón'),
+    aut:       _resolveKey(allKeys, 'Código Autorización', 'Codigo Autorizacion',
+                                    'Código Autorizacion', 'Cod Autorizacion',
+                                    'Cod. Autorizacion', 'Autorizacion', 'Auth'),
+    importe:   _resolveKey(allKeys, 'Importe Venta', 'Importe de Venta', 'Importe', 'Monto', 'Monto Venta'),
+    tarjeta:   _resolveKey(allKeys, 'Tarjeta'),
+    fechaVenta:_resolveKey(allKeys, 'Fecha Venta', 'Fecha de Venta', 'Fecha Operacion', 'Fecha'),
+    fechaPago: _resolveKey(allKeys, 'Fecha Pago', 'Fecha de Pago'),
+    fechaAdel: _resolveKey(allKeys, 'Fecha Adelanto'),
+    nroLiq:    _resolveKey(allKeys, 'Nro Liquidación', 'Nro Liquidacion', 'Nro de Liquidacion', 'Liquidacion'),
+    nombreEq:  _resolveKey(allKeys, 'Nombre de equipo', 'Nombre Equipo', 'Nombre del Equipo', 'Nombre'),
+    nroTarj:   _resolveKey(allKeys, 'Nro Tarjeta', 'Número de Tarjeta', 'Numero Tarjeta', 'Nro. Tarjeta'),
+    cuotas:    _resolveKey(allKeys, 'Cuotas', 'Nro Cuotas'),
+    nroCom:    _resolveKey(allKeys, 'Nro Comercio', 'Nro de Comercio', 'Numero Comercio'),
+    banco:     _resolveKey(allKeys, 'Banco Pagador', 'Banco'),
+    rechazo:   _resolveKey(allKeys, 'Rechazo'),
+    arancel:   _resolveKey(allKeys, 'Arancel'),
+    ivaArancel:_resolveKey(allKeys, 'IVA Arancel', 'Iva Arancel', 'IVA del Arancel'),
+    cfo:       _resolveKey(allKeys, 'CFO'),
+    ivaCfo:    _resolveKey(allKeys, 'Iva CFO', 'IVA CFO'),
+    tipoOp:    _resolveKey(allKeys, 'Tipo operacion', 'Tipo Operacion', 'Tipo de Operacion'),
+    bancoEm:   _resolveKey(allKeys, 'Banco Emisor'),
+  };
+  console.log('[LIQ] Mapeo de columnas resuelto:', K);
+
+  // ── Getter seguro ────────────────────────────────────────────────────
+  const g = (r, k) => (k && r[k] !== undefined) ? r[k] : null;
+
+  // ── Mapear TODAS las filas, filtrar al final ─────────────────────────
   _LIQ_NORM = rows
-    .filter(r => {
-      // Aceptar cualquier fila con al menos un campo identificador de operación
-      // (equipo, cupón, auth o lote). Excluye filas completamente vacías.
-      const eq  = _liqCol(r, 'Nro Equipo', 'Equipo', 'Terminal', 'Nro de Equipo');
-      const cup = _liqCol(r, 'Nro de Cupón', 'Nro Cupon', 'Nro de Cupon', 'Cupon', 'Cupón');
-      const aut = _liqCol(r, 'Código Autorización', 'Codigo Autorizacion', 'Cod Autorizacion',
-                              'Cod. Autorizacion', 'Código de Autorización', 'Auth');
-      const lot = _liqCol(r, 'Nro de Lote', 'Nro Lote', 'Lote');
-      return (eq != null) || (cup != null && cup !== '') || (aut != null && aut !== '') || (lot != null);
-    })
     .map((r, i) => {
-      const tarjeta = String(_liqCol(r, 'Tarjeta') || '').trim();
-      const impRaw  = _liqCol(r, 'Importe Venta', 'Importe de Venta', 'Importe', 'Monto', 'Monto Venta');
+      const tarjeta = String(g(r, K.tarjeta) || '').trim();
+      const impRaw  = String(g(r, K.importe) || '0')
+        .replace(/\./g, '').replace(',', '.');
       return {
         idx:          i,
-        fechaVenta:   String(_liqCol(r, 'Fecha Venta', 'Fecha de Venta', 'Fecha Operacion') || '').trim().slice(0, 10),
-        fechaPago:    String(_liqCol(r, 'Fecha Pago', 'Fecha de Pago')   || '').trim().slice(0, 10),
-        fechaAdelanto:String(_liqCol(r, 'Fecha Adelanto')                || '').trim().slice(0, 10),
-        nroLiq:       String(_liqCol(r, 'Nro Liquidación', 'Nro Liquidacion', 'Nro de Liquidacion', 'Liquidacion') || '').trim(),
-        equipo:       normNum(_liqCol(r, 'Nro Equipo', 'Equipo', 'Terminal', 'Nro de Equipo')),
-        nombreEquipo: String(_liqCol(r, 'Nombre de equipo', 'Nombre Equipo', 'Nombre del Equipo') || '').trim(),
-        lote:         normNum(_liqCol(r, 'Nro de Lote', 'Nro Lote', 'Lote')),
-        cupon:        normNum(_liqCol(r, 'Nro de Cupón', 'Nro Cupon', 'Nro de Cupon', 'Cupon', 'Cupón')),
+        fechaVenta:   String(g(r, K.fechaVenta)  || '').trim().slice(0, 10),
+        fechaPago:    String(g(r, K.fechaPago)    || '').trim().slice(0, 10),
+        fechaAdelanto:String(g(r, K.fechaAdel)    || '').trim().slice(0, 10),
+        nroLiq:       String(g(r, K.nroLiq)       || '').trim(),
+        equipo:       normNum(g(r, K.equipo)),
+        nombreEquipo: String(g(r, K.nombreEq)     || '').trim(),
+        lote:         normNum(g(r, K.lote)),
+        cupon:        normNum(g(r, K.cupon)),
         tarjeta,
-        nroTarjeta:   String(_liqCol(r, 'Nro Tarjeta', 'Número de Tarjeta', 'Numero Tarjeta') || '').trim(),
-        aut:          normNum(_liqCol(r, 'Código Autorización', 'Codigo Autorizacion',
-                                        'Cod. Autorizacion', 'Código de Autorización', 'Auth', 'Autorizacion')),
-        cuotas:       parseInt(_liqCol(r, 'Cuotas', 'Nro Cuotas')) || 1,
-        importe:      (() => {
-          const s = String(impRaw || '').replace(/\./g, '').replace(',', '.');
-          return Math.abs(parseFloat(s) || 0);
-        })(),
-        nroCom:       normNum(_liqCol(r, 'Nro Comercio', 'Nro de Comercio', 'Numero Comercio')),
-        banco:        String(_liqCol(r, 'Banco Pagador', 'Banco')        || '').trim(),
-        rechazo:      String(_liqCol(r, 'Rechazo')                       || 'N').trim().toUpperCase(),
-        arancel:      parseFloat(_liqCol(r, 'Arancel'))                  || 0,
-        ivaArancel:   parseFloat(_liqCol(r, 'IVA Arancel', 'Iva Arancel')) || 0,
-        cfo:          parseFloat(_liqCol(r, 'CFO'))                      || 0,
-        ivaCfo:       parseFloat(_liqCol(r, 'Iva CFO', 'IVA CFO'))       || 0,
-        tipoOp:       String(_liqCol(r, 'Tipo operacion', 'Tipo Operacion', 'Tipo de Operacion') || '').trim(),
-        bancoEmisor:  String(_liqCol(r, 'Banco Emisor')                  || '').trim(),
-        // Procesadora inferida del nombre de tarjeta
+        nroTarjeta:   String(g(r, K.nroTarj)      || '').trim(),
+        aut:          normNum(g(r, K.aut)),
+        cuotas:       parseInt(g(r, K.cuotas))     || 1,
+        importe:      Math.abs(parseFloat(impRaw)  || 0),
+        nroCom:       normNum(g(r, K.nroCom)),
+        banco:        String(g(r, K.banco)         || '').trim(),
+        rechazo:      String(g(r, K.rechazo)       || 'N').trim().toUpperCase(),
+        arancel:      parseFloat(g(r, K.arancel))  || 0,
+        ivaArancel:   parseFloat(g(r, K.ivaArancel))|| 0,
+        cfo:          parseFloat(g(r, K.cfo))      || 0,
+        ivaCfo:       parseFloat(g(r, K.ivaCfo))   || 0,
+        tipoOp:       String(g(r, K.tipoOp)        || '').trim(),
+        bancoEmisor:  String(g(r, K.bancoEm)       || '').trim(),
         proc: tarjeta.toUpperCase().includes('GETNET') ? 'GETPOS' : 'FISERV',
       };
-    });
+    })
+    // Excluir filas sin ningún dato útil (filas vacías, totales, etc.)
+    .filter(liq => liq.equipo !== '0' || liq.aut !== '0' || liq.cupon !== '0' || liq.importe > 0);
 
+  console.log('[LIQ] Filas parseadas:', _LIQ_NORM.length);
   _buildLiqIdx();
   return _LIQ_NORM;
 }
