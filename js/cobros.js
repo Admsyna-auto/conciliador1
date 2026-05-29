@@ -72,85 +72,145 @@ function parseLiquidaciones(wb) {
   return _LIQ_NORM;
 }
 
-// ── Código único de una fila de liquidación ──────────────────────────
+// ── Normalizar monto para clave hash (sin decimales, valor absoluto) ─
+function _normM(v) { return String(Math.round(Math.abs(parseFloat(v) || 0))); }
+
+// ── Descripción del código único para mostrar / exportar ─────────────
 function _codigoLiq(liq) {
-  // Formato: equipo_lote_cupon
-  return `${liq.equipo}_${liq.lote}_${liq.cupon}`;
+  return liq.proc === 'GETPOS'
+    ? `GP_${liq.equipo}_${liq.aut}`
+    : `FIS_${liq.equipo}_${liq.lote}_${liq.cupon}`;
 }
 
-// ── Construir índice hash ────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════
+// ÍNDICE MULTI-CLAVE (FISERV y GETPOS tienen estructuras distintas)
+// ══════════════════════════════════════════════════════════════════
+// FISERV en la liquidación: equipo + lote + cupon  (cupon = ticket del procesador)
+// GETPOS en la liquidación: equipo + aut           (auth = cupón del procesador GETPOS)
+//   → el "Nro de Lote" GETPOS del archivo de procesadora NO coincide con
+//     el "Nro de Lote" de la liquidación; en cambio el auth SÍ coincide
+//     con "Código Autorización" de la liquidación.
+// ══════════════════════════════════════════════════════════════════
 function _buildLiqIdx() {
   _LIQ_IDX = {};
+
+  const add = (key, liq) => {
+    if (!key || key.includes('_0') && key.split('_').every(p => p === '0' || p === 'FIS' || p === 'GP')) return;
+    (_LIQ_IDX[key] = _LIQ_IDX[key] || []).push(liq);
+  };
+
   for (const liq of _LIQ_NORM) {
-    const c = _codigoLiq(liq);       // equipo_lote_cupon
-    const s = `${liq.lote}_${liq.cupon}`;  // sin equipo (tolerancia)
+    const eq  = liq.equipo;
+    const lot = liq.lote;
+    const cup = liq.cupon;
+    const aut = liq.aut;
+    const mon = _normM(liq.importe);
 
-    (_LIQ_IDX[c] = _LIQ_IDX[c] || []).push(liq);
-    (_LIQ_IDX[s] = _LIQ_IDX[s] || []).push(liq);
-
-    // Índice por auth (fallback de último recurso)
-    if (liq.aut && liq.aut !== '0') {
-      const ka = `aut_${liq.aut}_${liq.equipo}`;
-      (_LIQ_IDX[ka] = _LIQ_IDX[ka] || []).push(liq);
+    if (liq.proc === 'GETPOS') {
+      // ── Claves GETPOS ───────────────────────────────────────────
+      // Primaria: equipo + auth (auth = cupon del GETPOS)
+      add(`GP_${eq}_${aut}`,           liq);
+      add(`GP_${eq}_${aut}_${mon}`,    liq);   // con monto para desambiguar
+      // Sin equipo (tolerancia)
+      add(`GP_${aut}_${mon}`,          liq);
+      add(`GP_${aut}`,                 liq);
+      // Por si el cupon del GETPOS ≠ auth pero coincide con liq.cupon
+      if (cup && cup !== '0') {
+        add(`GP_${eq}_CUP_${cup}`,     liq);
+        add(`GP_${eq}_CUP_${cup}_${mon}`, liq);
+      }
+    } else {
+      // ── Claves FISERV ───────────────────────────────────────────
+      // Primaria: equipo + lote + cupon
+      add(`FIS_${eq}_${lot}_${cup}`,   liq);
+      // Sin equipo
+      add(`FIS_${lot}_${cup}`,         liq);
+      // Equipo + auth (cuando lote/cupon no coinciden)
+      if (aut && aut !== '0') {
+        add(`FIS_${eq}_${aut}`,        liq);
+        add(`FIS_${eq}_${aut}_${mon}`, liq);
+      }
     }
   }
 }
 
 // ══════════════════════════════════════════════════════════════════
-// CÓDIGO ÚNICO PARA UNA FILA DE RESULTADO
+// CLAVES DE BÚSQUEDA PARA UNA FILA DE RESULTADO
 // ══════════════════════════════════════════════════════════════════
-// Devuelve { full, short, autKey } con los distintos niveles de clave.
-// full  = equipo_lote_ticket  (mayor especificidad, misma estructura que liquidación)
-// short = lote_ticket         (sin equipo, para tolerancia)
-// autKey = aut_auth_equipo    (fallback)
-function _codigosDeRec(r) {
+function _clavesDeRec(r) {
   const p   = r.proc;
   const cor = typeof CORREGIDAS !== 'undefined' ? CORREGIDAS[r.sky.idx] : null;
 
   if (p) {
-    // ── Fila conciliada con procesadora ──────────────────────────
-    // FISERV: cupón en la liquidación = p.ticket
-    // GETPOS: cupón en la liquidación = p.cupon
     const equipo = normNum(p.equipo || p.pos || '');
     const lote   = normNum(p.lote   || r.sky.lote || '');
-    const ticket = normNum(p.ticket || p.cupon    || '');   // ticket=FISERV, cupon=GETPOS
+    const ticket = normNum(p.ticket || '');   // solo FISERV tiene ticket
+    const cupon  = normNum(p.cupon  || '');   // GETPOS usa cupon
     const aut    = normNum(p.aut    || '');
+    const mon    = _normM(r.sky.monto);
+    const esFIS  = r.procEncontrada === 'FISERV' || (!r.procEncontrada && !!p.ticket);
 
-    if (lote === '0' || ticket === '0') return null;
-
-    return {
-      full:   `${equipo}_${lote}_${ticket}`,
-      short:  `${lote}_${ticket}`,
-      autKey: (aut !== '0' && equipo !== '0') ? `aut_${aut}_${equipo}` : null,
-      equipo, lote, ticket,
-    };
+    if (esFIS) {
+      // ── Cascada FISERV ──────────────────────────────────────────
+      // L1 (más específica): equipo + lote + ticket
+      // L2: sin equipo
+      // L3: equipo + auth
+      // L4: equipo + auth + monto
+      return {
+        proc:  'FISERV',
+        keys: [
+          ticket !== '0' && equipo !== '0' ? `FIS_${equipo}_${lote}_${ticket}` : null,
+          ticket !== '0'                   ? `FIS_${lote}_${ticket}`           : null,
+          aut    !== '0' && equipo !== '0' ? `FIS_${equipo}_${aut}`            : null,
+          aut    !== '0' && equipo !== '0' ? `FIS_${equipo}_${aut}_${mon}`     : null,
+        ].filter(Boolean),
+        label: equipo !== '0' && ticket !== '0'
+          ? `FIS_${equipo}_${lote}_${ticket}`
+          : `FIS_${lote}_${ticket || aut}`,
+      };
+    } else {
+      // ── Cascada GETPOS ──────────────────────────────────────────
+      // Para GETPOS el auth del procesador = Código Autorización de la liquidación
+      // El "cupon" GETPOS también puede ser el mismo valor que aut
+      // El equipo (pos) del GETPOS = Nro Equipo de la liquidación
+      // El lote GETPOS ≠ Nro de Lote de la liquidación (numeración diferente)
+      const autGP  = aut !== '0' ? aut : cupon;   // aut o cupon como auth
+      const cuponGP = cupon !== '0' ? cupon : aut;
+      return {
+        proc:  'GETPOS',
+        keys: [
+          autGP  !== '0' && equipo !== '0' ? `GP_${equipo}_${autGP}_${mon}`       : null,
+          autGP  !== '0' && equipo !== '0' ? `GP_${equipo}_${autGP}`              : null,
+          autGP  !== '0'                   ? `GP_${autGP}_${mon}`                 : null,
+          autGP  !== '0'                   ? `GP_${autGP}`                        : null,
+          // Intento con cupon como campo cupón (por si ≠ auth en liq)
+          cuponGP !== '0' && cuponGP !== autGP && equipo !== '0'
+            ? `GP_${equipo}_CUP_${cuponGP}`     : null,
+          cuponGP !== '0' && cuponGP !== autGP && equipo !== '0'
+            ? `GP_${equipo}_CUP_${cuponGP}_${mon}` : null,
+        ].filter(Boolean),
+        label: equipo !== '0' && autGP !== '0'
+          ? `GP_${equipo}_${autGP}`
+          : `GP_${autGP || cuponGP}`,
+      };
+    }
   }
 
-  if (cor) {
-    // ── Corrección manual: recruzar no encontró proc ──────────────
-    // Usar cupon corregido por el usuario + lote de SKY
-    const lote  = normNum(r.sky.lote  || '');
-    const cupon = normNum(cor.cupon   || r.sky.cupon || '');
-
-    if (lote === '0' || cupon === '0') return null;
-    return {
-      full:   `0_${lote}_${cupon}`,  // sin equipo conocido
-      short:  `${lote}_${cupon}`,
-      autKey: null,
-      equipo: '0', lote, ticket: cupon,
-    };
-  }
-
-  // ── SIN MATCH sin corrección — fallback con campos SKY ───────────
+  // ── Sin proc (corrección manual o SIN MATCH) ─────────────────────
   const lote  = normNum(r.sky.lote  || '');
-  const cupon = normNum(r.sky.cupon || '');
+  const cupon = normNum(cor?.cupon  || r.sky.cupon || '');
+  const mon   = _normM(r.sky.monto);
+  const esFallGP = r.sky.esGETPos;
 
-  if (lote === '0' || cupon === '0') return null;
+  const prefix = esFallGP ? 'GP' : 'FIS';
   return {
-    full:   `0_${lote}_${cupon}`,
-    short:  `${lote}_${cupon}`,
-    autKey: null,
-    equipo: '0', lote, ticket: cupon,
+    proc:  esFallGP ? 'GETPOS' : 'FISERV',
+    keys: [
+      `${prefix}_${lote}_${cupon}`,
+      `${prefix}_${cupon}_${mon}`,
+      `${prefix}_${cupon}`,
+    ].filter(Boolean),
+    label: `${prefix}_SKY_${lote}_${cupon}`,
   };
 }
 
@@ -158,23 +218,12 @@ function _codigosDeRec(r) {
 function _buscarEnLiq(r) {
   if (!_LIQ_NORM.length) return null;
 
-  const codes = _codigosDeRec(r);
-  if (!codes) return null;
+  const info = _clavesDeRec(r);
+  if (!info) return null;
 
-  // 1. Código completo equipo+lote+ticket (más preciso)
-  if (codes.full && codes.equipo !== '0') {
-    const hit = _LIQ_IDX[codes.full];
-    if (hit?.length) return hit[0];
-  }
-
-  // 2. Lote + ticket sin equipo (para SIN MATCH o equipo no disponible)
-  const hit2 = _LIQ_IDX[codes.short];
-  if (hit2?.length) return hit2[0];
-
-  // 3. Auth + equipo (último recurso)
-  if (codes.autKey) {
-    const hit3 = _LIQ_IDX[codes.autKey];
-    if (hit3?.length) return hit3[0];
+  for (const key of info.keys) {
+    const hits = _LIQ_IDX[key];
+    if (hits?.length) return hits[0];
   }
 
   return null;
@@ -193,8 +242,8 @@ function cruzarCobros() {
   const candidatos = RESULTADO.filter(r => !r.sky.integrado && !r.sky.esNeg);
 
   for (const r of candidatos) {
-    const codes = _codigosDeRec(r);
-    const liq   = _buscarEnLiq(r);
+    const info = _clavesDeRec(r);
+    const liq  = _buscarEnLiq(r);
 
     let estado;
     if (!liq) {
@@ -205,16 +254,23 @@ function cruzarCobros() {
       estado = 'COBRADO';
     }
 
+    // Fuente del código para display/filtros
+    let fuenteCodigo;
+    if (r.proc) {
+      fuenteCodigo = info?.proc === 'GETPOS' ? 'GETPOS' : 'FISERV';
+    } else if (typeof CORREGIDAS !== 'undefined' && CORREGIDAS[r.sky.idx]) {
+      fuenteCodigo = 'MANUAL';
+    } else {
+      fuenteCodigo = 'SKY';
+    }
+
     COBROS_RESULT.push({
-      fila:       r,
+      fila:        r,
       liq,
       estado,
-      codigoProc: codes?.full  || '—',   // para depuración / exportación
-      codigoLiq:  liq ? _codigoLiq(liq) : '—',
-      fuenteCodigo: r.proc
-        ? (r.proc.ticket ? 'FISERV(ticket)' : 'GETPOS(cupon)')
-        : (typeof CORREGIDAS !== 'undefined' && CORREGIDAS[r.sky.idx]
-            ? 'MANUAL(corregido)' : 'SKY(fallback)'),
+      codigoProc:  info?.label  || '—',   // para depuración / exportación
+      codigoLiq:   liq ? _codigoLiq(liq) : '—',
+      fuenteCodigo,
     });
   }
 }
