@@ -5,9 +5,9 @@
 // Estado de filtros
 const FILTROS = { suc:'', tar:'', proc:'', fecha:'', vend:'', search:'' };
 const HDR_BASE = ['Estado','Método','Proc.Esp.','Proc.Real','Integrado',
-  'Suc.Sky','Tarjeta Sky','Plan','Fecha','Monto','Cupón','Lote',
-  'Tarjeta Proc.','Cuotas','Com.FIS','Cód.Auth.','Suc.Proc.',
-  'Com.OK','Match Parcial'];
+  'Suc. SKY','Tarjeta SKY','Plan SKY','Fecha SKY','Monto SKY','Cupón SKY','Lote SKY',
+  'Tarjeta Proc.','Cuotas Proc.','Com.FIS','Cód.Auth. Proc.','Lote Proc.','Ticket Proc.','Suc. Proc.',
+  'Dif. Monto','Com.OK','Match Parcial'];
 
 // ── Normalización ────────────────────────────────────────
 function norm(v) { const s=String(v??'').trim().replace(/^0+/,''); return s||'0'; }
@@ -733,6 +733,11 @@ function rowClass(est) {
 function toRow(r) {
   const s=r.sky, p=r.proc;
   const monto=`<span class="num ${s.monto<0?'num-neg':''}">${fmtARS(s.monto)}</span>`;
+  const procMonto = r.procMontoNorm ?? p?.monto ?? null;
+  const difVal = (procMonto !== null && s.monto !== undefined) ? s.monto - procMonto : null;
+  const dif = difVal !== null
+    ? `<span class="num ${difVal<0?'num-neg':''}">${fmtARS(difVal)}</span>`
+    : '';
   return [
     estadoBadge(r.estado),
     `<span class="met">${r.metodo??''}</span>`,
@@ -740,7 +745,8 @@ function toRow(r) {
     s.integrado?'<span class="st st-int">SI</span>':'',
     s.suc, s.tarjeta, s.plan, s.fecha, monto, s.cupon, s.lote,
     p?.tarjeta??'', p?.cuotas??'', p?.comFis??'',
-    p?.aut??'', p?.suc??'', r.comOK??'', r.matchParcial??'',
+    p?.aut??'', p?.lote??'', p?.ticket??'', p?.suc??'',
+    dif, r.comOK??'', r.matchParcial??'',
   ];
 }
 
@@ -1073,15 +1079,17 @@ function descargar(proc) {
 function descargarCompleto() {
   const HDR=['Estado','Método','Is Dev.','Anul.S/Cobro','Integrado',
     'Proc.Esp.','Proc.Real','Com.OK','Suc.OK','Match Parcial',
-    'Fecha','Suc','Tarjeta','Plan','Cupón','Lote','Com.SKY','Monto','Neto','Vendedor','Asiento',
-    'Tarjeta Proc.','Cuotas','Monto Proc.','Cód.Auth.','Lote Proc.','Suc.Proc.','Com.FIS','Terminal'];
+    'Fecha SKY','Suc. SKY','Tarjeta SKY','Plan SKY','Cupón SKY','Lote SKY','Com. SKY','Monto SKY','Neto SKY','Vendedor SKY','Asiento SKY',
+    'Tarjeta Proc.','Cuotas Proc.','Monto Proc.','Dif. Monto','Cód.Auth. Proc.','Lote Proc.','Ticket Proc.','Suc. Proc.','Com.FIS Proc.','Terminal Proc.'];
   const rows=RESULTADO.map(r=>{
     const s=r.sky, p=r.proc;
+    const procMonto = r.procMontoNorm ?? p?.monto ?? null;
+    const difMonto  = procMonto !== null ? +(s.monto - procMonto).toFixed(2) : '';
     return [r.estado,r.metodo??'',r.esDevolucion??'NO',r.esAnulSinCobro??'NO',s.integrado?'SI':'NO',
       r.procEsperada??'',r.procEncontrada??'',r.comOK??'',r.sucOK??'',r.matchParcial??'',
       fmtFecha(s.fecha),s.suc,s.tarjeta,s.plan,s.cupon,s.lote,s.nroCom,s.monto,s.neto,
       s.vendedor??'',s.asiento??'',
-      p?.tarjeta??'',p?.cuotas??'',r.procMontoNorm??p?.monto??'',p?.aut??'',p?.lote??'',p?.suc??'',p?.comFis??'',p?.equipo??''];
+      p?.tarjeta??'',p?.cuotas??'',procMonto??'',difMonto,p?.aut??'',p?.lote??'',p?.ticket??'',p?.suc??'',p?.comFis??'',p?.equipo??''];
   });
   _exportXlsx([HDR,...rows],'Conciliación completa',`Conciliacion_${hoy()}.xlsx`);
 }
