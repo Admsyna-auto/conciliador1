@@ -1575,7 +1575,7 @@ function exportarCorrecciones() {
     'Procesadora','Cupón ingresado','Método cruce','Estado cruce',
     // Procesadora
     'Monto Proc.','DIF $','Tarjeta Proc.','Cuotas Proc.',
-    'Com.FIS','Cód.Auth.','Suc.Proc.','Com.OK'
+    'Lote Proc.','Ticket Proc.','Com.FIS','Cód.Auth.','Suc.Proc.','Com.OK'
   ];
 
   const data = entries.map(([idxStr, cor]) => {
@@ -1594,6 +1594,7 @@ function exportarCorrecciones() {
       p ? Math.abs(p.monto || 0) : '',
       cor.difMonto != null ? cor.difMonto : '',
       p?.tarjeta ?? '', p?.cuotas ?? '',
+      p?.lote ?? '', p?.ticket ?? '',
       p?.comFis ?? '', p?.aut ?? '', p?.suc ?? '', fila.comOK ?? '',
     ];
   }).filter(Boolean);
