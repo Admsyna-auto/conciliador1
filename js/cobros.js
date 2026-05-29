@@ -36,7 +36,15 @@ function parseLiquidaciones(wb) {
   const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
 
   _LIQ_NORM = rows
-    .filter(r => r['Nro de Cupón'] != null && r['Nro de Lote'] != null)
+    // Incluir cualquier fila que tenga equipo Y al menos un identificador de operación.
+    // GETPOS puede no tener Nro de Lote → no filtrar por ese campo.
+    .filter(r => {
+      const eq  = r['Nro Equipo'];
+      const aut = r['Código Autorización'];
+      const cup = r['Nro de Cupón'];
+      const imp = r['Importe Venta'];
+      return eq != null && imp != null && (aut != null || cup != null);
+    })
     .map((r, i) => {
       const tarjeta = String(r['Tarjeta'] || '').trim();
       return {
@@ -85,17 +93,29 @@ function _codigoLiq(liq) {
 // ══════════════════════════════════════════════════════════════════
 // ÍNDICE MULTI-CLAVE (FISERV y GETPOS tienen estructuras distintas)
 // ══════════════════════════════════════════════════════════════════
-// FISERV en la liquidación: equipo + lote + cupon  (cupon = ticket del procesador)
-// GETPOS en la liquidación: equipo + aut           (auth = cupón del procesador GETPOS)
-//   → el "Nro de Lote" GETPOS del archivo de procesadora NO coincide con
-//     el "Nro de Lote" de la liquidación; en cambio el auth SÍ coincide
-//     con "Código Autorización" de la liquidación.
+// GETPOS:
+//   • Nro Equipo (liquidación) = Código del POS (procesadora) → coincide ✓
+//   • Nro de Lote (liquidación) ≠ Lote (procesadora)          → NO coincide ✗
+//   • Código Autorización      = auth de la procesadora       → coincide ✓
+//   Clave primaria: GP_equipo_auth
+//
+// FISERV:
+//   • Nro Equipo (liquidación) ≠ equipo de la procesadora     → NO coincide ✗
+//     (son dos sistemas de ID distintos: 521171 vs 19383953)
+//   • Nro de Lote  (liquidación) ≠ Nro de Lote (procesadora)  → NO coincide ✗
+//   • Nro de Cupón (liquidación) = Nro de Cupón (procesadora) → coincide ✓
+//   • Código Autorización       = auth de la procesadora      → coincide ✓
+//   Clave primaria: FIS_A_auth_monto  (auth es asignado por Visa/MC, globalmente único)
+//   Clave secundaria: FIS_C_cupon_monto  (cupon = Nro de Cupón)
 // ══════════════════════════════════════════════════════════════════
 function _buildLiqIdx() {
   _LIQ_IDX = {};
 
   const add = (key, liq) => {
-    if (!key || key.includes('_0') && key.split('_').every(p => p === '0' || p === 'FIS' || p === 'GP')) return;
+    if (!key) return;
+    // Descartar claves trivialmente degeneradas (todo ceros)
+    const parts = key.split('_');
+    if (parts.slice(1).every(p => p === '0')) return;
     (_LIQ_IDX[key] = _LIQ_IDX[key] || []).push(liq);
   };
 
@@ -108,27 +128,42 @@ function _buildLiqIdx() {
 
     if (liq.proc === 'GETPOS') {
       // ── Claves GETPOS ───────────────────────────────────────────
-      // Primaria: equipo + auth (auth = cupon del GETPOS)
-      add(`GP_${eq}_${aut}`,           liq);
-      add(`GP_${eq}_${aut}_${mon}`,    liq);   // con monto para desambiguar
-      // Sin equipo (tolerancia)
-      add(`GP_${aut}_${mon}`,          liq);
-      add(`GP_${aut}`,                 liq);
-      // Por si el cupon del GETPOS ≠ auth pero coincide con liq.cupon
+      // Primaria: equipo + auth (el auth del GETPOS = Código Autorización de liq)
+      if (aut && aut !== '0') {
+        add(`GP_${eq}_${aut}`,             liq);
+        add(`GP_${eq}_${aut}_${mon}`,      liq);
+        add(`GP_${aut}_${mon}`,            liq);
+        add(`GP_${aut}`,                   liq);
+      }
+      // Fallback: equipo + cupon (cuando cupon ≠ auth)
       if (cup && cup !== '0') {
-        add(`GP_${eq}_CUP_${cup}`,     liq);
-        add(`GP_${eq}_CUP_${cup}_${mon}`, liq);
+        add(`GP_${eq}_CUP_${cup}`,         liq);
+        add(`GP_${eq}_CUP_${cup}_${mon}`,  liq);
       }
     } else {
       // ── Claves FISERV ───────────────────────────────────────────
-      // Primaria: equipo + lote + cupon
-      add(`FIS_${eq}_${lot}_${cup}`,   liq);
-      // Sin equipo
-      add(`FIS_${lot}_${cup}`,         liq);
-      // Equipo + auth (cuando lote/cupon no coinciden)
+      // El equipo y lote de la liquidación ≠ equipo/lote de la procesadora.
+      // La clave más confiable es el Código de Autorización (red Visa/MC).
+      // También el Nro de Cupón puede coincidir con el ticket de la procesadora.
+
+      // L1 – Auth-based (más confiable: asignado por la red de tarjetas)
       if (aut && aut !== '0') {
-        add(`FIS_${eq}_${aut}`,        liq);
-        add(`FIS_${eq}_${aut}_${mon}`, liq);
+        add(`FIS_A_${aut}_${mon}`,         liq);  // auth + monto (primaria)
+        add(`FIS_A_${aut}`,                liq);  // auth solo    (tolerancia)
+      }
+      // L2 – Cupón + monto (Nro de Cupón coincide entre procesadora y liquidación)
+      if (cup && cup !== '0') {
+        add(`FIS_C_${cup}_${mon}`,         liq);
+        add(`FIS_C_${cup}`,                liq);
+      }
+      // L3 – Claves tradicionales (por si coinciden equipo/lote en algún caso)
+      if (cup && cup !== '0' && lot && lot !== '0') {
+        add(`FIS_${eq}_${lot}_${cup}`,     liq);
+        add(`FIS_${lot}_${cup}`,           liq);
+      }
+      if (aut && aut !== '0') {
+        add(`FIS_${eq}_${aut}`,            liq);
+        add(`FIS_${eq}_${aut}_${mon}`,     liq);
       }
     }
   }
@@ -152,21 +187,31 @@ function _clavesDeRec(r) {
 
     if (esFIS) {
       // ── Cascada FISERV ──────────────────────────────────────────
-      // L1 (más específica): equipo + lote + ticket
-      // L2: sin equipo
-      // L3: equipo + auth
-      // L4: equipo + auth + monto
+      // El equipo y lote del archivo procesadora ≠ equipo/lote de la liquidación.
+      // Prioridad:
+      //   L1 – auth + monto  (Código Autorización: globalmente único, mismo en ambos archivos)
+      //   L2 – auth solo     (tolerancia si monto difiere por centavos)
+      //   L3 – ticket + monto (Nro de Cupón coincide entre procesadora y liquidación)
+      //   L4 – ticket solo
+      //   L5-L8 – claves tradicionales equipo/lote (por si acaso coinciden)
       return {
         proc:  'FISERV',
         keys: [
+          // L1-L2: auth-based (más confiable)
+          aut    !== '0'                   ? `FIS_A_${aut}_${mon}`            : null,
+          aut    !== '0'                   ? `FIS_A_${aut}`                   : null,
+          // L3-L4: ticket/cupon + monto
+          ticket !== '0'                   ? `FIS_C_${ticket}_${mon}`         : null,
+          ticket !== '0'                   ? `FIS_C_${ticket}`                : null,
+          // L5-L8: claves tradicionales (equipo+lote+ticket, por si coinciden)
           ticket !== '0' && equipo !== '0' ? `FIS_${equipo}_${lote}_${ticket}` : null,
           ticket !== '0'                   ? `FIS_${lote}_${ticket}`           : null,
           aut    !== '0' && equipo !== '0' ? `FIS_${equipo}_${aut}`            : null,
           aut    !== '0' && equipo !== '0' ? `FIS_${equipo}_${aut}_${mon}`     : null,
         ].filter(Boolean),
-        label: equipo !== '0' && ticket !== '0'
-          ? `FIS_${equipo}_${lote}_${ticket}`
-          : `FIS_${lote}_${ticket || aut}`,
+        label: aut !== '0'
+          ? `FIS_A_${aut}_${mon}`
+          : `FIS_${lote}_${ticket}`,
       };
     } else {
       // ── Cascada GETPOS ──────────────────────────────────────────
