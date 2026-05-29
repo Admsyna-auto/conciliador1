@@ -78,6 +78,17 @@ function _dLegend(position='top') {
   return { position, labels: { color:DASH_CLR.txt, font:{family:'JetBrains Mono',size:10}, boxWidth:10, padding:8 } };
 }
 
+// ── Pestaña interna del dashboard ─────────────────────────────────
+function showDashTab(tab, btn) {
+  document.querySelectorAll('.dash-itab').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  const tx  = document.getElementById('dash-tab-tx');
+  const pag = document.getElementById('dash-tab-pag');
+  if (tx)  tx.style.display  = tab === 'tx'  ? '' : 'none';
+  if (pag) pag.style.display = tab === 'pag' ? '' : 'none';
+  setTimeout(() => Object.values(_dashCharts).forEach(c => { try{c.resize();}catch(e){} }), 60);
+}
+
 // ════════════════════════════════════════════════════════════════════
 // RENDER PRINCIPAL
 // ════════════════════════════════════════════════════════════════════
@@ -312,7 +323,7 @@ function renderDashboard() {
     .sort((a,b) => (b[1].ok+b[1].sm+b[1].otro) - (a[1].ok+a[1].sm+a[1].otro))
     .slice(0, 25);
 
-  _dashCharts.sucComp = new Chart(document.getElementById('ch-suc-comp'), {
+  _dashCharts.sucComp  = new Chart(document.getElementById('ch-suc-comp'), {
     type:'bar',
     data: {
       labels: sucAllPairs.map(([k])=>'Suc. '+k),
@@ -358,6 +369,9 @@ function renderDashboard() {
         parseFloat(pctMonto)>=90?DASH_CLR.ok:parseFloat(pctMonto)>=70?DASH_CLR.malFact:DASH_CLR.sm);
   }
 
+  // Renderizar tab pagos
+  _renderDashPagos();
+
   // ── 9. BAR — Monto sin match por sucursal (top 15) ─────────────────
   const sucSMmonto = {};
   smRows.forEach(r => { const s=r.sky?.suc??'?'; sucSMmonto[s]=(sucSMmonto[s]||0)+Math.abs(r.sky?.monto||0); });
@@ -378,4 +392,280 @@ function renderDashboard() {
       }
     }
   });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// RENDER PAGOS — Gráficos del módulo 4 · COBROS en el dashboard
+// ════════════════════════════════════════════════════════════════════
+function _renderDashPagos() {
+  const hasCobros = typeof COBROS_RESULT !== 'undefined' && COBROS_RESULT.length > 0;
+
+  const cobrados   = hasCobros ? COBROS_RESULT.filter(c => c.estado === 'COBRADO')   : [];
+  const pendientes = hasCobros ? COBROS_RESULT.filter(c => c.estado === 'PENDIENTE') : [];
+  const rechazados = hasCobros ? COBROS_RESULT.filter(c => c.estado === 'RECHAZADO') : [];
+  const total      = hasCobros ? COBROS_RESULT.length : 0;
+
+  const sumM = arr => arr.reduce((s,c) => s + Math.abs(c.fila?.sky?.monto||0), 0);
+  const totCob = sumM(cobrados), totPen = sumM(pendientes), totRec = sumM(rechazados);
+  const totTot = totCob + totPen + totRec;
+  const pctCobOps = total   ? (cobrados.length / total   * 100) : 0;
+  const pctCobMon = totTot  ? (totCob / totTot           * 100) : 0;
+
+  // ── KPIs pagos ───────────────────────────────────────────────────
+  const _pk = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
+  _pk('pkpi-total',   total.toLocaleString('es-AR'));
+  _pk('pkpi-mtotal',  _dFmtM(totTot));
+  _pk('pkpi-cob',     cobrados.length.toLocaleString('es-AR'));
+  _pk('pkpi-mcob',    _dFmtM(totCob));
+  _pk('pkpi-pen',     pendientes.length.toLocaleString('es-AR'));
+  _pk('pkpi-mpen',    _dFmtM(totPen));
+  _pk('pkpi-rec',     rechazados.length.toLocaleString('es-AR'));
+  _pk('pkpi-mrec',    _dFmtM(totRec));
+  _pk('pkpi-pct',     pctCobOps.toFixed(1) + '%');
+  _pk('pkpi-pctm',    pctCobMon.toFixed(1) + '% por monto');
+  _pk('pkpi-mpen2',   _dFmtM(totPen));
+  _pk('pkpi-pctpen',  totTot ? (totPen/totTot*100).toFixed(1)+'% del total' : '—');
+
+  const noDataMsg = `<div style="padding:30px;text-align:center;color:var(--m2);font-size:10px">
+    Sin datos — cargá el archivo de liquidaciones</div>`;
+
+  if (!hasCobros) {
+    ['ch-pag-donut-ops','ch-pag-donut-monto','ch-pag-proc','ch-pag-fecha-pago',
+     'ch-pag-evol','ch-pag-suc-pend-ops','ch-pag-suc-pend-monto',
+     'ch-pag-suc-comp','ch-pag-tarjeta'].forEach(id => {
+      const wrap = document.getElementById(id)?.parentElement;
+      if (wrap) wrap.innerHTML = noDataMsg;
+    });
+    const re = document.getElementById('dash-resumen-pagos');
+    if (re) re.innerHTML = noDataMsg;
+    return;
+  }
+
+  const C_COB = '#34d399', C_PEN = '#f87171', C_REC = '#fbbf24';
+
+  // ── 1. DONUT — Estado cobro (ops) ────────────────────────────────
+  _dashCharts.pagDonutOps = new Chart(document.getElementById('ch-pag-donut-ops'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Cobrado','Pendiente','Rechazado'],
+      datasets: [{ data:[cobrados.length, pendientes.length, rechazados.length],
+        backgroundColor:[C_COB+'dd',C_PEN+'dd',C_REC+'dd'],
+        borderWidth:1, borderColor:'#111827', hoverOffset:8 }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, cutout:'60%',
+      plugins: {
+        legend: _dLegend('right'),
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed.toLocaleString('es-AR')} (${total?(ctx.parsed/total*100).toFixed(1):0}%)` } }
+      }
+    }
+  });
+
+  // ── 2. DONUT — Estado cobro (monto $) ───────────────────────────
+  _dashCharts.pagDonutMonto = new Chart(document.getElementById('ch-pag-donut-monto'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Cobrado','Pendiente','Rechazado'],
+      datasets: [{ data:[totCob, totPen, totRec],
+        backgroundColor:[C_COB+'dd',C_PEN+'dd',C_REC+'dd'],
+        borderWidth:1, borderColor:'#111827', hoverOffset:8 }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, cutout:'60%',
+      plugins: {
+        legend: _dLegend('right'),
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${_dFmtPeso(ctx.parsed)}` } }
+      }
+    }
+  });
+
+  // ── 3. GROUPED BAR — Por procesadora ────────────────────────────
+  const procPag = { FISERV:{cob:0,pen:0,rec:0}, GETPOS:{cob:0,pen:0,rec:0} };
+  COBROS_RESULT.forEach(c => {
+    const p = c.fuenteCodigo === 'GETPOS' ? 'GETPOS' : 'FISERV';
+    const k = c.estado==='COBRADO'?'cob':c.estado==='RECHAZADO'?'rec':'pen';
+    procPag[p][k]++;
+  });
+  _dashCharts.pagProc = new Chart(document.getElementById('ch-pag-proc'), {
+    type:'bar',
+    data: {
+      labels:['FISERV','GETPOS'],
+      datasets:[
+        { label:'Cobrado',   data:[procPag.FISERV.cob,procPag.GETPOS.cob], backgroundColor:C_COB+'cc', borderRadius:3, borderWidth:0 },
+        { label:'Pendiente', data:[procPag.FISERV.pen,procPag.GETPOS.pen], backgroundColor:C_PEN+'cc', borderRadius:3, borderWidth:0 },
+        { label:'Rechazado', data:[procPag.FISERV.rec,procPag.GETPOS.rec], backgroundColor:C_REC+'cc', borderRadius:3, borderWidth:0 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+      scales: _dScales()
+    }
+  });
+
+  // ── 4. BAR — Calendario de cobros (fecha de pago) ───────────────
+  const byFP = {};
+  cobrados.forEach(c => {
+    const f = c.liq?.fechaPago || c.liq?.fechaVenta || '?';
+    if (f !== '?') byFP[f] = (byFP[f]||0) + 1;
+  });
+  const fpFechas = Object.keys(byFP).sort();
+  _dashCharts.pagFechaPago = new Chart(document.getElementById('ch-pag-fecha-pago'), {
+    type:'bar',
+    data: {
+      labels: fpFechas,
+      datasets:[{ label:'Ops cobradas', data:fpFechas.map(f=>byFP[f]), backgroundColor:C_COB+'99', borderRadius:3, borderWidth:0 }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{ ticks:{ color:DASH_CLR.txt, font:{size:9}, maxRotation:40 }, grid:{ color:DASH_CLR.grid } },
+        y:{ ticks:{ color:DASH_CLR.txt, font:{size:9} }, grid:{ color:DASH_CLR.grid }, beginAtZero:true }
+      }
+    }
+  });
+
+  // ── 5. LINE — Evolución por fecha de venta ──────────────────────
+  const byFV = {};
+  COBROS_RESULT.forEach(c => {
+    const f = c.fila?.sky?.fecha || '?';
+    if (!byFV[f]) byFV[f]={cob:0,pen:0,rec:0};
+    const k = c.estado==='COBRADO'?'cob':c.estado==='RECHAZADO'?'rec':'pen';
+    byFV[f][k]++;
+  });
+  const vFechas = Object.keys(byFV).filter(f=>f!=='?').sort();
+  _dashCharts.pagEvol = new Chart(document.getElementById('ch-pag-evol'), {
+    type:'line',
+    data:{
+      labels: vFechas,
+      datasets:[
+        { label:'Cobrado',   data:vFechas.map(f=>byFV[f].cob), borderColor:C_COB, backgroundColor:C_COB+'18', fill:true,  tension:.35, pointRadius:3, borderWidth:2 },
+        { label:'Pendiente', data:vFechas.map(f=>byFV[f].pen), borderColor:C_PEN, backgroundColor:C_PEN+'18', fill:true,  tension:.35, pointRadius:3, borderWidth:2 },
+        { label:'Rechazado', data:vFechas.map(f=>byFV[f].rec), borderColor:C_REC, backgroundColor:'transparent', fill:false, tension:.35, pointRadius:3, borderWidth:1, borderDash:[4,4] },
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+      scales:{
+        x:{ ticks:{ color:DASH_CLR.txt, font:{size:9}, maxRotation:40 }, grid:{ color:DASH_CLR.grid } },
+        y:{ ticks:{ color:DASH_CLR.txt, font:{size:9} }, grid:{ color:DASH_CLR.grid }, beginAtZero:true }
+      }
+    }
+  });
+
+  // ── 6. H-BAR — Top 15 suc por ops pendientes ────────────────────
+  const sucPO = {};
+  pendientes.forEach(c => { const s=c.fila?.sky?.suc??'?'; sucPO[s]=(sucPO[s]||0)+1; });
+  const spoPairs = Object.entries(sucPO).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  _dashCharts.pagSucPendOps = new Chart(document.getElementById('ch-pag-suc-pend-ops'), {
+    type:'bar',
+    data:{ labels:spoPairs.map(([k])=>'Suc.'+k), datasets:[{ label:'Ops pendientes', data:spoPairs.map(([,v])=>v), backgroundColor:C_PEN+'bb', borderRadius:3, borderWidth:0 }] },
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false} },
+      scales:{
+        x:{ ticks:{ color:DASH_CLR.txt, font:{size:9} }, grid:{ color:DASH_CLR.grid } },
+        y:{ ticks:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'} }, grid:{ display:false } }
+      }
+    }
+  });
+
+  // ── 7. H-BAR — Top 15 suc por monto pendiente ($) ───────────────
+  const sucPM = {};
+  pendientes.forEach(c => { const s=c.fila?.sky?.suc??'?'; sucPM[s]=(sucPM[s]||0)+Math.abs(c.fila?.sky?.monto||0); });
+  const spmPairs = Object.entries(sucPM).sort((a,b)=>b[1]-a[1]).slice(0,15);
+  _dashCharts.pagSucPendMonto = new Chart(document.getElementById('ch-pag-suc-pend-monto'), {
+    type:'bar',
+    data:{ labels:spmPairs.map(([k])=>'Suc.'+k), datasets:[{ label:'Monto pendiente', data:spmPairs.map(([,v])=>v), backgroundColor:C_PEN+'99', borderRadius:3, borderWidth:0 }] },
+    options:{
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ' '+_dFmtPeso(ctx.parsed.x) } } },
+      scales:{
+        x:{ ticks:{ color:DASH_CLR.txt, font:{size:9}, callback:v=>_dFmtM(v) }, grid:{ color:DASH_CLR.grid } },
+        y:{ ticks:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'} }, grid:{ display:false } }
+      }
+    }
+  });
+
+  // ── 8. STACKED BAR — Composición por sucursal (top 25) ──────────
+  const sucComp2 = {};
+  COBROS_RESULT.forEach(c => {
+    const s = c.fila?.sky?.suc??'?';
+    if (!sucComp2[s]) sucComp2[s]={cob:0,pen:0,rec:0};
+    const k = c.estado==='COBRADO'?'cob':c.estado==='RECHAZADO'?'rec':'pen';
+    sucComp2[s][k]++;
+  });
+  const scPairs = Object.entries(sucComp2)
+    .sort((a,b)=>(b[1].cob+b[1].pen+b[1].rec)-(a[1].cob+a[1].pen+a[1].rec)).slice(0,25);
+  _dashCharts.pagSucComp = new Chart(document.getElementById('ch-pag-suc-comp'), {
+    type:'bar',
+    data:{
+      labels: scPairs.map(([k])=>'Suc.'+k),
+      datasets:[
+        { label:'Cobrado',   data:scPairs.map(([,v])=>v.cob), backgroundColor:C_COB+'cc', borderWidth:0 },
+        { label:'Pendiente', data:scPairs.map(([,v])=>v.pen), backgroundColor:C_PEN+'cc', borderWidth:0 },
+        { label:'Rechazado', data:scPairs.map(([,v])=>v.rec), backgroundColor:C_REC+'aa', borderWidth:0 },
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+      scales:{
+        x:{ stacked:true, ticks:{ color:DASH_CLR.txt, font:{size:9}, maxRotation:45 }, grid:{ color:DASH_CLR.grid } },
+        y:{ stacked:true, ticks:{ color:DASH_CLR.txt, font:{size:9} }, grid:{ color:DASH_CLR.grid } }
+      }
+    }
+  });
+
+  // ── 9. GROUPED BAR — Por tarjeta (cobrado/pendiente, monto) ─────
+  const tarjPag = {};
+  COBROS_RESULT.forEach(c => {
+    const t = c.fila?.sky?.tarjeta || 'Sin dato';
+    if (!tarjPag[t]) tarjPag[t]={cob:0,pen:0};
+    if (c.estado==='COBRADO')   tarjPag[t].cob += Math.abs(c.fila?.sky?.monto||0);
+    if (c.estado==='PENDIENTE') tarjPag[t].pen += Math.abs(c.fila?.sky?.monto||0);
+  });
+  const tpPairs = Object.entries(tarjPag)
+    .sort((a,b)=>(b[1].cob+b[1].pen)-(a[1].cob+a[1].pen)).slice(0,12);
+  _dashCharts.pagTarjeta = new Chart(document.getElementById('ch-pag-tarjeta'), {
+    type:'bar',
+    data:{
+      labels: tpPairs.map(([k])=>k),
+      datasets:[
+        { label:'Cobrado',   data:tpPairs.map(([,v])=>v.cob), backgroundColor:C_COB+'cc', borderRadius:3, borderWidth:0 },
+        { label:'Pendiente', data:tpPairs.map(([,v])=>v.pen), backgroundColor:C_PEN+'cc', borderRadius:3, borderWidth:0 },
+      ]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9}, boxWidth:10 } } },
+      scales:{
+        x:{ ticks:{ color:DASH_CLR.txt, font:{size:9}, maxRotation:30 }, grid:{ color:DASH_CLR.grid } },
+        y:{ ticks:{ color:DASH_CLR.txt, font:{size:9}, callback:v=>_dFmtM(v) }, grid:{ color:DASH_CLR.grid } }
+      }
+    }
+  });
+
+  // ── Resumen económico pagos ──────────────────────────────────────
+  const reEl = document.getElementById('dash-resumen-pagos');
+  if (reEl) {
+    const line = (lbl,val,clr='var(--txt)') =>
+      `<div style="display:flex;justify-content:space-between;align-items:center;
+        padding:6px 10px;background:var(--s3);border-radius:var(--r4)">
+        <span style="color:var(--m2)">${lbl}</span>
+        <span style="font-weight:700;color:${clr}">${val}</span></div>`;
+    reEl.innerHTML =
+      line('Ops. analizadas',       total.toLocaleString('es-AR')) +
+      line('Monto total analizado',  _dFmtPeso(totTot)) +
+      line('Cobrado (ops)',          cobrados.length.toLocaleString('es-AR')+' ('+pctCobOps.toFixed(1)+'%)', C_COB) +
+      line('Cobrado (monto)',        _dFmtPeso(totCob),    C_COB) +
+      line('Pendiente (ops)',        pendientes.length.toLocaleString('es-AR'), C_PEN) +
+      line('Pendiente (monto)',      _dFmtPeso(totPen),    C_PEN) +
+      line('Rechazado (ops)',        rechazados.length.toLocaleString('es-AR'), C_REC) +
+      line('Rechazado (monto)',      _dFmtPeso(totRec),    C_REC) +
+      line('% Cobrado por monto',   pctCobMon.toFixed(1)+'%',
+        pctCobMon>=80?C_COB:pctCobMon>=50?C_REC:C_PEN);
+  }
 }

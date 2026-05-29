@@ -568,6 +568,16 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   transition:border-color .15s,color .15s
 }
 .dash-refresh-btn:hover{border-color:var(--acc);color:var(--acc)}
+
+/* ══ DASHBOARD INNER TABS ════════════════════════════ */
+.dash-itab{
+  background:none;border:1px solid var(--b2);border-radius:var(--r4);
+  color:var(--m2);font-family:var(--mono);font-size:9px;padding:5px 13px;
+  cursor:pointer;transition:border-color .15s,color .15s,background .15s;
+  letter-spacing:.3px;
+}
+.dash-itab:hover{border-color:var(--acc);color:var(--acc)}
+.dash-itab.active{background:rgba(79,142,247,.12);border-color:var(--acc);color:var(--acc)}
 </style>
 </head>
 <body>
@@ -945,98 +955,204 @@ tr.row-int td{background:rgba(52,211,153,.02)}
     <div id="dash-content" style="display:none">
       <div class="dash-scroll">
 
-        <!-- Header -->
+        <!-- Header con tabs internos -->
         <div class="dash-hdr">
-          <div style="font-size:10px;color:var(--m2)">
-            Basado en <b id="dash-total-lbl" style="color:var(--txt)">—</b> operaciones conciliadas
+          <div style="display:flex;gap:4px;align-items:center">
+            <button class="dash-itab active" onclick="showDashTab('tx',this)">📊 Transacciones</button>
+            <button class="dash-itab" onclick="showDashTab('pag',this)">💳 Pagos</button>
           </div>
-          <button class="dash-refresh-btn" onclick="renderDashboard()">↺ Actualizar gráficos</button>
-        </div>
-
-        <!-- KPI cards -->
-        <div class="dash-kpis">
-          <div class="kpi-card kpi-hi">
-            <div class="kpi-lbl">Total operaciones</div>
-            <div class="kpi-val" id="kpi-total">—</div>
-          </div>
-          <div class="kpi-card kpi-ok">
-            <div class="kpi-lbl">OK conciliadas</div>
-            <div class="kpi-val" id="kpi-ok">—</div>
-          </div>
-          <div class="kpi-card kpi-sm">
-            <div class="kpi-lbl">Sin Match</div>
-            <div class="kpi-val" id="kpi-sm">—</div>
-          </div>
-          <div class="kpi-card" id="kpi-card-pct" style="border-color:rgba(79,142,247,.2)">
-            <div class="kpi-lbl">% Conciliación</div>
-            <div class="kpi-val" id="kpi-pct">—</div>
-          </div>
-          <div class="kpi-card kpi-ok">
-            <div class="kpi-lbl">Monto OK</div>
-            <div class="kpi-val" id="kpi-mok">—</div>
-          </div>
-          <div class="kpi-card kpi-sm">
-            <div class="kpi-lbl">Monto Sin Match</div>
-            <div class="kpi-val" id="kpi-msm">—</div>
+          <div style="display:flex;align-items:center;gap:12px">
+            <div style="font-size:10px;color:var(--m2)">
+              Basado en <b id="dash-total-lbl" style="color:var(--txt)">—</b> operaciones conciliadas
+            </div>
+            <button class="dash-refresh-btn" onclick="renderDashboard()">↺ Actualizar</button>
           </div>
         </div>
 
-        <!-- Charts grid -->
-        <div class="dash-grid">
+        <!-- ── TAB: TRANSACCIONES ─────────────────────── -->
+        <div id="dash-tab-tx">
 
-          <!-- Fila 1: Distribución de estados + Monto por estado -->
-          <div class="dash-card">
-            <div class="dash-card-title">Distribución de estados <span>(cantidad de ops)</span></div>
-            <div class="dash-cw h220"><canvas id="ch-estados"></canvas></div>
-          </div>
-          <div class="dash-card">
-            <div class="dash-card-title">Monto total por estado <span>($)</span></div>
-            <div class="dash-cw h220"><canvas id="ch-monto-estado"></canvas></div>
-          </div>
-
-          <!-- Fila 2: Por procesadora + Top suc sin match -->
-          <div class="dash-card">
-            <div class="dash-card-title">Resultado por procesadora</div>
-            <div class="dash-cw h220"><canvas id="ch-proc"></canvas></div>
-          </div>
-          <div class="dash-card">
-            <div class="dash-card-title">Top sucursales — Sin Match <span>(ops)</span></div>
-            <div class="dash-cw h220"><canvas id="ch-suc-sm"></canvas></div>
-          </div>
-
-          <!-- Fila 3: Evolución diaria (ancho completo) -->
-          <div class="dash-card dash-card-full">
-            <div class="dash-card-title">Evolución diaria de operaciones</div>
-            <div class="dash-cw h180"><canvas id="ch-evolucion"></canvas></div>
-          </div>
-
-          <!-- Fila 4: Por tarjeta + Diferencia por suc -->
-          <div class="dash-card">
-            <div class="dash-card-title">Distribución por tarjeta</div>
-            <div class="dash-cw h220"><canvas id="ch-tarjeta"></canvas></div>
-          </div>
-          <div class="dash-card">
-            <div class="dash-card-title">Diferencia de monto por sucursal <span>(top 15)</span></div>
-            <div class="dash-cw h220"><canvas id="ch-suc-dif"></canvas></div>
+          <!-- KPI cards -->
+          <div class="dash-kpis">
+            <div class="kpi-card kpi-hi">
+              <div class="kpi-lbl">Total operaciones</div>
+              <div class="kpi-val" id="kpi-total">—</div>
+            </div>
+            <div class="kpi-card kpi-ok">
+              <div class="kpi-lbl">OK conciliadas</div>
+              <div class="kpi-val" id="kpi-ok">—</div>
+            </div>
+            <div class="kpi-card kpi-sm">
+              <div class="kpi-lbl">Sin Match</div>
+              <div class="kpi-val" id="kpi-sm">—</div>
+            </div>
+            <div class="kpi-card" id="kpi-card-pct" style="border-color:rgba(79,142,247,.2)">
+              <div class="kpi-lbl">% Conciliación</div>
+              <div class="kpi-val" id="kpi-pct">—</div>
+            </div>
+            <div class="kpi-card kpi-ok">
+              <div class="kpi-lbl">Monto OK</div>
+              <div class="kpi-val" id="kpi-mok">—</div>
+            </div>
+            <div class="kpi-card kpi-sm">
+              <div class="kpi-lbl">Monto Sin Match</div>
+              <div class="kpi-val" id="kpi-msm">—</div>
+            </div>
           </div>
 
-          <!-- Fila 5: Monto sin match por suc + Composición full width -->
-          <div class="dash-card">
-            <div class="dash-card-title">Monto Sin Match por sucursal <span>($, top 15)</span></div>
-            <div class="dash-cw h220"><canvas id="ch-suc-sm-monto"></canvas></div>
-          </div>
-          <div class="dash-card" style="justify-content:flex-start">
-            <div class="dash-card-title" style="margin-bottom:14px">Resumen de impacto económico</div>
-            <div id="dash-resumen-economico" style="display:flex;flex-direction:column;gap:8px;font-size:10px"></div>
+          <!-- Charts grid -->
+          <div class="dash-grid">
+
+            <!-- Fila 1: Distribución de estados + Monto por estado -->
+            <div class="dash-card">
+              <div class="dash-card-title">Distribución de estados <span>(cantidad de ops)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-estados"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Monto total por estado <span>($)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-monto-estado"></canvas></div>
+            </div>
+
+            <!-- Fila 2: Por procesadora + Top suc sin match -->
+            <div class="dash-card">
+              <div class="dash-card-title">Resultado por procesadora</div>
+              <div class="dash-cw h220"><canvas id="ch-proc"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Top sucursales — Sin Match <span>(ops)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-suc-sm"></canvas></div>
+            </div>
+
+            <!-- Fila 3: Evolución diaria (ancho completo) -->
+            <div class="dash-card dash-card-full">
+              <div class="dash-card-title">Evolución diaria de operaciones</div>
+              <div class="dash-cw h180"><canvas id="ch-evolucion"></canvas></div>
+            </div>
+
+            <!-- Fila 4: Por tarjeta + Diferencia por suc -->
+            <div class="dash-card">
+              <div class="dash-card-title">Distribución por tarjeta</div>
+              <div class="dash-cw h220"><canvas id="ch-tarjeta"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Diferencia de monto por sucursal <span>(top 15)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-suc-dif"></canvas></div>
+            </div>
+
+            <!-- Fila 5: Monto sin match por suc + Resumen económico -->
+            <div class="dash-card">
+              <div class="dash-card-title">Monto Sin Match por sucursal <span>($, top 15)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-suc-sm-monto"></canvas></div>
+            </div>
+            <div class="dash-card" style="justify-content:flex-start">
+              <div class="dash-card-title" style="margin-bottom:14px">Resumen de impacto económico</div>
+              <div id="dash-resumen-economico" style="display:flex;flex-direction:column;gap:8px;font-size:10px"></div>
+            </div>
+
+            <!-- Fila 6: Stacked por sucursal (ancho completo) -->
+            <div class="dash-card dash-card-full">
+              <div class="dash-card-title">Composición OK / Sin Match / Otros por sucursal <span>(top 25)</span></div>
+              <div class="dash-cw h260"><canvas id="ch-suc-comp"></canvas></div>
+            </div>
+
+          </div><!-- .dash-grid transacciones -->
+        </div><!-- #dash-tab-tx -->
+
+        <!-- ── TAB: PAGOS ─────────────────────────────── -->
+        <div id="dash-tab-pag" style="display:none">
+
+          <!-- KPI cards pagos -->
+          <div class="dash-kpis" style="grid-template-columns:repeat(6,1fr)">
+            <div class="kpi-card kpi-hi">
+              <div class="kpi-lbl">Total liq.</div>
+              <div class="kpi-val cyn" id="pkpi-total">—</div>
+              <div class="kpi-sub" id="pkpi-mtotal">—</div>
+            </div>
+            <div class="kpi-card kpi-ok">
+              <div class="kpi-lbl">Cobradas</div>
+              <div class="kpi-val" style="color:var(--grn)" id="pkpi-cob">—</div>
+              <div class="kpi-sub" id="pkpi-mcob">—</div>
+            </div>
+            <div class="kpi-card kpi-sm">
+              <div class="kpi-lbl">Pendientes</div>
+              <div class="kpi-val" style="color:var(--red)" id="pkpi-pen">—</div>
+              <div class="kpi-sub" id="pkpi-mpen">—</div>
+            </div>
+            <div class="kpi-card" style="border-color:rgba(251,146,60,.25)">
+              <div class="kpi-lbl">Rechazadas</div>
+              <div class="kpi-val" style="color:var(--org)" id="pkpi-rec">—</div>
+              <div class="kpi-sub" id="pkpi-mrec">—</div>
+            </div>
+            <div class="kpi-card kpi-ok">
+              <div class="kpi-lbl">% Ops cobradas</div>
+              <div class="kpi-val" style="color:var(--grn)" id="pkpi-pct">—</div>
+              <div class="kpi-sub" id="pkpi-pctm">—</div>
+            </div>
+            <div class="kpi-card kpi-sm">
+              <div class="kpi-lbl">Monto pendiente</div>
+              <div class="kpi-val" style="color:var(--red)" id="pkpi-mpen2">—</div>
+              <div class="kpi-sub" id="pkpi-pctpen">—</div>
+            </div>
           </div>
 
-          <!-- Fila 6: Stacked por sucursal (ancho completo) -->
-          <div class="dash-card dash-card-full">
-            <div class="dash-card-title">Composición OK / Sin Match / Otros por sucursal <span>(top 25)</span></div>
-            <div class="dash-cw h260"><canvas id="ch-suc-comp"></canvas></div>
-          </div>
+          <!-- Charts grid pagos -->
+          <div class="dash-grid">
 
-        </div><!-- .dash-grid -->
+            <!-- Fila 1: Donuts estado de cobro -->
+            <div class="dash-card">
+              <div class="dash-card-title">Estado de cobro <span>(cantidad de ops)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-pag-donut-ops"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Estado de cobro <span>(monto $)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-pag-donut-monto"></canvas></div>
+            </div>
+
+            <!-- Fila 2: Por procesadora + Calendario -->
+            <div class="dash-card">
+              <div class="dash-card-title">FISERV vs GETPOS <span>cobrado / pendiente / rechazado</span></div>
+              <div class="dash-cw h220"><canvas id="ch-pag-proc"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Calendario de cobros <span>(fecha de pago)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-pag-fecha-pago"></canvas></div>
+            </div>
+
+            <!-- Fila 3: Evolución diaria (ancho completo) -->
+            <div class="dash-card dash-card-full">
+              <div class="dash-card-title">Evolución diaria — Cobrado vs Pendiente <span>(por fecha de venta)</span></div>
+              <div class="dash-cw h180"><canvas id="ch-pag-evol"></canvas></div>
+            </div>
+
+            <!-- Fila 4: Top sucursales pendientes -->
+            <div class="dash-card">
+              <div class="dash-card-title">Top sucursales <span>— ops pendientes</span></div>
+              <div class="dash-cw h220"><canvas id="ch-pag-suc-pend-ops"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Top sucursales <span>— monto pendiente ($)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-pag-suc-pend-monto"></canvas></div>
+            </div>
+
+            <!-- Fila 5: Stacked por suc (ancho completo) -->
+            <div class="dash-card dash-card-full">
+              <div class="dash-card-title">Composición por sucursal — Cobrado / Pendiente / Rechazado <span>(top 25)</span></div>
+              <div class="dash-cw h260"><canvas id="ch-pag-suc-comp"></canvas></div>
+            </div>
+
+            <!-- Fila 6: Por tarjeta + Resumen económico pagos -->
+            <div class="dash-card">
+              <div class="dash-card-title">Por tarjeta — Cobrado vs Pendiente <span>($)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-pag-tarjeta"></canvas></div>
+            </div>
+            <div class="dash-card" style="justify-content:flex-start">
+              <div class="dash-card-title" style="margin-bottom:14px">Resumen económico de cobros</div>
+              <div id="dash-resumen-pagos" style="display:flex;flex-direction:column;gap:8px;font-size:10px"></div>
+            </div>
+
+          </div><!-- .dash-grid pagos -->
+        </div><!-- #dash-tab-pag -->
+
       </div><!-- .dash-scroll -->
     </div><!-- #dash-content -->
 
