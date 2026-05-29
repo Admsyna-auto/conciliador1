@@ -411,18 +411,18 @@ function _renderDashPagos() {
   const pctCobOps = total   ? (cobrados.length / total   * 100) : 0;
   const pctCobMon = totTot  ? (totCob / totTot           * 100) : 0;
 
-  // ── KPIs pagos ───────────────────────────────────────────────────
+  // ── KPIs pagos — monto $ en grande, ops en chico ────────────────
   const _pk = (id,v) => { const e=document.getElementById(id); if(e) e.textContent=v; };
-  _pk('pkpi-total',   total.toLocaleString('es-AR'));
-  _pk('pkpi-mtotal',  _dFmtM(totTot));
-  _pk('pkpi-cob',     cobrados.length.toLocaleString('es-AR'));
-  _pk('pkpi-mcob',    _dFmtM(totCob));
-  _pk('pkpi-pen',     pendientes.length.toLocaleString('es-AR'));
-  _pk('pkpi-mpen',    _dFmtM(totPen));
-  _pk('pkpi-rec',     rechazados.length.toLocaleString('es-AR'));
-  _pk('pkpi-mrec',    _dFmtM(totRec));
-  _pk('pkpi-pct',     pctCobOps.toFixed(1) + '%');
-  _pk('pkpi-pctm',    pctCobMon.toFixed(1) + '% por monto');
+  _pk('pkpi-total',   _dFmtM(totTot));
+  _pk('pkpi-mtotal',  total.toLocaleString('es-AR') + ' ops');
+  _pk('pkpi-cob',     _dFmtM(totCob));
+  _pk('pkpi-mcob',    cobrados.length.toLocaleString('es-AR') + ' ops');
+  _pk('pkpi-pen',     _dFmtM(totPen));
+  _pk('pkpi-mpen',    pendientes.length.toLocaleString('es-AR') + ' ops');
+  _pk('pkpi-rec',     _dFmtM(totRec));
+  _pk('pkpi-mrec',    rechazados.length.toLocaleString('es-AR') + ' ops');
+  _pk('pkpi-pct',     pctCobMon.toFixed(1) + '%');
+  _pk('pkpi-pctm',    pctCobOps.toFixed(1) + '% por ops');
   _pk('pkpi-mpen2',   _dFmtM(totPen));
   _pk('pkpi-pctpen',  totTot ? (totPen/totTot*100).toFixed(1)+'% del total' : '—');
 
