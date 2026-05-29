@@ -179,6 +179,8 @@ function serializarFila(r) {
     esDevolucion: r.esDevolucion, esAnulSinCobro: r.esAnulSinCobro,
     correccionManual: r.correccionManual,
     procMontoNorm: r.procMontoNorm,
+    difCuotas: r.difCuotas, skyCuotas: r.skyCuotas, procCuotas: r.procCuotas,
+    difProcesadora: r.difProcesadora,
     difTasa: r.difTasa, difMonto: r.difMonto,
     tasaCobrada: r.tasaCobrada, tasaAcordada: r.tasaAcordada,
     accionSugerida: r.accionSugerida,

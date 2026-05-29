@@ -234,6 +234,7 @@ tbody tr:hover td{background:var(--s3)}
 .st-fis{background:rgba(79,142,247,.1);color:var(--acc);border:1px solid rgba(79,142,247,.2)}
 .st-anul{background:rgba(56,189,248,.08);color:var(--cyn);border:1px solid rgba(56,189,248,.15)}
 .st-sin{background:rgba(107,114,128,.1);color:#9ca3af;border:1px solid rgba(107,114,128,.2)}
+.st-dif-cuotas{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.3)}
 .st-int{background:rgba(52,211,153,.06);color:#6ee7b7;border:1px solid rgba(52,211,153,.15)}
 .met{font-size:8px;color:var(--m2);font-family:var(--mono)}
 .num{text-align:right;font-family:var(--mono)}
@@ -244,6 +245,7 @@ tr.row-sin td{background:rgba(107,114,128,.04)}
 tr.row-anul td{background:rgba(56,189,248,.04)}
 tr.row-mal td{background:rgba(248,113,113,.04)}
 tr.row-com td{background:rgba(251,146,60,.04)}
+tr.row-dif td{background:rgba(251,191,36,.04)}
 tr.row-int td{background:rgba(52,211,153,.02)}
 
 /* ══ FILTROS ═════════════════════════════════════════ */
@@ -798,6 +800,12 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       <button class="tb" onclick="showTab('t-dif-gp','tab-strip-dif',this)">
         GETPOS sin cruce <span class="cnt" id="cnt-dif-gp">0</span>
       </button>
+      <button class="tb" onclick="showTab('t-dif-cuotas','tab-strip-dif',this)" style="border-color:rgba(251,191,36,.3)">
+        ⚠ Dif. Cuotas <span class="cnt" id="cnt-dif-cuotas" style="background:rgba(251,191,36,.15);color:#fbbf24">0</span>
+      </button>
+      <button class="tb" onclick="showTab('t-dif-proc','tab-strip-dif',this)" style="border-color:rgba(248,113,113,.3)">
+        ⚠ Dif. Procesadora <span class="cnt" id="cnt-dif-proc" style="background:rgba(248,113,113,.12);color:#f87171">0</span>
+      </button>
     </div>
     <div class="tab-body active" id="t-dif-main" style="display:flex;flex-direction:column;flex:1;min-height:0">
     <div id="mod-dif" style="display:flex;flex-direction:column;flex:1;min-height:0">
@@ -829,6 +837,33 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       </div>
       <div class="tbl-wrap"><table id="tbl-dif-gp"><thead></thead><tbody></tbody></table></div>
     </div>
+
+    <!-- Tab: Diferencias de cuotas -->
+    <div class="tab-body" id="t-dif-cuotas" style="flex-direction:column;flex:1;min-height:0">
+      <div class="cor-hdr-bar" style="border-left:3px solid #fbbf24">
+        <span class="cor-hdr-title" style="color:#fbbf24">Diferencias de cuotas</span>
+        <span class="cor-stats" id="dif-cuotas-stats"></span>
+        <div style="margin-left:auto">
+          <button class="dl-btn" style="background:#2d2000;color:#fbbf24;border:1px solid rgba(251,191,36,.3)"
+            onclick="exportarDifCuotas()">⬇ Exportar Excel</button>
+        </div>
+      </div>
+      <div class="tbl-wrap"><table id="tbl-dif-cuotas"><thead></thead><tbody></tbody></table></div>
+    </div>
+
+    <!-- Tab: Diferencias de procesadora -->
+    <div class="tab-body" id="t-dif-proc" style="flex-direction:column;flex:1;min-height:0">
+      <div class="cor-hdr-bar" style="border-left:3px solid var(--red)">
+        <span class="cor-hdr-title" style="color:var(--red)">Diferencias de procesadora</span>
+        <span class="cor-stats" id="dif-proc-stats"></span>
+        <div style="margin-left:auto">
+          <button class="dl-btn" style="background:#2d0808;color:#f87171;border:1px solid rgba(248,113,113,.3)"
+            onclick="exportarDifProcesadora()">⬇ Exportar Excel</button>
+        </div>
+      </div>
+      <div class="tbl-wrap"><table id="tbl-dif-proc"><thead></thead><tbody></tbody></table></div>
+    </div>
+
   </div>
 
   <!-- ── MÓDULO 4: TABLAS MAESTRAS ──────────────────── -->
@@ -1075,6 +1110,8 @@ function showTab(id, stripId, btn) {
   if (id==='t-urg' && RESULTADO.length)  renderTablaUrgente();
   if (id==='t-dif-fis')                   renderNoCruzadasFis();
   if (id==='t-dif-gp')                    renderNoCruzadasGp();
+  if (id==='t-dif-cuotas')               renderDifCuotas();
+  if (id==='t-dif-proc')                 renderDifProcesadora();
   if (id==='t-ref' && RESULTADO.length)  renderTablaRefacturado();
   if (id==='t-cor')                       renderTablaCorrecciones();
 }

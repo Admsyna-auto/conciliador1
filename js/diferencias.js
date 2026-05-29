@@ -163,13 +163,19 @@ function renderModuloDiferencias() {
 
   renderTablaDif();
 
-  // Mostrar tab strip y actualizar contadores de no cruzadas
+  // Mostrar tab strip y actualizar todos los contadores
   const strip = document.getElementById('tab-strip-dif');
   if (strip) strip.style.display = 'flex';
   const cntFis = document.getElementById('cnt-dif-fis');
   if (cntFis) cntFis.textContent = (window._FIS_NO_CRUZADAS || []).length;
   const cntGp = document.getElementById('cnt-dif-gp');
   if (cntGp) cntGp.textContent = (window._GP_NO_CRUZADAS || []).length;
+
+  // Contadores nuevas tabs
+  const cntCuotas = document.getElementById('cnt-dif-cuotas');
+  if (cntCuotas) cntCuotas.textContent = _getDifCuotasRows().length;
+  const cntProc = document.getElementById('cnt-dif-proc');
+  if (cntProc) cntProc.textContent = _getDifProcRows().length;
 }
 
 function renderTablaDif() {
@@ -354,6 +360,140 @@ function _exportXlsx(data, sheetName, filename) {
   const ws = XLSX.utils.aoa_to_sheet(data);
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
   XLSX.writeFile(wb, filename);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// DIF. CUOTAS — operaciones cruzadas con cuotas distintas
+// ════════════════════════════════════════════════════════════════════
+
+function _getDifCuotasRows() {
+  // Compatibilidad con sesiones guardadas antes de esta feature:
+  // recalcular difCuotas on-the-fly si no está en la fila
+  return RESULTADO.filter(r => {
+    if (!r.proc) return false;
+    if (r.difCuotas !== undefined) return r.difCuotas;
+    const sc = Math.max(1, parseInt(r.sky?.cuotas) || 1);
+    const pc = Math.max(1, parseInt(r.proc?.cuotas) || 1);
+    return sc !== pc;
+  });
+}
+
+function renderDifCuotas() {
+  const rows  = _getDifCuotasRows();
+  const tbl   = document.getElementById('tbl-dif-cuotas');
+  const stats = document.getElementById('dif-cuotas-stats');
+  const cnt   = document.getElementById('cnt-dif-cuotas');
+  if (cnt)   cnt.textContent = rows.length;
+  if (stats) stats.innerHTML =
+    `<b>${rows.length}</b> operación${rows.length!==1?'es':''} con ` +
+    `<b style="color:var(--yel)">cuotas diferentes</b> entre Skylab y procesadora`;
+  if (!tbl) return;
+
+  const HDR = ['Estado','Fecha SKY','Suc.','Vendedor','Tarjeta','Plan','Cuotas SKY','Cuotas Proc.','Dif.','Monto SKY','Procesadora','Cód.Auth. Proc.','Lote Proc.','Cupón SKY'];
+  tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
+  tbl.querySelector('tbody').innerHTML = rows.map(r => {
+    const s  = r.sky, p = r.proc;
+    const sc = r.skyCuotas  ?? Math.max(1, parseInt(s.cuotas)  || 1);
+    const pc = r.procCuotas ?? Math.max(1, parseInt(p?.cuotas) || 1);
+    const dif = sc - pc;
+    const difStr = dif > 0 ? `+${dif}` : String(dif);
+    return `<tr class="${rowClass(r.estado)}">
+      <td>${estadoBadge(r.estado)}</td>
+      <td>${s.fecha}</td>
+      <td>${s.suc}</td>
+      <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.vendedor||''}">${s.vendedor||'—'}</td>
+      <td>${s.tarjeta}</td>
+      <td style="font-size:9px">${s.plan}</td>
+      <td class="num" style="color:var(--acc);font-weight:700">${sc}</td>
+      <td class="num" style="color:var(--org);font-weight:700">${pc}</td>
+      <td class="num" style="color:var(--red);font-weight:700">${difStr} cuota${Math.abs(dif)!==1?'s':''}</td>
+      <td class="num">${fmtARS(s.monto)}</td>
+      <td><span class="st ${r.procEncontrada==='FISERV'?'st-fis':'st-gp'}">${r.procEncontrada||'—'}</span></td>
+      <td class="num" style="font-size:9px">${p?.aut||'—'}</td>
+      <td class="num" style="font-size:9px">${p?.lote||'—'}</td>
+      <td class="num" style="font-size:9px">${s.cupon||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function exportarDifCuotas() {
+  const rows = _getDifCuotasRows();
+  if (!rows.length) { alert('No hay operaciones con diferencia de cuotas.'); return; }
+  const HDR = ['Estado','Fecha SKY','Suc.','Vendedor','Tarjeta','Plan',
+    'Cuotas SKY','Cuotas Proc.','Dif. Cuotas','Monto SKY',
+    'Procesadora','Cód.Auth. Proc.','Lote Proc.','Ticket Proc.','Cupón SKY','Asiento'];
+  const data = rows.map(r => {
+    const s = r.sky, p = r.proc;
+    const sc = r.skyCuotas  ?? Math.max(1, parseInt(s.cuotas)  || 1);
+    const pc = r.procCuotas ?? Math.max(1, parseInt(p?.cuotas) || 1);
+    return [r.estado, s.fecha, s.suc, s.vendedor||'', s.tarjeta, s.plan,
+      sc, pc, sc - pc, s.monto,
+      r.procEncontrada||'', p?.aut||'', p?.lote||'', p?.ticket||'', s.cupon||'', s.asiento||''];
+  });
+  _exportXlsx([HDR, ...data], 'Dif. Cuotas', `DifCuotas_${hoy()}.xlsx`);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// DIF. PROCESADORA — facturado por una proc, cobrado por otra
+// ════════════════════════════════════════════════════════════════════
+
+function _getDifProcRows() {
+  return RESULTADO.filter(r => r.estado?.startsWith('MAL FACTURADO') && r.proc);
+}
+
+function renderDifProcesadora() {
+  const rows  = _getDifProcRows();
+  const tbl   = document.getElementById('tbl-dif-proc');
+  const stats = document.getElementById('dif-proc-stats');
+  const cnt   = document.getElementById('cnt-dif-proc');
+  if (cnt)   cnt.textContent = rows.length;
+  if (stats) stats.innerHTML =
+    `<b>${rows.length}</b> operación${rows.length!==1?'es':''} ` +
+    `<b style="color:var(--red)">facturadas por una procesadora pero cobradas por otra</b>`;
+  if (!tbl) return;
+
+  const HDR = ['Estado','Fecha SKY','Suc.','Vendedor','Tarjeta','Plan','Cuotas','Monto SKY',
+    'Proc. Esperada','Proc. Real','Com. SKY','Com. FIS','Cód.Auth. Proc.','Lote Proc.','Cupón SKY'];
+  tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
+  tbl.querySelector('tbody').innerHTML = rows.map(r => {
+    const s = r.sky, p = r.proc;
+    const espCls = r.procEsperada==='FISERV'?'st-fis':'st-gp';
+    const realCls= r.procEncontrada==='FISERV'?'st-fis':'st-gp';
+    return `<tr class="${rowClass(r.estado)}">
+      <td>${estadoBadge(r.estado)}</td>
+      <td>${s.fecha}</td>
+      <td>${s.suc}</td>
+      <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.vendedor||''}">${s.vendedor||'—'}</td>
+      <td>${s.tarjeta}</td>
+      <td style="font-size:9px">${s.plan}</td>
+      <td class="num">${s.cuotas||1}</td>
+      <td class="num">${fmtARS(s.monto)}</td>
+      <td><span class="st ${espCls}">${r.procEsperada||'—'}</span></td>
+      <td><span class="st ${realCls}" style="outline:1px solid var(--red)">${r.procEncontrada||'—'}</span></td>
+      <td class="num" style="font-size:9px">${s.nroCom||'—'}</td>
+      <td class="num" style="font-size:9px">${p?.comFis||'—'}</td>
+      <td class="num" style="font-size:9px">${p?.aut||'—'}</td>
+      <td class="num" style="font-size:9px">${p?.lote||'—'}</td>
+      <td class="num" style="font-size:9px">${s.cupon||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function exportarDifProcesadora() {
+  const rows = _getDifProcRows();
+  if (!rows.length) { alert('No hay operaciones con diferencia de procesadora.'); return; }
+  const HDR = ['Estado','Fecha SKY','Suc.','Vendedor','Tarjeta','Plan','Cuotas','Monto SKY',
+    'Proc. Esperada','Proc. Real','Com. SKY','Com. FIS',
+    'Cód.Auth. Proc.','Lote Proc.','Ticket Proc.','Cupón SKY','Asiento'];
+  const data = rows.map(r => {
+    const s = r.sky, p = r.proc;
+    return [r.estado, s.fecha, s.suc, s.vendedor||'', s.tarjeta, s.plan,
+      s.cuotas||1, s.monto,
+      r.procEsperada||'', r.procEncontrada||'',
+      s.nroCom||'', p?.comFis||'',
+      p?.aut||'', p?.lote||'', p?.ticket||'', s.cupon||'', s.asiento||''];
+  });
+  _exportXlsx([HDR, ...data], 'Dif. Procesadora', `DifProcesadora_${hoy()}.xlsx`);
 }
 
 function hoy() { return new Date().toISOString().slice(0,10); }

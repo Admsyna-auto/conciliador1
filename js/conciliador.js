@@ -472,19 +472,35 @@ function armarFila(s, proc, procReal, metodo, procEsp) {
   // Marcar integradas visualmente sin cambiar el estado
   if (s.integrado && estado==='OK') estado='OK (integrado)';
 
-  // Normalizar signo del monto de procesadora para devoluciones:
-  // GETPOS y FISERV reportan devoluiones como monto positivo; SKY las trae negativas.
-  // procMontoNorm tiene el mismo signo que s.monto para que los exports no muestren diferencia espuria.
+  // ── Diferencia de cuotas ────────────────────────────────────────
+  // Normalizar a mínimo 1 para evitar falsos positivos cuando el campo viene vacío
+  const skyCuotas  = Math.max(1, parseInt(s.cuotas)       || 1);
+  const procCuotas = Math.max(1, parseInt(proc?.cuotas)   || 1);
+  const difCuotas  = skyCuotas !== procCuotas;
+
+  // Solo elevar a DIF. CUOTAS si el cruce de comercio y procesadora está OK;
+  // si ya hay MAL FACTURADO o COM. ERRADO ese problema es más grave.
+  if (difCuotas && (estado==='OK' || estado==='OK (equiv.)' || estado==='OK (integrado)')) {
+    estado = 'DIF. CUOTAS';
+  }
+
+  // ── Diferencia de procesadora ────────────────────────────────────
+  // Flag explícito (el estado ya queda como 'MAL FACTURADO: ...' en esos casos)
+  const difProcesadora = estado.startsWith('MAL FACTURADO');
+
+  // Normalizar signo del monto de procesadora para devoluciones
   const procMontoNorm = proc
     ? (s.esNeg && proc.monto > 0 ? -proc.monto : proc.monto)
     : null;
 
-  // Calcular diferencia de monto real usando valores absolutos (centavos de redondeo)
+  // Calcular diferencia de monto real usando valores absolutos
   const difMonto = proc && s.monto && proc.monto
     ? Math.abs(Math.abs(s.monto) - Math.abs(proc.monto))
     : null;
+
   return { sky:s, proc, procMontoNorm, metodo, estado, procEncontrada:procReal, procEsperada:procEsp,
     comOK, sucOK, matchParcial:'', esDevolucion:s.esNeg?'SI':'NO', esAnulSinCobro:'NO',
+    difCuotas, skyCuotas, procCuotas, difProcesadora,
     difMonto: difMonto !== null ? +difMonto.toFixed(2) : null };
 }
 
@@ -640,6 +656,7 @@ function contarEstados() {
     ref:  RESULTADO.filter(r=>r.estado==='REFACTURADO').length,
     anul: RESULTADO.filter(r=>r.estado==='ANULACION SIN COBRO').length,
     dev:  RESULTADO.filter(r=>r.sky.esNeg).length,
+    dif:  RESULTADO.filter(r=>r.estado==='DIF. CUOTAS').length,
   };
 }
 
@@ -696,6 +713,18 @@ function updateCounts() {
   const corCount = Object.keys(CORREGIDAS).length;
   const corCnt = document.getElementById('cnt-cor');
   if (corCnt) corCnt.textContent = corCount.toLocaleString();
+
+  // Contadores de las nuevas tabs de diferencias
+  const difCuotasCount = st.dif;
+  const difProcCount   = st.mal;
+  const elDifCuotas = document.getElementById('cnt-dif-cuotas');
+  const elDifProc   = document.getElementById('cnt-dif-proc');
+  if (elDifCuotas) elDifCuotas.textContent = difCuotasCount;
+  if (elDifProc)   elDifProc.textContent   = difProcCount;
+
+  // Badge del módulo 3 muestra la suma de diferencias accionables
+  const mcntDif = document.getElementById('mcnt-diferencias');
+  if (mcntDif) mcntDif.textContent = (difCuotasCount + difProcCount).toLocaleString();
 }
 
 // ── RENDER TABLA ─────────────────────────────────────────
@@ -710,6 +739,7 @@ function estadoBadge(est) {
     'INTEGRADO':        'st-int',
     'REVISION URGENTE': 'st-urgente',
     'REFACTURADO':      'st-refact',
+    'DIF. CUOTAS':      'st-dif-cuotas',
   };
   if (!est) return '';
   const cls=m[est]||(est.includes('GETPOS')?'st-gp':est.includes('FISERV')?'st-fis':'st-mal');
@@ -727,6 +757,7 @@ function rowClass(est) {
   if (est==='COM. ERRADO') return 'row-com';
   if (est==='REVISION URGENTE') return 'row-urgente';
   if (est==='REFACTURADO') return 'row-refact';
+  if (est==='DIF. CUOTAS') return 'row-dif';
   return '';
 }
 
