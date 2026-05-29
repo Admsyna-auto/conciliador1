@@ -373,14 +373,24 @@ function buscarCuotasEnTM(plan, tarjeta, procesadora) {
   const normT = String(tarjeta     || '').trim().toUpperCase();
   const normR = String(procesadora || '').trim().toUpperCase();
 
+  // Coincidencia con límite de palabra para evitar que "4 CUOTAS" coincida
+  // como subcadena dentro de "14 CUOTAS" (sin este control "14".includes("4") = true).
+  // Busca `needle` en `haystack` respetando inicio/fin de token (espacio o extremo).
+  function wordMatch(haystack, needle) {
+    if (!needle) return true;
+    if (haystack === needle) return true;
+    const esc = needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp('(?:^|\\s)' + esc + '(?:\\s|$)').test(haystack);
+  }
+
   const candidatos = TM.planes.filter(p => {
     if (!p.cuotas) return false;
     const tmPlan = String(p.plan        || '').trim().toUpperCase();
     const tmTarj = String(p.tarjeta     || '').trim().toUpperCase();
     const tmProc = String(p.procesadora || '').trim().toUpperCase();
 
-    // El nombre del plan en TM debe estar contenido en el plan SKY (o viceversa)
-    const matchPlan = !tmPlan || normP.includes(tmPlan) || tmPlan.includes(normP);
+    // El nombre del plan debe coincidir respetando límites de palabra
+    const matchPlan = !tmPlan || wordMatch(normP, tmPlan) || wordMatch(tmPlan, normP);
     // Tarjeta y procesadora son filtros opcionales
     const matchTarj = !tmTarj || normT.includes(tmTarj) || tmTarj.includes(normT);
     const matchProc = !tmProc || tmProc === normR;
@@ -390,8 +400,14 @@ function buscarCuotasEnTM(plan, tarjeta, procesadora) {
 
   if (!candidatos.length) return null;
 
-  // Priorizar entrada con más campos específicos (tarjeta + procesadora rellenos)
+  // Ordenar: 1º match exacto de plan, 2º sky-contiene-TM, 3º TM-contiene-sky
+  // En igualdad, más campos específicos (tarjeta + procesadora) ganan
   candidatos.sort((a, b) => {
+    const pA = String(a.plan || '').trim().toUpperCase();
+    const pB = String(b.plan || '').trim().toUpperCase();
+    const qA = !pA ? 0 : pA === normP ? 2 : wordMatch(normP, pA) ? 1 : 0;
+    const qB = !pB ? 0 : pB === normP ? 2 : wordMatch(normP, pB) ? 1 : 0;
+    if (qB !== qA) return qB - qA;
     const sA = [a.tarjeta, a.procesadora].filter(Boolean).length;
     const sB = [b.tarjeta, b.procesadora].filter(Boolean).length;
     return sB - sA;
