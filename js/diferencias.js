@@ -367,14 +367,15 @@ function _exportXlsx(data, sheetName, filename) {
 // ════════════════════════════════════════════════════════════════════
 
 function _getDifCuotasRows() {
-  // Compatibilidad con sesiones guardadas antes de esta feature:
-  // recalcular difCuotas on-the-fly si no está en la fila
+  // Siempre recalcular con TM actual: el usuario puede cargar/modificar TM.planes
+  // después del cruce sin necesidad de reprocesar.
   return RESULTADO.filter(r => {
     if (!r.proc) return false;
-    if (r.difCuotas !== undefined) return r.difCuotas;
-    const sc = Math.max(1, parseInt(r.sky?.cuotas) || 1);
-    const pc = Math.max(1, parseInt(r.proc?.cuotas) || 1);
-    return sc !== pc;
+    const tmC = (typeof buscarCuotasEnTM === 'function')
+      ? buscarCuotasEnTM(r.sky?.plan, r.sky?.tarjeta, r.procEncontrada) : null;
+    const skyCuotas  = tmC !== null ? tmC : Math.max(1, parseInt(r.sky?.cuotas) || 1);
+    const procCuotas = Math.max(1, parseInt(r.proc?.cuotas) || 1);
+    return skyCuotas !== procCuotas;
   });
 }
 
@@ -393,16 +394,13 @@ function renderDifCuotas() {
   tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
   tbl.querySelector('tbody').innerHTML = rows.map(r => {
     const s  = r.sky, p = r.proc;
-    // Recalcular on-the-fly con TM si el dato no estaba serializado (sesiones anteriores)
-    let sc = r.skyCuotas;
-    let fromTM = r.skyCuotasTM ?? false;
-    if (sc === undefined) {
-      const tmC = (typeof buscarCuotasEnTM === 'function')
-        ? buscarCuotasEnTM(s.plan, s.tarjeta, r.procEncontrada) : null;
-      sc = tmC !== null ? tmC : Math.max(1, parseInt(s.cuotas) || 1);
-      fromTM = tmC !== null;
-    }
-    const pc = r.procCuotas ?? Math.max(1, parseInt(p?.cuotas) || 1);
+    // Siempre recalcular con TM actual para reflejar cambios en Planes/Cuotas
+    // sin necesidad de reprocesar (no confiar en valores cacheados del cruce anterior)
+    const tmC = (typeof buscarCuotasEnTM === 'function')
+      ? buscarCuotasEnTM(s.plan, s.tarjeta, r.procEncontrada) : null;
+    const sc     = tmC !== null ? tmC : Math.max(1, parseInt(s.cuotas) || 1);
+    const fromTM = tmC !== null;
+    const pc = Math.max(1, parseInt(p?.cuotas) || 1);
     const dif = sc - pc;
     const difStr = dif > 0 ? `+${dif}` : String(dif);
     // Indicador de fuente
@@ -436,8 +434,10 @@ function exportarDifCuotas() {
     'Procesadora','Cód.Auth. Proc.','Lote Proc.','Ticket Proc.','Cupón SKY','Asiento'];
   const data = rows.map(r => {
     const s = r.sky, p = r.proc;
-    const sc = r.skyCuotas  ?? Math.max(1, parseInt(s.cuotas)  || 1);
-    const pc = r.procCuotas ?? Math.max(1, parseInt(p?.cuotas) || 1);
+    const tmC = (typeof buscarCuotasEnTM === 'function')
+      ? buscarCuotasEnTM(s.plan, s.tarjeta, r.procEncontrada) : null;
+    const sc = tmC !== null ? tmC : Math.max(1, parseInt(s.cuotas)  || 1);
+    const pc = Math.max(1, parseInt(p?.cuotas) || 1);
     return [r.estado, s.fecha, s.suc, s.vendedor||'', s.tarjeta, s.plan,
       sc, pc, sc - pc, s.monto,
       r.procEncontrada||'', p?.aut||'', p?.lote||'', p?.ticket||'', s.cupon||'', s.asiento||''];
