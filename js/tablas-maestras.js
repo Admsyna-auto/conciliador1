@@ -361,6 +361,46 @@ function esc(v) {
   return String(v ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
 }
 
+// ════════════════════════════════════════════════════════════════════
+// BUSCAR CUOTAS EN TM.PLANES
+// ════════════════════════════════════════════════════════════════════
+// Devuelve el nº de cuotas según TM.planes para un plan/tarjeta/procesadora dado.
+// Retorna null si no hay entrada en la tabla maestra (no modifica el valor del archivo).
+function buscarCuotasEnTM(plan, tarjeta, procesadora) {
+  if (!TM.planes || !TM.planes.length) return null;
+
+  const normP = String(plan        || '').trim().toUpperCase();
+  const normT = String(tarjeta     || '').trim().toUpperCase();
+  const normR = String(procesadora || '').trim().toUpperCase();
+
+  const candidatos = TM.planes.filter(p => {
+    if (!p.cuotas) return false;
+    const tmPlan = String(p.plan        || '').trim().toUpperCase();
+    const tmTarj = String(p.tarjeta     || '').trim().toUpperCase();
+    const tmProc = String(p.procesadora || '').trim().toUpperCase();
+
+    // El nombre del plan en TM debe estar contenido en el plan SKY (o viceversa)
+    const matchPlan = !tmPlan || normP.includes(tmPlan) || tmPlan.includes(normP);
+    // Tarjeta y procesadora son filtros opcionales
+    const matchTarj = !tmTarj || normT.includes(tmTarj) || tmTarj.includes(normT);
+    const matchProc = !tmProc || tmProc === normR;
+
+    return matchPlan && matchTarj && matchProc;
+  });
+
+  if (!candidatos.length) return null;
+
+  // Priorizar entrada con más campos específicos (tarjeta + procesadora rellenos)
+  candidatos.sort((a, b) => {
+    const sA = [a.tarjeta, a.procesadora].filter(Boolean).length;
+    const sB = [b.tarjeta, b.procesadora].filter(Boolean).length;
+    return sB - sA;
+  });
+
+  const c = parseInt(candidatos[0].cuotas);
+  return isNaN(c) ? null : c;
+}
+
 // Función para obtener tasa según operación
 function buscarTasaEnTM(tarjeta, cuotas, comercio, procesadora) {
   if (!TM.tasas || !TM.tasas.length) return null;

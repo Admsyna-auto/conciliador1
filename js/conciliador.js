@@ -473,9 +473,15 @@ function armarFila(s, proc, procReal, metodo, procEsp) {
   if (s.integrado && estado==='OK') estado='OK (integrado)';
 
   // ── Diferencia de cuotas ────────────────────────────────────────
-  // Normalizar a mínimo 1 para evitar falsos positivos cuando el campo viene vacío
-  const skyCuotas  = Math.max(1, parseInt(s.cuotas)       || 1);
-  const procCuotas = Math.max(1, parseInt(proc?.cuotas)   || 1);
+  // 1. Buscar cuotas en TM.planes (fuente autoritativa).
+  //    Si el plan SKY no tiene cuotas en el texto (p.ej. "TARJETA NARANJA CLASICA")
+  //    el valor extraído por parseSkylab es 1, pero TM.planes puede tener el dato correcto.
+  const tmCuotas   = (typeof buscarCuotasEnTM === 'function')
+    ? buscarCuotasEnTM(s.plan, s.tarjeta, procReal)
+    : null;
+  const skyCuotas  = tmCuotas !== null ? tmCuotas : Math.max(1, parseInt(s.cuotas) || 1);
+  const skyCuotasTM = tmCuotas !== null; // true = el dato viene de TM.planes
+  const procCuotas = Math.max(1, parseInt(proc?.cuotas) || 1);
   const difCuotas  = skyCuotas !== procCuotas;
 
   // Solo elevar a DIF. CUOTAS si el cruce de comercio y procesadora está OK;
@@ -500,7 +506,7 @@ function armarFila(s, proc, procReal, metodo, procEsp) {
 
   return { sky:s, proc, procMontoNorm, metodo, estado, procEncontrada:procReal, procEsperada:procEsp,
     comOK, sucOK, matchParcial:'', esDevolucion:s.esNeg?'SI':'NO', esAnulSinCobro:'NO',
-    difCuotas, skyCuotas, procCuotas, difProcesadora,
+    difCuotas, skyCuotas, skyCuotasTM, procCuotas, difProcesadora,
     difMonto: difMonto !== null ? +difMonto.toFixed(2) : null };
 }
 

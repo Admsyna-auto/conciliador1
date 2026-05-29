@@ -393,18 +393,30 @@ function renderDifCuotas() {
   tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
   tbl.querySelector('tbody').innerHTML = rows.map(r => {
     const s  = r.sky, p = r.proc;
-    const sc = r.skyCuotas  ?? Math.max(1, parseInt(s.cuotas)  || 1);
+    // Recalcular on-the-fly con TM si el dato no estaba serializado (sesiones anteriores)
+    let sc = r.skyCuotas;
+    let fromTM = r.skyCuotasTM ?? false;
+    if (sc === undefined) {
+      const tmC = (typeof buscarCuotasEnTM === 'function')
+        ? buscarCuotasEnTM(s.plan, s.tarjeta, r.procEncontrada) : null;
+      sc = tmC !== null ? tmC : Math.max(1, parseInt(s.cuotas) || 1);
+      fromTM = tmC !== null;
+    }
     const pc = r.procCuotas ?? Math.max(1, parseInt(p?.cuotas) || 1);
     const dif = sc - pc;
     const difStr = dif > 0 ? `+${dif}` : String(dif);
+    // Indicador de fuente
+    const tmBadge = fromTM
+      ? `<span title="Valor tomado de TM Planes/Cuotas" style="font-size:7px;background:rgba(79,142,247,.15);color:var(--acc);border:1px solid rgba(79,142,247,.3);border-radius:2px;padding:1px 3px;margin-left:3px">TM</span>`
+      : `<span title="Valor extraído del archivo Skylab" style="font-size:7px;background:rgba(107,114,128,.1);color:var(--m2);border:1px solid rgba(107,114,128,.2);border-radius:2px;padding:1px 3px;margin-left:3px">Arch.</span>`;
     return `<tr class="${rowClass(r.estado)}">
       <td>${estadoBadge(r.estado)}</td>
       <td>${s.fecha}</td>
       <td>${s.suc}</td>
       <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.vendedor||''}">${s.vendedor||'—'}</td>
       <td>${s.tarjeta}</td>
-      <td style="font-size:9px">${s.plan}</td>
-      <td class="num" style="color:var(--acc);font-weight:700">${sc}</td>
+      <td style="font-size:9px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${s.plan||''}">${s.plan||'—'}</td>
+      <td class="num" style="color:var(--acc);font-weight:700">${sc}${tmBadge}</td>
       <td class="num" style="color:var(--org);font-weight:700">${pc}</td>
       <td class="num" style="color:var(--red);font-weight:700">${difStr} cuota${Math.abs(dif)!==1?'s':''}</td>
       <td class="num">${fmtARS(s.monto)}</td>
