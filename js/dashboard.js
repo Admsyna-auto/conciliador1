@@ -426,20 +426,45 @@ function _renderDashPagos() {
   _pk('pkpi-mpen2',   _dFmtM(totPen));
   _pk('pkpi-pctpen',  totTot ? (totPen/totTot*100).toFixed(1)+'% del total' : '—');
 
-  const noDataMsg = `<div style="padding:30px;text-align:center;color:var(--m2);font-size:10px">
-    Sin datos — cargá el archivo de liquidaciones</div>`;
+  const PAG_IDS = ['ch-pag-donut-ops','ch-pag-donut-monto','ch-pag-proc','ch-pag-fecha-pago',
+    'ch-pag-evol','ch-pag-suc-pend-ops','ch-pag-suc-pend-monto',
+    'ch-pag-suc-comp','ch-pag-tarjeta'];
 
-  if (!hasCobros) {
-    ['ch-pag-donut-ops','ch-pag-donut-monto','ch-pag-proc','ch-pag-fecha-pago',
-     'ch-pag-evol','ch-pag-suc-pend-ops','ch-pag-suc-pend-monto',
-     'ch-pag-suc-comp','ch-pag-tarjeta'].forEach(id => {
-      const wrap = document.getElementById(id)?.parentElement;
-      if (wrap) wrap.innerHTML = noDataMsg;
+  // Mostrar/ocultar overlay "sin datos" SIN destruir los <canvas>
+  // (si se reemplaza innerHTML del wrapper, el canvas queda eliminado del DOM
+  //  y Chart.js no puede dibujarlo aunque haya datos luego)
+  function _pagNoData(show) {
+    PAG_IDS.forEach(id => {
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      canvas.style.display = show ? 'none' : '';
+      const wrap = canvas.parentElement;
+      if (!wrap) return;
+      let overlay = wrap.querySelector('.pag-nodata');
+      if (show) {
+        if (!overlay) {
+          overlay = document.createElement('div');
+          overlay.className = 'pag-nodata';
+          overlay.style.cssText = 'padding:30px;text-align:center;color:var(--m2);font-size:10px';
+          overlay.textContent = 'Sin datos — cargá el archivo de liquidaciones';
+          wrap.appendChild(overlay);
+        }
+        overlay.style.display = '';
+      } else if (overlay) {
+        overlay.style.display = 'none';
+      }
     });
     const re = document.getElementById('dash-resumen-pagos');
-    if (re) re.innerHTML = noDataMsg;
+    if (re && show) re.innerHTML = '<div style="padding:30px;text-align:center;color:var(--m2);font-size:10px">Sin datos — cargá el archivo de liquidaciones</div>';
+  }
+
+  if (!hasCobros) {
+    _pagNoData(true);
     return;
   }
+
+  // Hay datos — asegurarse de que los canvas estén visibles
+  _pagNoData(false);
 
   const C_COB = '#34d399', C_PEN = '#f87171', C_REC = '#fbbf24';
 
