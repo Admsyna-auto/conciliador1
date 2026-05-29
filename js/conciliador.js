@@ -265,17 +265,18 @@ function parseGetpos(wb, nombre2suc) {
         }
       }
     }
+    const esRev=['Anulación','Devolución'].includes(tipo);
+    const montoRawGp=parseMontoFloat(getCol(r,'Monto Bruto Transacción','Monto Bruto Transaccion','monto bruto transaccion'));
     const obj={aut:norm(getCol(r,'Cód. Aut.','Cod. Aut.','cód aut','cod aut')),
       cupon:norm(getCol(r,'Nro de Cupón','Nro de Cupon','nro de cupon')),
-      monto:parseMontoFloat(getCol(r,'Monto Bruto Transacción','Monto Bruto Transaccion','monto bruto transaccion')),
-      montoN:normMonto(getCol(r,'Monto Bruto Transacción','Monto Bruto Transaccion','monto bruto transaccion')),
+      monto: esRev ? -montoRawGp : montoRawGp,
+      montoN:normMonto(montoRawGp),
       fecha:normFecha(getCol(r,'Fecha de Operación','Fecha de Operacion','fecha de operacion')),
       nombre:String(r['Nombre Establecimiento']||''),
       suc:gpSuc,pos:String(r['Código del POS']||''),
       marca:String(r['Marca']||''),plan:String(r['Plan Cuotas']||''),
       cuotas:parseInt(String(r['Plan Cuotas']||'').match(/\d+/)?.[0])||1,tipo,
       tarjeta:r['Tarjeta'],cupon_raw:r['Nro de Cupón']};
-    const esRev=['Anulación','Devolución'].includes(tipo);
     (esRev?rev_r:norm_r).push(obj);
   }
   return { norm:norm_r, rev:rev_r };
