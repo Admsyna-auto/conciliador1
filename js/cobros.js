@@ -31,46 +31,73 @@ function normNum(v) {
 // ══════════════════════════════════════════════════════════════════
 // PARSEO LIQUIDACIONES
 // ══════════════════════════════════════════════════════════════════
+// ── Búsqueda fuzzy de columna (tolera variaciones de nombre, tildes, case) ──
+function _liqCol(r, ...names) {
+  for (const n of names) {
+    if (r[n] !== undefined && r[n] !== null) return r[n];
+  }
+  const rkeys = Object.keys(r);
+  const norm = s => s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]/g,' ').trim();
+  for (const n of names) {
+    const nn = norm(n);
+    const found = rkeys.find(k => norm(k) === nn);
+    if (found !== undefined && r[found] !== undefined && r[found] !== null) return r[found];
+  }
+  return null;
+}
+
 function parseLiquidaciones(wb) {
   const ws   = wb.Sheets[wb.SheetNames[0]];
   const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
 
+  // Log primeras columnas para diagnóstico
+  if (rows.length > 0) {
+    console.log('[LIQ] Columnas detectadas:', Object.keys(rows[0]).slice(0, 20));
+    console.log('[LIQ] Primera fila muestra:', rows[0]);
+  }
+
   _LIQ_NORM = rows
-    // Incluir cualquier fila que tenga equipo Y al menos un identificador de operación.
-    // GETPOS puede no tener Nro de Lote → no filtrar por ese campo.
     .filter(r => {
-      const eq  = r['Nro Equipo'];
-      const aut = r['Código Autorización'];
-      const cup = r['Nro de Cupón'];
-      const imp = r['Importe Venta'];
-      return eq != null && imp != null && (aut != null || cup != null);
+      // Aceptar cualquier fila con al menos un campo identificador de operación
+      // (equipo, cupón, auth o lote). Excluye filas completamente vacías.
+      const eq  = _liqCol(r, 'Nro Equipo', 'Equipo', 'Terminal', 'Nro de Equipo');
+      const cup = _liqCol(r, 'Nro de Cupón', 'Nro Cupon', 'Nro de Cupon', 'Cupon', 'Cupón');
+      const aut = _liqCol(r, 'Código Autorización', 'Codigo Autorizacion', 'Cod Autorizacion',
+                              'Cod. Autorizacion', 'Código de Autorización', 'Auth');
+      const lot = _liqCol(r, 'Nro de Lote', 'Nro Lote', 'Lote');
+      return (eq != null) || (cup != null && cup !== '') || (aut != null && aut !== '') || (lot != null);
     })
     .map((r, i) => {
-      const tarjeta = String(r['Tarjeta'] || '').trim();
+      const tarjeta = String(_liqCol(r, 'Tarjeta') || '').trim();
+      const impRaw  = _liqCol(r, 'Importe Venta', 'Importe de Venta', 'Importe', 'Monto', 'Monto Venta');
       return {
         idx:          i,
-        fechaVenta:   String(r['Fecha Venta']     || '').trim().slice(0, 10),
-        fechaPago:    String(r['Fecha Pago']      || '').trim().slice(0, 10),
-        fechaAdelanto:String(r['Fecha Adelanto']  || '').trim().slice(0, 10),
-        nroLiq:       String(r['Nro Liquidación'] || '').trim(),
-        equipo:       normNum(r['Nro Equipo']),
-        nombreEquipo: String(r['Nombre de equipo'] || '').trim(),
-        lote:         normNum(r['Nro de Lote']),
-        cupon:        normNum(r['Nro de Cupón']),
+        fechaVenta:   String(_liqCol(r, 'Fecha Venta', 'Fecha de Venta', 'Fecha Operacion') || '').trim().slice(0, 10),
+        fechaPago:    String(_liqCol(r, 'Fecha Pago', 'Fecha de Pago')   || '').trim().slice(0, 10),
+        fechaAdelanto:String(_liqCol(r, 'Fecha Adelanto')                || '').trim().slice(0, 10),
+        nroLiq:       String(_liqCol(r, 'Nro Liquidación', 'Nro Liquidacion', 'Nro de Liquidacion', 'Liquidacion') || '').trim(),
+        equipo:       normNum(_liqCol(r, 'Nro Equipo', 'Equipo', 'Terminal', 'Nro de Equipo')),
+        nombreEquipo: String(_liqCol(r, 'Nombre de equipo', 'Nombre Equipo', 'Nombre del Equipo') || '').trim(),
+        lote:         normNum(_liqCol(r, 'Nro de Lote', 'Nro Lote', 'Lote')),
+        cupon:        normNum(_liqCol(r, 'Nro de Cupón', 'Nro Cupon', 'Nro de Cupon', 'Cupon', 'Cupón')),
         tarjeta,
-        nroTarjeta:   String(r['Nro Tarjeta']         || '').trim(),
-        aut:          normNum(r['Código Autorización']),
-        cuotas:       parseInt(r['Cuotas']) || 1,
-        importe:      parseFloat(String(r['Importe Venta'] || '').replace(/,/g, '')) || 0,
-        nroCom:       normNum(r['Nro Comercio']),
-        banco:        String(r['Banco Pagador']  || '').trim(),
-        rechazo:      String(r['Rechazo']        || 'N').trim().toUpperCase(),
-        arancel:      parseFloat(r['Arancel'])     || 0,
-        ivaArancel:   parseFloat(r['IVA Arancel']) || 0,
-        cfo:          parseFloat(r['CFO'])          || 0,
-        ivaCfo:       parseFloat(r['Iva CFO'])      || 0,
-        tipoOp:       String(r['Tipo operacion']  || '').trim(),
-        bancoEmisor:  String(r['Banco Emisor']    || '').trim(),
+        nroTarjeta:   String(_liqCol(r, 'Nro Tarjeta', 'Número de Tarjeta', 'Numero Tarjeta') || '').trim(),
+        aut:          normNum(_liqCol(r, 'Código Autorización', 'Codigo Autorizacion',
+                                        'Cod. Autorizacion', 'Código de Autorización', 'Auth', 'Autorizacion')),
+        cuotas:       parseInt(_liqCol(r, 'Cuotas', 'Nro Cuotas')) || 1,
+        importe:      (() => {
+          const s = String(impRaw || '').replace(/\./g, '').replace(',', '.');
+          return Math.abs(parseFloat(s) || 0);
+        })(),
+        nroCom:       normNum(_liqCol(r, 'Nro Comercio', 'Nro de Comercio', 'Numero Comercio')),
+        banco:        String(_liqCol(r, 'Banco Pagador', 'Banco')        || '').trim(),
+        rechazo:      String(_liqCol(r, 'Rechazo')                       || 'N').trim().toUpperCase(),
+        arancel:      parseFloat(_liqCol(r, 'Arancel'))                  || 0,
+        ivaArancel:   parseFloat(_liqCol(r, 'IVA Arancel', 'Iva Arancel')) || 0,
+        cfo:          parseFloat(_liqCol(r, 'CFO'))                      || 0,
+        ivaCfo:       parseFloat(_liqCol(r, 'Iva CFO', 'IVA CFO'))       || 0,
+        tipoOp:       String(_liqCol(r, 'Tipo operacion', 'Tipo Operacion', 'Tipo de Operacion') || '').trim(),
+        bancoEmisor:  String(_liqCol(r, 'Banco Emisor')                  || '').trim(),
         // Procesadora inferida del nombre de tarjeta
         proc: tarjeta.toUpperCase().includes('GETNET') ? 'GETPOS' : 'FISERV',
       };
