@@ -506,6 +506,16 @@ function aplicarCorreccionesManuales() {
     fila.correccionManual=cor;
     fila.estado=`CORREGIDO MANUAL (${cor.proc})`;
     fila.procEncontrada=cor.proc; fila.metodo='MANUAL';
+    // Re-cruzar para obtener fila.proc y que quede excluida de "sin cruce"
+    if (!fila.proc && cor.cupon && cor.proc && (_FIS_NORM.length || _GP_NORM.length)) {
+      const res = recruzarFila(parseInt(idx), cor.cupon, cor.proc, cor.metodo || '');
+      if (res?.ok) {
+        fila.proc   = res.match;
+        fila.comOK  = res.comOK;
+        fila.sucOK  = res.sucOK;
+        fila.estado = res.estado;
+      }
+    }
   }
 }
 
