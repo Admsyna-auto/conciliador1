@@ -309,16 +309,37 @@ function _clavesDeRec(r) {
   const cupon = normNum(cor?.cupon  || r.sky.cupon || '');
   const mon   = _normM(r.sky.monto);
   const esFallGP = r.sky.esGETPos;
-
   const prefix = esFallGP ? 'GP' : 'FIS';
+
+  // Si hay corrección manual el usuario pudo haber ingresado un auth code
+  // o un cupón → intentamos todos los formatos reales del índice de liquidaciones
+  // para maximizar las chances de cruzar contra la liq.
+  const keys = [];
+  if (!esFallGP) {
+    // FISERV: el código ingresado puede ser auth (FIS_A_) o cupón (FIS_C_)
+    if (cupon !== '0') {
+      keys.push(`FIS_A_${cupon}_${mon}`);   // como si fuera auth + monto
+      keys.push(`FIS_A_${cupon}`);          // como si fuera auth solo
+      keys.push(`FIS_C_${cupon}_${mon}`);   // como si fuera cupón + monto
+      keys.push(`FIS_C_${cupon}`);          // como si fuera cupón solo
+      keys.push(`FIS_${lote}_${cupon}`);    // tradicional lote + cupón
+    }
+  } else {
+    // GETPOS: el código ingresado suele ser el auth (= Código Autorización de la liq)
+    if (cupon !== '0') {
+      keys.push(`GP_${cupon}_${mon}`);
+      keys.push(`GP_${cupon}`);
+      keys.push(`GP_${lote}_${cupon}`);
+    }
+  }
+  // Fallback genérico por si no hubo match arriba
+  keys.push(`${prefix}_${cupon}_${mon}`);
+  keys.push(`${prefix}_${cupon}`);
+
   return {
     proc:  esFallGP ? 'GETPOS' : 'FISERV',
-    keys: [
-      `${prefix}_${lote}_${cupon}`,
-      `${prefix}_${cupon}_${mon}`,
-      `${prefix}_${cupon}`,
-    ].filter(Boolean),
-    label: `${prefix}_SKY_${lote}_${cupon}`,
+    keys:  keys.filter(Boolean),
+    label: `${prefix}_MANUAL_${cupon}`,
   };
 }
 
