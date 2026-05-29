@@ -471,11 +471,18 @@ function armarFila(s, proc, procReal, metodo, procEsp) {
   // Marcar integradas visualmente sin cambiar el estado
   if (s.integrado && estado==='OK') estado='OK (integrado)';
 
-  // Calcular diferencia de monto real (incluyendo centavos)
+  // Normalizar signo del monto de procesadora para devoluciones:
+  // GETPOS y FISERV reportan devoluiones como monto positivo; SKY las trae negativas.
+  // procMontoNorm tiene el mismo signo que s.monto para que los exports no muestren diferencia espuria.
+  const procMontoNorm = proc
+    ? (s.esNeg && proc.monto > 0 ? -proc.monto : proc.monto)
+    : null;
+
+  // Calcular diferencia de monto real usando valores absolutos (centavos de redondeo)
   const difMonto = proc && s.monto && proc.monto
     ? Math.abs(Math.abs(s.monto) - Math.abs(proc.monto))
     : null;
-  return { sky:s, proc, metodo, estado, procEncontrada:procReal, procEsperada:procEsp,
+  return { sky:s, proc, procMontoNorm, metodo, estado, procEncontrada:procReal, procEsperada:procEsp,
     comOK, sucOK, matchParcial:'', esDevolucion:s.esNeg?'SI':'NO', esAnulSinCobro:'NO',
     difMonto: difMonto !== null ? +difMonto.toFixed(2) : null };
 }
@@ -1073,7 +1080,7 @@ function descargarCompleto() {
       r.procEsperada??'',r.procEncontrada??'',r.comOK??'',r.sucOK??'',r.matchParcial??'',
       fmtFecha(s.fecha),s.suc,s.tarjeta,s.plan,s.cupon,s.lote,s.nroCom,s.monto,s.neto,
       s.vendedor??'',s.asiento??'',
-      p?.tarjeta??'',p?.cuotas??'',p?.monto??'',p?.aut??'',p?.lote??'',p?.suc??'',p?.comFis??'',p?.equipo??''];
+      p?.tarjeta??'',p?.cuotas??'',r.procMontoNorm??p?.monto??'',p?.aut??'',p?.lote??'',p?.suc??'',p?.comFis??'',p?.equipo??''];
   });
   _exportXlsx([HDR,...rows],'Conciliación completa',`Conciliacion_${hoy()}.xlsx`);
 }

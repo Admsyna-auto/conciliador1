@@ -178,6 +178,7 @@ function serializarFila(r) {
     comOK: r.comOK, sucOK: r.sucOK, matchParcial: r.matchParcial,
     esDevolucion: r.esDevolucion, esAnulSinCobro: r.esAnulSinCobro,
     correccionManual: r.correccionManual,
+    procMontoNorm: r.procMontoNorm,
     difTasa: r.difTasa, difMonto: r.difMonto,
     tasaCobrada: r.tasaCobrada, tasaAcordada: r.tasaAcordada,
     accionSugerida: r.accionSugerida,
