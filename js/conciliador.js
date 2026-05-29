@@ -1563,6 +1563,44 @@ function renderNoCruzadasGp() {
   </tr>`).join('');
 }
 
+function exportarCorrecciones() {
+  const entries = Object.entries(CORREGIDAS);
+  if (!entries.length) { alert('No hay correcciones manuales para exportar.'); return; }
+
+  const HDR = [
+    // Skylab
+    'Fecha SKY','Sucursal','Vendedor','Tarjeta SKY','Plan','Cuotas SKY',
+    'Monto SKY','Cupón SKY','Lote','Nro.Comercio SKY',
+    // Corrección
+    'Procesadora','Cupón ingresado','Método cruce','Estado cruce',
+    // Procesadora
+    'Monto Proc.','DIF $','Tarjeta Proc.','Cuotas Proc.',
+    'Com.FIS','Cód.Auth.','Suc.Proc.','Com.OK'
+  ];
+
+  const data = entries.map(([idxStr, cor]) => {
+    const idx  = parseInt(idxStr);
+    const fila = RESULTADO[idx];
+    if (!fila) return null;
+    const s = fila.sky;
+    const p = fila.proc;
+    return [
+      // Skylab
+      s.fecha, s.suc, s.vendedor ?? '', s.tarjeta, s.plan, s.cuotas ?? '',
+      Math.abs(s.monto), s.cupon, s.lote, s.nroCom ?? '',
+      // Corrección
+      cor.proc ?? '', cor.cupon ?? '', cor.metodo ?? '', fila.estado ?? '',
+      // Procesadora
+      p ? Math.abs(p.monto || 0) : '',
+      cor.difMonto != null ? cor.difMonto : '',
+      p?.tarjeta ?? '', p?.cuotas ?? '',
+      p?.comFis ?? '', p?.aut ?? '', p?.suc ?? '', fila.comOK ?? '',
+    ];
+  }).filter(Boolean);
+
+  _exportXlsx([HDR, ...data], 'Correcciones', `Correcciones_Manuales_${hoy()}.xlsx`);
+}
+
 function exportarNoCruzadasFis() {
   // Cruce inicial: estado al momento del cruce automático (sin correcciones manuales)
   const rows = window._FIS_NO_CRUZADAS || [];
