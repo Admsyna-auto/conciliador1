@@ -547,7 +547,7 @@ function aplicarCorreccionesManuales() {
     fila.estado=`CORREGIDO MANUAL (${cor.proc})`;
     fila.procEncontrada=cor.proc; fila.metodo='MANUAL';
     if (!fila.proc && cor.cupon && cor.proc && (_FIS_NORM.length || _GP_NORM.length)) {
-      const res = recruzarFila(idx, cor.cupon, cor.proc, cor.metodo || '');
+      const res = recruzarFila(idx, cor.cupon, cor.proc, cor.metodo || '', cor.montoReal ?? null);
       if (res?.ok) {
         fila.proc   = res.match;
         fila.comOK  = res.comOK;
@@ -1039,8 +1039,10 @@ function aplicarCorreccion(idx) {
     ? parseFloat(montoRealRaw.replace(',','.')) || null
     : null;
 
-  // Re-cruzar inmediatamente con el cupón ingresado
-  const res = (_FIS_NORM.length || _GP_NORM.length) ? recruzarFila(idx, cupon, proc, metodo) : null;
+  // Re-cruzar usando montoReal si fue ingresado, sino monto SKY
+  const res = (_FIS_NORM.length || _GP_NORM.length)
+    ? recruzarFila(idx, cupon, proc, metodo, montoReal)
+    : null;
 
   CORREGIDAS[key]={cupon, proc, metodo,
     montoReal,                              // null = igual al facturado
@@ -1281,7 +1283,7 @@ function reprocesarCorrecciones() {
     const idx = RESULTADO.findIndex(r => _skyKey(r.sky) === key);
     if (idx < 0) continue;
     const fila = RESULTADO[idx];
-    const res=recruzarFila(idx, cor.cupon, cor.proc, cor.metodo||'');
+    const res=recruzarFila(idx, cor.cupon, cor.proc, cor.metodo||'', cor.montoReal ?? null);
     CORREGIDAS[key] = {...cor, difMonto: res.ok ? (res.difMonto ?? null) : null,
       resultado: res.ok ? 'CRUZADO' : 'NO CRUZADO',
       metodo: res.met||'', motivo: res.motivo||''};
@@ -1394,9 +1396,11 @@ const METODOS_GETPOS = [
   { val:'G5', label:'CodAut parcial + Monto' },
 ];
 
-function recruzarFila(skyIdx, cuponManual, proc, metodo) {
+function recruzarFila(skyIdx, cuponManual, proc, metodo, montoRealOverride) {
   const fila=RESULTADO[skyIdx]; if (!fila) return {ok:false, motivo:'Fila no encontrada'};
-  const s=fila.sky, mn=s.montoN, sn=s.suc, fn=s.fecha;
+  const s=fila.sky, sn=s.suc, fn=s.fecha;
+  // Usar montoReal si fue corregido manualmente, sino usar el monto de Skylab
+  const mn = montoRealOverride != null ? normMonto(montoRealOverride) : s.montoN;
   const cuNorm=norm(cuponManual);
 
 
