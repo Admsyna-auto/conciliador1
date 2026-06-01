@@ -954,7 +954,8 @@ function renderFilas() {
   }
   const hdr=`<div class="fix-hdr">
     <div>Suc · Asiento · Cupón</div><div>Plan · Lote · Vendedor</div>
-    <div>Monto / Fecha</div><div>Cupón procesadora</div>
+    <div>Monto facturado / Fecha</div><div>Monto real cobrado</div>
+    <div>Cupón procesadora</div>
     <div>Procesadora</div><div>Método de cruce</div><div></div></div>`;
   cont.innerHTML=hdr+filtrados.map(r=>{
     const s=r.sky, cor=CORREGIDAS[_skyKey(s)]||{};
@@ -976,9 +977,19 @@ function renderFilas() {
       <div><div class="fix-cell-lbl">Plan · Lote</div>
         <div class="fix-cell-val">${s.plan} · Lote ${s.lote}</div>
         <div class="fix-cell-sub">${s.vendedor??''}</div></div>
-      <div><div class="fix-cell-lbl">Monto · Fecha</div>
+      <div><div class="fix-cell-lbl">Monto facturado · Fecha</div>
         <div class="fix-cell-val fix-monto" style="color:${montoColor}">${montoFmt}</div>
         <div class="fix-cell-sub">${s.fecha}</div></div>
+      <div>
+        <div class="fix-cell-lbl">Monto real cobrado</div>
+        <input class="fix-inp" id="fi-mon-${s.idx}" type="number" step="0.01"
+          placeholder="Igual al facturado"
+          title="Dejá vacío si el monto cobrado es igual al facturado"
+          value="${cor.montoReal != null ? cor.montoReal : ''}"
+          style="font-family:var(--mono);text-align:right">
+        ${cor.montoReal != null ? `<div class="fix-cell-sub" style="color:${cor.montoReal != Math.abs(s.monto) ? 'var(--yel)' : 'var(--grn)'}">
+          ${cor.montoReal != Math.abs(s.monto) ? '⚠ Difiere del facturado' : '✓ Igual al facturado'}</div>` : ''}
+      </div>
       <div><input class="fix-inp" id="fi-cup-${s.idx}" placeholder="Cupón / Autorización" value="${cor.cupon||''}"></div>
       <div>
         <select class="fix-sel" id="fi-proc-${s.idx}" onchange="actualizarMetodos(${s.idx})">
@@ -1022,10 +1033,18 @@ function aplicarCorreccion(idx) {
   const key=_skyKey(fila.sky);
   const antes=CORREGIDAS[key]||{};
 
+  // Monto real cobrado (vacío = igual al facturado)
+  const montoRealRaw = document.getElementById(`fi-mon-${idx}`)?.value?.trim();
+  const montoReal = montoRealRaw !== '' && montoRealRaw != null
+    ? parseFloat(montoRealRaw.replace(',','.')) || null
+    : null;
+
   // Re-cruzar inmediatamente con el cupón ingresado
   const res = (_FIS_NORM.length || _GP_NORM.length) ? recruzarFila(idx, cupon, proc, metodo) : null;
 
-  CORREGIDAS[key]={cupon, proc, metodo, difMonto: res?.difMonto ?? null,
+  CORREGIDAS[key]={cupon, proc, metodo,
+    montoReal,                              // null = igual al facturado
+    difMonto: res?.difMonto ?? null,
     resultado: res ? (res.ok ? 'CRUZADO' : 'NO CRUZADO') : 'PENDIENTE',
     metodo: res?.met || '',
     motivo: res?.motivo || ''
@@ -1229,7 +1248,7 @@ function hoy() { return new Date().toISOString().slice(0,10); }
 // TABLA Y RE-PROCESO DE CORRECCIONES MANUALES
 // ══════════════════════════════════════════════════════════════════
 const HDR_COR = ['Estado cruce','Método','Fecha','Suc','Vendedor','Tarjeta','Plan',
-  'Monto SKY','Monto Proc.','DIF $','Cupón SKY','Proc.','Cupón ingresado','Tarjeta proc.','Com.FIS','Com.OK','Detalle',''];
+  'Monto SKY','Monto real','Monto Proc.','DIF $','Cupón SKY','Proc.','Cupón ingresado','Tarjeta proc.','Com.FIS','Com.OK','Detalle',''];
 
 
 // Eliminar una corrección y devolver la fila a SIN MATCH
@@ -1319,6 +1338,10 @@ function renderTablaCorrecciones() {
       <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis">${s.vendedor||'—'}</td>
       <td>${s.tarjeta}</td><td>${s.plan}</td>
       <td class="num">$${Math.abs(s.monto).toLocaleString('es-AR',{minimumFractionDigits:2})}</td>
+      <td class="num" style="color:${cor.montoReal != null && cor.montoReal !== Math.abs(s.monto) ? 'var(--yel)' : 'var(--grn)'}">
+        ${cor.montoReal != null
+          ? `$${parseFloat(cor.montoReal).toLocaleString('es-AR',{minimumFractionDigits:2})}${cor.montoReal !== Math.abs(s.monto) ? ' ⚠' : ' ✓'}`
+          : '<span style="color:var(--m2)">= facturado</span>'}</td>
       <td class="num" style="color:var(--m1)">${p ? '$'+Math.abs(p.monto||0).toLocaleString('es-AR',{minimumFractionDigits:2}) : '—'}</td>
       <td class="num ${cor.difMonto>500?'num-pos':cor.difMonto===0?'':'num-pos'}">${cor.difMonto!=null?(cor.difMonto===0?'<span style="color:var(--grn)">✓ Igual</span>':'$'+cor.difMonto.toLocaleString('es-AR',{maximumFractionDigits:0})):'—'}</td>
       <td class="num" style="font-family:var(--mono)">${s.cupon}</td>
