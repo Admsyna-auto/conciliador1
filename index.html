@@ -1616,6 +1616,7 @@ async function loadSesion(id) {
       document.getElementById('dl-bar').classList.add('show');
       setupDownloads();
     }
+    _showToast(`✓ Sesión "${SESSION.nombre}" · ${RESULTADO.length.toLocaleString('es-AR')} operaciones`);
     log(`Sesión "${SESSION.nombre}" restaurada · ${RESULTADO.length} operaciones`, 'ok');
   } else {
     alert('Error al cargar la sesión.');
@@ -1635,12 +1636,54 @@ async function importarYRestaurar(input) {
   const file = input.files[0]; if (!file) return;
   try {
     await importarSesion(file);
-    document.getElementById('session-name').value = SESSION.nombre || 'Sesión importada';
+    // Restaurar campos del formulario
+    document.getElementById('session-name').value  = SESSION.nombre      || 'Sesión importada';
+    document.getElementById('param-usuario').value = SESSION.usuario     || 'Usuario';
+    document.getElementById('param-desde').value   = SESSION.periodoDesde || '';
+    document.getElementById('param-hasta').value   = SESSION.periodoHasta || '';
     renderSbEquiv();
-    if (RESULTADO.length) { renderTodo(); setupDownloads(); }
-    alert(`✓ Sesión "${SESSION.nombre}" importada con ${RESULTADO.length} operaciones.`);
-  } catch(e) { alert('Error importando: ' + e.message); }
+    if (RESULTADO.length) {
+      renderTodo();
+      // Mostrar tabs y resultado
+      document.getElementById('tab-strip-cruce').style.display = 'flex';
+      document.getElementById('t-empty').classList.remove('active');
+      document.querySelectorAll('#mod-cruce .tab-body').forEach(t => t.classList.remove('active'));
+      document.getElementById('t-all').classList.add('active');
+      // Activar pestaña "Completo" en el tab strip
+      const strip = document.getElementById('tab-strip-cruce');
+      strip.querySelectorAll('.tb').forEach(b => b.classList.remove('active'));
+      strip.querySelectorAll('.tb')[1]?.classList.add('active'); // índice 1 = "Completo"
+      // Mostrar barra de descargas
+      document.getElementById('dl-bar').classList.add('show');
+      setupDownloads();
+    }
+    // Toast en lugar de alert bloqueante
+    _showToast(`✓ Sesión importada · ${RESULTADO.length.toLocaleString('es-AR')} operaciones`);
+  } catch(e) {
+    alert('Error importando sesión: ' + e.message);
+    console.error(e);
+  }
   input.value = '';
+}
+
+function _showToast(msg, ms = 3500) {
+  let t = document.getElementById('_toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = '_toast';
+    t.style.cssText = `position:fixed;bottom:60px;left:50%;transform:translateX(-50%) translateY(20px);
+      background:var(--s2);border:1px solid var(--grn);color:var(--grn);
+      font-family:var(--mono);font-size:10px;padding:9px 18px;border-radius:6px;
+      z-index:9999;opacity:0;transition:opacity .25s,transform .25s;pointer-events:none;
+      box-shadow:0 4px 16px rgba(0,0,0,.4)`;
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  requestAnimationFrame(() => { t.style.opacity='1'; t.style.transform='translateX(-50%) translateY(0)'; });
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => {
+    t.style.opacity='0'; t.style.transform='translateX(-50%) translateY(10px)';
+  }, ms);
 }
 
 function nuevaSesion() {

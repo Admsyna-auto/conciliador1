@@ -164,11 +164,13 @@ function buildSnapshot() {
 function serializarFila(r) {
   // El objeto proc puede ser grande — guardamos solo los campos necesarios
   const p = r.proc ? {
-    lote: r.proc.lote, ticket: r.proc.ticket, aut: r.proc.aut,
-    monto: r.proc.monto, fecha: r.proc.fecha, suc: r.proc.suc,
-    tarjeta: r.proc.tarjeta, cuotas: r.proc.cuotas, comFis: r.proc.comFis,
-    nombre: r.proc.nombre, marca: r.proc.marca, plan: r.proc.plan,
-    equipo: r.proc.equipo, pos: r.proc.pos,
+    lote:    r.proc.lote,    ticket:  r.proc.ticket,  aut:    r.proc.aut,
+    cupon:   r.proc.cupon,                             // GETPOS: cupón para cruce COBROS
+    monto:   r.proc.monto,   montoN:  r.proc.montoN,  fecha:  r.proc.fecha,
+    suc:     r.proc.suc,     tarjeta: r.proc.tarjeta,  cuotas: r.proc.cuotas,
+    comFis:  r.proc.comFis,  nombre:  r.proc.nombre,   marca:  r.proc.marca,
+    plan:    r.proc.plan,    equipo:  r.proc.equipo,   pos:    r.proc.pos,
+    tipo:    r.proc.tipo,    arancel: r.proc.arancel,  cfo:    r.proc.cfo,
   } : null;
   return {
     sky: { ...r.sky },
