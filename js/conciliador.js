@@ -880,7 +880,11 @@ function marcarRevision(idx, estado) {
   fila.procEncontrada = estado === 'REFACTURADO' ? 'N/A' : fila.procEsperada;
   fila.matchParcial   = estado === 'REFACTURADO'
     ? 'Marcado manualmente como refacturado — no coincide por refacturación'
+    : estado === 'ANULACION SIN COBRO'
+    ? 'Marcado manualmente como anulación sin cobro'
     : 'Marcado manualmente como revisión urgente — venta sin pago encontrado';
+  // Flags de tipo
+  if (estado === 'ANULACION SIN COBRO') fila.esAnulSinCobro = 'SI';
   // Guardar en CORREGIDAS con estado especial
   const cor = CORREGIDAS[_skyKey(fila.sky)] || {};
   CORREGIDAS[_skyKey(fila.sky)] = { ...cor, cupon: cor.cupon||'—', proc: cor.proc||fila.procEsperada,
@@ -911,11 +915,14 @@ function filtrarSinMatch() {
 }
 
 // Tipo de operación (Venta / Devolución / Anulación)
+// Nota: esDevolucion y esAnulSinCobro pueden ser 'SI'/'NO' (string) o true/false
 function _tipoOp(r) {
-  if (r.esDevolucion)   return { label:'DEVOLUCION', color:'#38bdf8' };
-  if (r.esAnulSinCobro) return { label:'ANULACION',  color:'#fb923c' };
-  if (r.sky?.esNeg)     return { label:'NEGATIVO',   color:'#f87171' };
-  return                       { label:'VENTA',      color:'#34d399' };
+  const isAnul = r.esAnulSinCobro === 'SI' || r.esAnulSinCobro === true;
+  const isDev  = r.esDevolucion   === 'SI' || r.esDevolucion   === true;
+  if (isAnul) return { label:'ANULACIÒN S/C', color:'#fb923c' };
+  if (isDev)  return { label:'DEVOLUCION',    color:'#38bdf8' };
+  if (r.sky?.esNeg) return { label:'NEGATIVO', color:'#f87171' };
+  return              { label:'VENTA',         color:'#34d399' };
 }
 
 // Resetear cualquier fila a SIN MATCH (sin importar si está en CORREGIDAS)
@@ -995,6 +1002,9 @@ function renderFilas() {
         <button class="fix-apply" style="background:#7c3aed;font-size:7px"
           onclick="marcarRevision('${s.idx}','REFACTURADO')" title="La operación fue refacturada — no coincide por refacturación">
           ↺ Refacturado</button>
+        <button class="fix-apply" style="background:#0369a1;font-size:7px"
+          onclick="marcarRevision('${s.idx}','ANULACION SIN COBRO')" title="Venta anulada — no se cobró y no debe buscarse en procesadora">
+          ✗ Anu. S/Cobro</button>
       </div>
     </div>`;
   }).join('');
