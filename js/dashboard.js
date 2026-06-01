@@ -82,10 +82,10 @@ function _dLegend(position='top') {
 function showDashTab(tab, btn) {
   document.querySelectorAll('.dash-itab').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  const tx  = document.getElementById('dash-tab-tx');
-  const pag = document.getElementById('dash-tab-pag');
-  if (tx)  tx.style.display  = tab === 'tx'  ? '' : 'none';
-  if (pag) pag.style.display = tab === 'pag' ? '' : 'none';
+  ['tx','pag','fin'].forEach(t => {
+    const el = document.getElementById(`dash-tab-${t}`);
+    if (el) el.style.display = t === tab ? '' : 'none';
+  });
   setTimeout(() => Object.values(_dashCharts).forEach(c => { try{c.resize();}catch(e){} }), 60);
 }
 
@@ -369,8 +369,9 @@ function renderDashboard() {
         parseFloat(pctMonto)>=90?DASH_CLR.ok:parseFloat(pctMonto)>=70?DASH_CLR.malFact:DASH_CLR.sm);
   }
 
-  // Renderizar tab pagos
+  // Renderizar tab pagos y financiero
   _renderDashPagos();
+  _renderDashFin();
 
   // ── 9. BAR — Monto sin match por sucursal (top 15) ─────────────────
   const sucSMmonto = {};
@@ -693,4 +694,401 @@ function _renderDashPagos() {
       line('% Cobrado por monto',   pctCobMon.toFixed(1)+'%',
         pctCobMon>=80?C_COB:pctCobMon>=50?C_REC:C_PEN);
   }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// RENDER FINANCIERO — Estimado vs Real, proyecciones y aging
+// ════════════════════════════════════════════════════════════════════
+function _renderDashFin() {
+  const hasRes = typeof RESULTADO !== 'undefined' && RESULTADO.length > 0;
+  const hasCob = typeof COBROS_RESULT !== 'undefined' && COBROS_RESULT.length > 0;
+
+  const FIN_IDS = ['ch-fin-flujo','ch-fin-acum','ch-fin-aging','ch-fin-brecha',
+                   'ch-fin-proyeccion','ch-fin-suc-neto','ch-fin-cuotas','ch-fin-cobertura'];
+
+  // Preservar canvas igual que en _renderDashPagos (overlay, no reemplazar)
+  function _finNoData(show) {
+    FIN_IDS.forEach(id => {
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      canvas.style.display = show ? 'none' : '';
+      const wrap = canvas.parentElement;
+      if (!wrap) return;
+      let ov = wrap.querySelector('.fin-nodata');
+      if (show) {
+        if (!ov) {
+          ov = document.createElement('div');
+          ov.className = 'fin-nodata';
+          ov.style.cssText = 'padding:30px;text-align:center;color:var(--m2);font-size:10px';
+          ov.textContent = 'Ejecutá el cruce y cargá Liquidaciones para ver el análisis financiero';
+          wrap.appendChild(ov);
+        }
+        ov.style.display = '';
+      } else if (ov) {
+        ov.style.display = 'none';
+      }
+    });
+  }
+
+  if (!hasRes) { _finNoData(true); return; }
+  _finNoData(false);
+
+  // ── Helpers de fecha ────────────────────────────────────────────────
+  const toMonth = d => d ? String(d).slice(0,7) : null;   // "2024-03"
+  const today   = new Date().toISOString().slice(0,10);
+  const dayDiff = (a, b) => {
+    if (!a || !b) return null;
+    return Math.round((new Date(b) - new Date(a)) / 86400000);
+  };
+
+  // ── Construir dataset base desde RESULTADO ──────────────────────────
+  // Ops con fecha estimada de pago (fecPago del archivo SKY)
+  const opsFP = RESULTADO.filter(r => r.sky?.fecPago && !r.sky.esNeg && !r.sky.integrado);
+
+  // Cruzar con COBROS_RESULT para saber estado real
+  const cobIdx = {};  // sky.idx → cobros entry
+  if (hasCob) COBROS_RESULT.forEach(c => { if (c.fila?.sky?.idx != null) cobIdx[c.fila.sky.idx] = c; });
+
+  // ── KPIs financieros ─────────────────────────────────────────────────
+  const _fk = (id, v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
+
+  const totalEst   = opsFP.reduce((s, r) => s + Math.abs(r.sky.monto), 0);
+  const cobEntries = opsFP.map(r => cobIdx[r.sky.idx]).filter(Boolean);
+  const cobrado    = cobEntries.filter(c => c.estado === 'COBRADO');
+  const pendiente  = opsFP.filter(r => {
+    const c = cobIdx[r.sky.idx];
+    return !c || c.estado === 'PENDIENTE';
+  });
+  const vencidos   = pendiente.filter(r => r.sky.fecPago < today);
+  const futuros    = pendiente.filter(r => r.sky.fecPago >= today);
+
+  const montoCob   = cobrado.reduce((s, c) => s + Math.abs(c.fila.sky.monto), 0);
+  const montoVenc  = vencidos.reduce((s, r) => s + Math.abs(r.sky.monto), 0);
+  const montoFut   = futuros.reduce((s, r) => s + Math.abs(r.sky.monto), 0);
+
+  // Brecha promedio (días entre fecPago estimada y fechaPago real)
+  let brechaSum = 0, brechaCount = 0;
+  cobrado.forEach(c => {
+    const est = c.fila?.sky?.fecPago;
+    const real = c.liq?.fechaPago;
+    const d = dayDiff(est, real);
+    if (d !== null) { brechaSum += d; brechaCount++; }
+  });
+  const brechaAvg = brechaCount ? (brechaSum / brechaCount).toFixed(1) : '—';
+
+  const pctCobFin = totalEst ? (montoCob/totalEst*100).toFixed(1) : '—';
+  _fk('fkpi-total-est',    _dFmtM(totalEst));
+  _fk('fkpi-cobrado',      _dFmtM(montoCob));
+  _fk('fkpi-vencido',      _dFmtM(montoVenc));
+  _fk('fkpi-futuro',       _dFmtM(montoFut));
+  _fk('fkpi-brecha',       brechaAvg === '—' ? '—' : brechaAvg + ' días');
+  _fk('fkpi-cobertura',    pctCobFin === '—' ? '—' : pctCobFin + '% cobrado');
+  _fk('fkpi-cobertura-pct', pctCobFin === '—' ? '—' : pctCobFin + '%');
+  _fk('fkpi-venc-sub',     vencidos.length.toLocaleString('es-AR') + ' ops vencidas');
+  _fk('fkpi-fut-sub',      futuros.length.toLocaleString('es-AR') + ' ops próximas');
+
+  const C_EST = '#4f8ef7', C_COB = '#34d399', C_PEN = '#f87171', C_VEN = '#fbbf24';
+
+  // ── 1. FLUJO MENSUAL — Estimado vs Cobrado ──────────────────────────
+  // Agrupar montos por mes usando fecPago (estimada) para ambas series
+  const byMonEst = {}, byMonCob = {};
+  opsFP.forEach(r => {
+    const m = toMonth(r.sky.fecPago); if (!m) return;
+    byMonEst[m] = (byMonEst[m]||0) + Math.abs(r.sky.monto);
+  });
+  cobrado.forEach(c => {
+    const m = toMonth(c.fila?.sky?.fecPago); if (!m) return;
+    byMonCob[m] = (byMonCob[m]||0) + Math.abs(c.fila.sky.monto);
+  });
+  const meses = [...new Set([...Object.keys(byMonEst),...Object.keys(byMonCob)])].sort();
+
+  _dashCharts.finFlujo = new Chart(document.getElementById('ch-fin-flujo'), {
+    type: 'bar',
+    data: {
+      labels: meses,
+      datasets: [
+        { label:'Estimado a cobrar', data: meses.map(m=>byMonEst[m]||0),
+          backgroundColor: C_EST+'66', borderColor: C_EST, borderWidth:1, borderRadius:3 },
+        { label:'Cobrado real',      data: meses.map(m=>byMonCob[m]||0),
+          backgroundColor: C_COB+'99', borderColor: C_COB, borderWidth:1, borderRadius:3 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+      scales: {
+        x: { ticks:{ color:DASH_CLR.txt, font:{size:8} }, grid:{ color:DASH_CLR.grid } },
+        y: { ticks:{ color:DASH_CLR.txt, font:{size:8}, callback: v=>_dFmtM(v) }, grid:{ color:DASH_CLR.grid } }
+      }
+    }
+  });
+
+  // ── 2. ACUMULADO — Curva estimado vs real ───────────────────────────
+  const sortedMeses = [...meses];
+  let cumEst = 0, cumCob = 0;
+  const cumEstArr = [], cumCobArr = [];
+  sortedMeses.forEach(m => {
+    cumEst += byMonEst[m]||0;
+    cumCob += byMonCob[m]||0;
+    cumEstArr.push(cumEst);
+    cumCobArr.push(cumCob);
+  });
+
+  _dashCharts.finAcum = new Chart(document.getElementById('ch-fin-acum'), {
+    type: 'line',
+    data: {
+      labels: sortedMeses,
+      datasets: [
+        { label:'Acumulado estimado', data: cumEstArr,
+          borderColor: C_EST, backgroundColor: C_EST+'22',
+          borderWidth:2, fill:true, tension:0.3, pointRadius:3 },
+        { label:'Acumulado cobrado', data: cumCobArr,
+          borderColor: C_COB, backgroundColor: C_COB+'22',
+          borderWidth:2, fill:true, tension:0.3, pointRadius:3 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+      scales: {
+        x: { ticks:{ color:DASH_CLR.txt, font:{size:8} }, grid:{ color:DASH_CLR.grid } },
+        y: { ticks:{ color:DASH_CLR.txt, font:{size:8}, callback: v=>_dFmtM(v) }, grid:{ color:DASH_CLR.grid } }
+      }
+    }
+  });
+
+  // ── 3. AGING — Pendientes vencidos por tramos ──────────────────────
+  const agingBuckets = { '0-7 días':0, '8-15 días':0, '16-30 días':0, '31-60 días':0, '>60 días':0 };
+  const agingMontos  = { '0-7 días':0, '8-15 días':0, '16-30 días':0, '31-60 días':0, '>60 días':0 };
+  vencidos.forEach(r => {
+    const dias = dayDiff(r.sky.fecPago, today) || 0;
+    const m = Math.abs(r.sky.monto);
+    let b;
+    if (dias <= 7)  b = '0-7 días';
+    else if (dias <= 15) b = '8-15 días';
+    else if (dias <= 30) b = '16-30 días';
+    else if (dias <= 60) b = '31-60 días';
+    else                 b = '>60 días';
+    agingBuckets[b]++;
+    agingMontos[b] += m;
+  });
+  const agingKeys = Object.keys(agingBuckets);
+  const agingColors = ['#34d399cc','#fbbf24cc','#fb923ccc','#f87171cc','#ef4444cc'];
+
+  _dashCharts.finAging = new Chart(document.getElementById('ch-fin-aging'), {
+    type: 'bar',
+    data: {
+      labels: agingKeys,
+      datasets: [
+        { label:'Ops vencidas', data: agingKeys.map(k=>agingBuckets[k]),
+          backgroundColor: agingColors, borderRadius:4, borderWidth:0,
+          yAxisID: 'y' },
+        { label:'Monto ($)', data: agingKeys.map(k=>agingMontos[k]),
+          backgroundColor: 'transparent', borderColor: C_VEN,
+          borderWidth:2, type:'line', yAxisID:'y2', tension:0.3, pointRadius:4 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+      scales: {
+        x: { ticks:{ color:DASH_CLR.txt, font:{size:9} }, grid:{ color:DASH_CLR.grid } },
+        y:  { position:'left',  ticks:{ color:DASH_CLR.txt, font:{size:8} }, grid:{ color:DASH_CLR.grid } },
+        y2: { position:'right', ticks:{ color:C_VEN, font:{size:8}, callback:v=>_dFmtM(v) }, grid:{ display:false } },
+      }
+    }
+  });
+
+  // ── 4. BRECHA POR TARJETA — Días promedio entre estimado y cobrado ──
+  const brechaByTarj = {};
+  cobrado.forEach(c => {
+    const est  = c.fila?.sky?.fecPago;
+    const real = c.liq?.fechaPago;
+    const tarj = c.fila?.sky?.tarjeta || 'Otra';
+    const d = dayDiff(est, real);
+    if (d === null) return;
+    if (!brechaByTarj[tarj]) brechaByTarj[tarj] = { sum:0, cnt:0 };
+    brechaByTarj[tarj].sum += d;
+    brechaByTarj[tarj].cnt++;
+  });
+  const brechaPairs = Object.entries(brechaByTarj)
+    .map(([t,v]) => [t, parseFloat((v.sum/v.cnt).toFixed(1))])
+    .sort((a,b) => b[1]-a[1]);
+
+  _dashCharts.finBrecha = new Chart(document.getElementById('ch-fin-brecha'), {
+    type: 'bar',
+    data: {
+      labels: brechaPairs.map(p=>p[0]),
+      datasets: [{
+        label:'Días promedio de brecha',
+        data: brechaPairs.map(p=>p[1]),
+        backgroundColor: brechaPairs.map(p => p[1]<=0?C_COB+'cc':p[1]<=7?C_VEN+'cc':C_PEN+'cc'),
+        borderRadius:4, borderWidth:0,
+      }]
+    },
+    options: {
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.parsed.x > 0 ? '+':'' }${ctx.parsed.x} días vs estimado` } }
+      },
+      scales: {
+        x: { ticks:{ color:DASH_CLR.txt, font:{size:8} }, grid:{ color:DASH_CLR.grid } },
+        y: { ticks:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'} }, grid:{ display:false } },
+      }
+    }
+  });
+
+  // ── 5. PROYECCIÓN — Próximos cobros pendientes (por semana) ─────────
+  // Agrupa futuros por semana ISO (lunes de la semana)
+  function weekOf(d) {
+    if (!d) return null;
+    const dt = new Date(d + 'T00:00:00');
+    const day = dt.getDay() || 7;
+    dt.setDate(dt.getDate() - day + 1);
+    return dt.toISOString().slice(0,10);
+  }
+  const byWeek = {};
+  futuros.forEach(r => {
+    const w = weekOf(r.sky.fecPago); if (!w) return;
+    if (!byWeek[w]) byWeek[w] = { monto:0, ops:0 };
+    byWeek[w].monto += Math.abs(r.sky.monto);
+    byWeek[w].ops++;
+  });
+  const weeks = Object.keys(byWeek).sort().slice(0,16);   // máx 16 semanas
+
+  _dashCharts.finProyeccion = new Chart(document.getElementById('ch-fin-proyeccion'), {
+    type: 'bar',
+    data: {
+      labels: weeks.map(w => {
+        const dt = new Date(w + 'T00:00:00');
+        return dt.toLocaleDateString('es-AR', { day:'2-digit', month:'short' });
+      }),
+      datasets: [{
+        label:'Cobros esperados',
+        data: weeks.map(w=>byWeek[w].monto),
+        backgroundColor: C_EST+'99', borderColor: C_EST, borderWidth:1, borderRadius:4,
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{
+          label: ctx => ` ${_dFmtPeso(ctx.parsed.y)}`,
+          afterLabel: (ctx) => ` ${byWeek[weeks[ctx.dataIndex]]?.ops||0} ops`,
+        }}
+      },
+      scales: {
+        x: { ticks:{ color:DASH_CLR.txt, font:{size:8} }, grid:{ color:DASH_CLR.grid } },
+        y: { ticks:{ color:DASH_CLR.txt, font:{size:8}, callback:v=>_dFmtM(v) }, grid:{ color:DASH_CLR.grid } }
+      }
+    }
+  });
+
+  // ── 6. SUCURSAL — Neto estimado vs Cobrado real (top 20) ────────────
+  const sucNeto = {}, sucCobM = {};
+  RESULTADO.filter(r=>!r.sky.esNeg&&!r.sky.integrado).forEach(r => {
+    const s = r.sky.suc||'?';
+    sucNeto[s] = (sucNeto[s]||0) + Math.abs(r.sky.neto||r.sky.monto);
+  });
+  cobrado.forEach(c => {
+    const s = c.fila?.sky?.suc||'?';
+    sucCobM[s] = (sucCobM[s]||0) + Math.abs(c.fila.sky.monto);
+  });
+  const sucPairs = Object.entries(sucNeto)
+    .sort((a,b)=>b[1]-a[1]).slice(0,20);
+
+  _dashCharts.finSucNeto = new Chart(document.getElementById('ch-fin-suc-neto'), {
+    type: 'bar',
+    data: {
+      labels: sucPairs.map(p=>p[0]),
+      datasets: [
+        { label:'Neto a cobrar', data: sucPairs.map(p=>p[1]),
+          backgroundColor: C_EST+'66', borderColor:C_EST, borderWidth:1, borderRadius:3 },
+        { label:'Cobrado real',  data: sucPairs.map(p=>sucCobM[p[0]]||0),
+          backgroundColor: C_COB+'99', borderColor:C_COB, borderWidth:1, borderRadius:3 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+      scales: {
+        x: { ticks:{ color:DASH_CLR.txt, font:{size:8}, maxRotation:45 }, grid:{ color:DASH_CLR.grid } },
+        y: { ticks:{ color:DASH_CLR.txt, font:{size:8}, callback:v=>_dFmtM(v) }, grid:{ color:DASH_CLR.grid } }
+      }
+    }
+  });
+
+  // ── 7. CUOTAS — Distribución cobrado/pendiente por cantidad de cuotas
+  const cuotasMap = {};
+  opsFP.forEach(r => {
+    const c = r.sky.cuotas||1;
+    const key = c === 1 ? '1 cuota (débito/contado)' : `${c} cuotas`;
+    if (!cuotasMap[key]) cuotasMap[key] = { cob:0, pen:0 };
+    const entry = cobIdx[r.sky.idx];
+    if (entry?.estado === 'COBRADO') cuotasMap[key].cob += Math.abs(r.sky.monto);
+    else                              cuotasMap[key].pen += Math.abs(r.sky.monto);
+  });
+  const cuotasKeys = Object.keys(cuotasMap).sort((a,b)=>{
+    const na = parseInt(a)||0, nb=parseInt(b)||0;
+    return na-nb;
+  });
+
+  _dashCharts.finCuotas = new Chart(document.getElementById('ch-fin-cuotas'), {
+    type: 'bar',
+    data: {
+      labels: cuotasKeys,
+      datasets: [
+        { label:'Cobrado', data: cuotasKeys.map(k=>cuotasMap[k].cob),
+          backgroundColor: C_COB+'99', borderRadius:4, borderWidth:0 },
+        { label:'Pendiente', data: cuotasKeys.map(k=>cuotasMap[k].pen),
+          backgroundColor: C_PEN+'99', borderRadius:4, borderWidth:0 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+      scales: {
+        x: { stacked:true, ticks:{ color:DASH_CLR.txt, font:{size:8} }, grid:{ color:DASH_CLR.grid } },
+        y: { stacked:true, ticks:{ color:DASH_CLR.txt, font:{size:8}, callback:v=>_dFmtM(v) }, grid:{ color:DASH_CLR.grid } }
+      }
+    }
+  });
+
+  // ── 8. COBERTURA MENSUAL — % cobrado vs estimado ────────────────────
+  const cobMeses = meses.filter(m => byMonEst[m]);
+  const pctByMes = cobMeses.map(m => {
+    const est = byMonEst[m]||0;
+    const cob = byMonCob[m]||0;
+    return est ? parseFloat((cob/est*100).toFixed(1)) : 0;
+  });
+
+  _dashCharts.finCobertura = new Chart(document.getElementById('ch-fin-cobertura'), {
+    type: 'bar',
+    data: {
+      labels: cobMeses,
+      datasets: [{
+        label:'% Cobrado vs Estimado',
+        data: pctByMes,
+        backgroundColor: pctByMes.map(p => p>=90?C_COB+'cc':p>=60?C_VEN+'cc':C_PEN+'cc'),
+        borderRadius:4, borderWidth:0,
+      }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{
+        legend:{ display:false },
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.parsed.y}% cobrado` } },
+        annotation: { annotations:{
+          line100:{ type:'line', yMin:100, yMax:100, borderColor:C_COB+'99', borderWidth:1, borderDash:[4,4] }
+        }}
+      },
+      scales: {
+        x: { ticks:{ color:DASH_CLR.txt, font:{size:8} }, grid:{ color:DASH_CLR.grid } },
+        y: { ticks:{ color:DASH_CLR.txt, font:{size:8}, callback:v=>v+'%' }, grid:{ color:DASH_CLR.grid },
+             max: Math.max(100, Math.max(...pctByMes, 0)+10) }
+      }
+    }
+  });
 }

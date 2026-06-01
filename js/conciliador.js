@@ -135,6 +135,7 @@ function parseSkylab(wb) {
       plan:     r['Plan'],
       cuotas,
       fecha:    normFecha(r['Fec.de Vta.']),
+      fecPago:  normFecha(r['Fec. de Pago'] || r['Fec.de Pago'] || r['Fecha de Pago'] || r['Fec de Pago'] || ''),
       lote:     norm(r['Lote']),
       cupon:    norm(r['Cupon']),
       nroCom:   String(r['Nro.Comercio']??'').replace('.0','').trim().replace(/^0+/,'') || '0',

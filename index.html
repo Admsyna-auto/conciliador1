@@ -960,6 +960,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
           <div style="display:flex;gap:4px;align-items:center">
             <button class="dash-itab active" onclick="showDashTab('tx',this)">📊 Transacciones</button>
             <button class="dash-itab" onclick="showDashTab('pag',this)">💳 Pagos</button>
+            <button class="dash-itab" onclick="showDashTab('fin',this)">📈 Financiero</button>
           </div>
           <div style="display:flex;align-items:center;gap:12px">
             <div style="font-size:10px;color:var(--m2)">
@@ -1152,6 +1153,91 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 
           </div><!-- .dash-grid pagos -->
         </div><!-- #dash-tab-pag -->
+
+        <!-- ── TAB: FINANCIERO ───────────────────────── -->
+        <div id="dash-tab-fin" style="display:none">
+
+          <!-- KPI cards financieros -->
+          <div class="dash-kpis" style="grid-template-columns:repeat(6,1fr)">
+            <div class="kpi-card kpi-hi">
+              <div class="kpi-lbl">Total estimado</div>
+              <div class="kpi-val cyn" id="fkpi-total-est">—</div>
+              <div class="kpi-sub">según Fec. de Pago SKY</div>
+            </div>
+            <div class="kpi-card kpi-ok">
+              <div class="kpi-lbl">Cobrado real</div>
+              <div class="kpi-val" style="color:var(--grn)" id="fkpi-cobrado">—</div>
+              <div class="kpi-sub" id="fkpi-cobertura">—</div>
+            </div>
+            <div class="kpi-card kpi-sm">
+              <div class="kpi-lbl">Pendiente vencido</div>
+              <div class="kpi-val" style="color:var(--red)" id="fkpi-vencido">—</div>
+              <div class="kpi-sub" id="fkpi-venc-sub">—</div>
+            </div>
+            <div class="kpi-card" style="border-color:rgba(79,142,247,.25)">
+              <div class="kpi-lbl">Pendiente futuro</div>
+              <div class="kpi-val cyn" id="fkpi-futuro">—</div>
+              <div class="kpi-sub" id="fkpi-fut-sub">—</div>
+            </div>
+            <div class="kpi-card" style="border-color:rgba(251,191,36,.25)">
+              <div class="kpi-lbl">Brecha promedio</div>
+              <div class="kpi-val" style="color:var(--yel)" id="fkpi-brecha">—</div>
+              <div class="kpi-sub">días estimado → cobrado</div>
+            </div>
+            <div class="kpi-card kpi-ok">
+              <div class="kpi-lbl">% Cobertura</div>
+              <div class="kpi-val" style="color:var(--grn)" id="fkpi-cobertura-pct">—</div>
+              <div class="kpi-sub">cobrado / estimado</div>
+            </div>
+          </div>
+
+          <!-- Charts grid financiero -->
+          <div class="dash-grid">
+
+            <!-- Fila 1: Flujo mensual + Acumulado -->
+            <div class="dash-card">
+              <div class="dash-card-title">Flujo mensual <span>— Estimado vs Cobrado real ($)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-fin-flujo"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Acumulado estimado vs cobrado</div>
+              <div class="dash-cw h220"><canvas id="ch-fin-acum"></canvas></div>
+            </div>
+
+            <!-- Fila 2: Aging de vencidos + Brecha por tarjeta -->
+            <div class="dash-card">
+              <div class="dash-card-title">Aging de pendientes vencidos <span>(ops + monto por tramo)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-fin-aging"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Brecha de cobro por tarjeta <span>(días promedio estimado → real)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-fin-brecha"></canvas></div>
+            </div>
+
+            <!-- Fila 3: Proyección semanal (ancho completo) -->
+            <div class="dash-card dash-card-full">
+              <div class="dash-card-title">Proyección de cobros pendientes <span>(próximas semanas, por fecha estimada de pago)</span></div>
+              <div class="dash-cw h180"><canvas id="ch-fin-proyeccion"></canvas></div>
+            </div>
+
+            <!-- Fila 4: Neto por sucursal + Cuotas -->
+            <div class="dash-card">
+              <div class="dash-card-title">Neto a cobrar vs Cobrado real <span>(top 20 sucursales)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-fin-suc-neto"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Cobrado vs Pendiente <span>por cantidad de cuotas</span></div>
+              <div class="dash-cw h220"><canvas id="ch-fin-cuotas"></canvas></div>
+            </div>
+
+            <!-- Fila 5: % cobertura mensual (ancho completo) -->
+            <div class="dash-card dash-card-full">
+              <div class="dash-card-title">Cobertura mensual <span>— % cobrado vs estimado por mes</span></div>
+              <div class="dash-cw h180"><canvas id="ch-fin-cobertura"></canvas></div>
+            </div>
+
+          </div><!-- .dash-grid financiero -->
+        </div><!-- #dash-tab-fin -->
 
       </div><!-- .dash-scroll -->
     </div><!-- #dash-content -->
