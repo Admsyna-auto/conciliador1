@@ -105,6 +105,13 @@ function renderDashboard() {
   if (typeof Chart === 'undefined') { _show(elOffline); return; }
   if (!RESULTADO.length)             { _show(elEmpty);   return; }
 
+  // Auto-cruzar cobros si hay liquidaciones cargadas pero COBROS_RESULT aún está vacío
+  if (typeof cruzarCobros === 'function' &&
+      typeof _LIQ_NORM !== 'undefined' && _LIQ_NORM.length > 0 &&
+      (typeof COBROS_RESULT === 'undefined' || COBROS_RESULT.length === 0)) {
+    cruzarCobros();
+  }
+
   _show(elContent);
   _dDestroyAll();
 
