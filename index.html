@@ -437,6 +437,24 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 }
 .tm-count{font-size:9px;color:var(--m2)}
 
+/* ══ CORRECCIONES / URGENTE / REFACTURADO ════════════ */
+.cor-hdr-bar{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  padding:8px 18px;background:var(--s1);border-bottom:1px solid var(--b1);
+  flex-shrink:0;border-left:3px solid var(--acc);
+}
+.cor-hdr-title{font-family:var(--head);font-size:12px;font-weight:700;color:var(--txt)}
+.cor-stats{font-size:9px;color:var(--m1)}
+.btn-reprocesar{
+  margin-left:auto;padding:5px 13px;background:var(--s3);
+  border:1px solid var(--b2);border-radius:var(--r4);
+  color:var(--m1);font-family:var(--mono);font-size:8px;
+  font-weight:600;cursor:pointer;transition:all .15s;
+}
+.btn-reprocesar:not(:disabled):hover{border-color:var(--cyn);color:var(--cyn)}
+.btn-reprocesar:disabled{opacity:.35;cursor:not-allowed}
+.cor-table-wrap{flex:1;overflow:auto;min-height:0}
+
 /* ══ DIFERENCIAS ═════════════════════════════════════ */
 .dif-layout{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 .dif-kpis{
@@ -871,7 +889,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
     <div class="tab-body" id="t-dev"><div class="tbl-wrap"><table id="tbl-dev"><thead></thead><tbody></tbody></table></div></div>
 
     <!-- CORRECCIONES MANUALES -->
-    <div class="tab-body" id="t-cor">
+    <div class="tab-body" id="t-cor" style="flex-direction:column;flex:1;min-height:0">
       <div class="cor-hdr-bar">
         <span class="cor-hdr-title">Correcciones manuales</span>
         <span class="cor-stats" id="cor-stats"></span>
