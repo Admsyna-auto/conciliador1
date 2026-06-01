@@ -1300,13 +1300,69 @@ function reprocesarCorrecciones() {
   return {ok, fail};
 }
 
+function limpiarFiltrosCor() {
+  ['cor-flt-suc','cor-flt-tar','cor-flt-proc','cor-flt-estado'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const s = document.getElementById('cor-flt-search'); if (s) s.value = '';
+  renderTablaCorrecciones();
+}
+
 function renderTablaCorrecciones() {
-  const entries=Object.entries(CORREGIDAS);
+  // ── Construir lista completa de filas para los filtros ──────────
+  const allEntries = Object.entries(CORREGIDAS).map(([key, cor]) => {
+    const idx = RESULTADO.findIndex(r => _skyKey(r.sky) === key);
+    return { key, cor, idx, fila: idx >= 0 ? RESULTADO[idx] : null };
+  }).filter(e => e.fila);
+
+  // ── Poblar selects de filtro (suc y tarjeta) ────────────────────
+  const sucSel   = document.getElementById('cor-flt-suc');
+  const tarSel   = document.getElementById('cor-flt-tar');
+  const curSuc   = sucSel?.value || '';
+  const curTar   = tarSel?.value || '';
+  if (sucSel) {
+    const sucs = [...new Set(allEntries.map(e => e.fila.sky.suc))].sort((a,b)=>+a-+b);
+    sucSel.innerHTML = `<option value="">Todas las suc.</option>` +
+      sucs.map(s=>`<option value="${s}" ${s===curSuc?'selected':''}>${s}</option>`).join('');
+  }
+  if (tarSel) {
+    const tars = [...new Set(allEntries.map(e => e.fila.sky.tarjeta).filter(Boolean))].sort();
+    tarSel.innerHTML = `<option value="">Todas las tarjetas</option>` +
+      tars.map(t=>`<option value="${t}" ${t===curTar?'selected':''}>${t}</option>`).join('');
+  }
+
+  // ── Leer filtros activos ────────────────────────────────────────
+  const fSuc    = document.getElementById('cor-flt-suc')?.value    || '';
+  const fTar    = document.getElementById('cor-flt-tar')?.value    || '';
+  const fProc   = document.getElementById('cor-flt-proc')?.value   || '';
+  const fEstado = document.getElementById('cor-flt-estado')?.value || '';
+  const fSearch = (document.getElementById('cor-flt-search')?.value || '').toLowerCase().trim();
+
+  // ── Aplicar filtros ─────────────────────────────────────────────
+  const filtered = allEntries.filter(({ fila, cor }) => {
+    const s = fila.sky;
+    if (fSuc    && s.suc !== fSuc)              return false;
+    if (fTar    && s.tarjeta !== fTar)          return false;
+    if (fProc   && cor.proc !== fProc)          return false;
+    if (fEstado && cor.resultado !== fEstado)   return false;
+    if (fSearch) {
+      const hay = [s.vendedor||'', s.cupon, String(s.asiento||''), cor.cupon||'', s.tarjeta]
+        .join(' ').toLowerCase();
+      if (!hay.includes(fSearch)) return false;
+    }
+    return true;
+  });
+
+  const entries = filtered.map(e => [e.key, e.cor]);   // formato [key, cor][]
+
   const tbl=document.getElementById('tbl-cor');
   const cnt=document.getElementById('cnt-cor');
   const stats=document.getElementById('cor-stats');
   const btnR=document.getElementById('btn-reproc');
-  if (cnt) cnt.textContent=entries.length.toLocaleString();
+  const fStats = document.getElementById('cor-filter-stats');
+  if (cnt) cnt.textContent=allEntries.length.toLocaleString();
+  if (fStats) fStats.textContent = filtered.length < allEntries.length
+    ? `Mostrando ${filtered.length} de ${allEntries.length}` : '';
   if (btnR) btnR.disabled=entries.length===0||(!_FIS_NORM.length&&!_GP_NORM.length);
   if (!tbl) return;
   const cruzados=entries.filter(([,c])=>c.resultado==='CRUZADO').length;
@@ -1669,10 +1725,11 @@ function renderTablaRefacturado() {
 
 function exportarUrgente() {
   const filas = RESULTADO.filter(r => r.estado === 'REVISION URGENTE');
-  const HDR = ['Fecha','Sucursal','Vendedor','Tarjeta','Plan','Monto','Cupón SKY','Lote','Nro.Comercio','Proc.Esperada','Detalle'];
+  const HDR = ['Nro.Asiento','Fecha','Sucursal','Vendedor','Tarjeta','Plan','Monto',
+               'Cupón SKY','Lote','Nro.Comercio','Proc.Esperada','Detalle'];
   const data = filas.map(r => {
     const s = r.sky, cor = CORREGIDAS[_skyKey(s)] || {};
-    return [s.fecha, s.suc, s.vendedor||'', s.tarjeta, s.plan,
+    return [s.asiento||'', s.fecha, s.suc, s.vendedor||'', s.tarjeta, s.plan,
       Math.abs(s.monto), s.cupon, s.lote, s.nroCom||'',
       r.procEsperada||'', cor.cupon?`Cupón probado: ${cor.cupon}`:r.matchParcial||''];
   });
@@ -1681,14 +1738,73 @@ function exportarUrgente() {
 
 function exportarRefacturado() {
   const filas = RESULTADO.filter(r => r.estado === 'REFACTURADO');
-  const HDR = ['Fecha','Sucursal','Vendedor','Tarjeta','Plan','Monto','Cupón SKY','Lote','Nro.Comercio','Proc.Esperada'];
+  const HDR = ['Nro.Asiento','Fecha','Sucursal','Vendedor','Tarjeta','Plan','Monto',
+               'Cupón SKY','Lote','Nro.Comercio','Proc.Esperada'];
   const data = filas.map(r => {
     const s = r.sky;
-    return [s.fecha, s.suc, s.vendedor||'', s.tarjeta, s.plan,
+    return [s.asiento||'', s.fecha, s.suc, s.vendedor||'', s.tarjeta, s.plan,
       Math.abs(s.monto), s.cupon, s.lote, s.nroCom||'', r.procEsperada||''];
   });
   _exportXlsx([HDR,...data], 'Refacturado', `Refacturado_${hoy()}.xlsx`);
 }
+
+// ── Marcar fila por estado SIN re-renderizar (para imports en batch) ──
+function _marcarRevisionSilent(idx, estado) {
+  idx = parseInt(idx);
+  const fila = RESULTADO[idx]; if (!fila) return false;
+  fila.estado         = estado;
+  fila.metodo         = estado;
+  fila.procEncontrada = estado === 'REFACTURADO' ? 'N/A' : fila.procEsperada;
+  fila.matchParcial   = estado === 'REFACTURADO'
+    ? 'Importado como refacturado'
+    : estado === 'ANULACION SIN COBRO'
+    ? 'Importado como anulación sin cobro'
+    : 'Importado como revisión urgente';
+  if (estado === 'ANULACION SIN COBRO') fila.esAnulSinCobro = 'SI';
+  const key = _skyKey(fila.sky);
+  const cor = CORREGIDAS[key] || {};
+  CORREGIDAS[key] = { ...cor, cupon: cor.cupon||'—', proc: cor.proc||fila.procEsperada,
+    resultado: estado, metodo: estado };
+  return true;
+}
+
+// ── Import genérico por estado (lee Nro.Asiento del Excel exportado) ─
+function _importarPorEstado(input, estado) {
+  const file = input.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const wb   = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
+      let ok = 0, nf = 0;
+      rows.forEach(row => {
+        const asiento = String(row['Nro.Asiento'] ?? row['Nro. Asiento'] ?? row['Asiento'] ?? '').trim();
+        if (!asiento || asiento === 'null') return;
+        const key = `A:${asiento}`;
+        const idx = RESULTADO.findIndex(r => _skyKey(r.sky) === key);
+        if (idx < 0) { nf++; return; }
+        if (_marcarRevisionSilent(idx, estado)) ok++;
+      });
+      // Render único al final
+      renderTablas(); updateCounts(); renderFilas();
+      renderTablaCorrecciones(); renderTablaUrgente(); renderTablaRefacturado();
+      scheduleAutoSave();
+      const label = estado === 'REFACTURADO' ? 'refacturadas' : 'marcadas como urgente';
+      typeof _showToast === 'function'
+        ? _showToast(`✓ ${ok} ${label}${nf ? ` · ${nf} no encontradas` : ''}`)
+        : alert(`✓ ${ok} ${label}` + (nf ? `\n⚠ ${nf} no encontradas` : ''));
+    } catch(err) {
+      alert('Error al leer el archivo: ' + err.message);
+      console.error(err);
+    }
+  };
+  r.readAsArrayBuffer(file);
+  input.value = '';
+}
+
+function importarUrgente(input)     { _importarPorEstado(input, 'REVISION URGENTE'); }
+function importarRefacturado(input) { _importarPorEstado(input, 'REFACTURADO'); }
 
 // ══════════════════════════════════════════════════════════════════
 // FISERV Y GETPOS SIN CRUCE

@@ -904,6 +904,29 @@ tr.row-int td{background:rgba(52,211,153,.02)}
           <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarCorrecciones(this)">
         </label>
       </div>
+      <!-- Barra de filtros correcciones -->
+      <div class="filter-bar" style="flex-shrink:0">
+        <span class="filter-lbl">Filtrar</span>
+        <select class="filter-sel" id="cor-flt-suc"    onchange="renderTablaCorrecciones()"><option value="">Todas las suc.</option></select>
+        <select class="filter-sel" id="cor-flt-tar"    onchange="renderTablaCorrecciones()"><option value="">Todas las tarjetas</option></select>
+        <select class="filter-sel" id="cor-flt-proc"   onchange="renderTablaCorrecciones()">
+          <option value="">Ambas proc.</option>
+          <option value="FISERV">FISERV</option>
+          <option value="GETPOS">GETPOS</option>
+        </select>
+        <select class="filter-sel" id="cor-flt-estado" onchange="renderTablaCorrecciones()">
+          <option value="">Todos los estados</option>
+          <option value="CRUZADO">✓ Cruzado</option>
+          <option value="NO CRUZADO">✗ Sin match</option>
+          <option value="PENDIENTE">⟳ Pendiente</option>
+          <option value="REVISION URGENTE">⚠ Rev. Urgente</option>
+          <option value="ANULACION SIN COBRO">✗ Anu. S/Cobro</option>
+          <option value="REFACTURADO">↺ Refacturado</option>
+        </select>
+        <input class="filter-inp" id="cor-flt-search" placeholder="Vendedor, cupón, asiento..." oninput="renderTablaCorrecciones()">
+        <button class="btn-clear" onclick="limpiarFiltrosCor()">✕ Limpiar</button>
+        <span class="filter-stats" id="cor-filter-stats" style="margin-left:auto"></span>
+      </div>
       <div class="cor-table-wrap">
         <table id="tbl-cor"><thead></thead><tbody></tbody></table>
       </div>
@@ -914,8 +937,14 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       <div class="cor-hdr-bar" style="border-left:3px solid var(--org)">
         <span class="cor-hdr-title" style="color:var(--org)">⚠ Revisión Urgente</span>
         <span class="cor-stats" id="urg-stats"></span>
-        <button class="dl-btn" style="background:var(--org);margin-left:auto"
-          onclick="exportarUrgente()">⬇ Exportar</button>
+        <div style="margin-left:auto;display:flex;gap:4px">
+          <button class="dl-btn" style="background:var(--org)" onclick="exportarUrgente()">⬇ Exportar</button>
+          <label class="dl-btn" style="background:#1e3a5f;color:#93c5fd;border:1px solid #2d5a8e;cursor:pointer"
+            title="Importar listado exportado previamente para re-marcar como Rev. Urgente">
+            ⬆ Importar
+            <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarUrgente(this)">
+          </label>
+        </div>
       </div>
       <div class="tbl-wrap">
         <table id="tbl-urg"><thead></thead><tbody></tbody></table>
@@ -927,8 +956,14 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       <div class="cor-hdr-bar" style="border-left:3px solid var(--vio)">
         <span class="cor-hdr-title" style="color:var(--vio)">↺ Refacturado</span>
         <span class="cor-stats" id="ref-stats"></span>
-        <button class="dl-btn" style="background:#7c3aed;margin-left:auto"
-          onclick="exportarRefacturado()">⬇ Exportar</button>
+        <div style="margin-left:auto;display:flex;gap:4px">
+          <button class="dl-btn" style="background:#7c3aed" onclick="exportarRefacturado()">⬇ Exportar</button>
+          <label class="dl-btn" style="background:#1e3a5f;color:#93c5fd;border:1px solid #2d5a8e;cursor:pointer"
+            title="Importar listado exportado previamente para re-marcar como Refacturado">
+            ⬆ Importar
+            <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarRefacturado(this)">
+          </label>
+        </div>
       </div>
       <div class="tbl-wrap">
         <table id="tbl-ref"><thead></thead><tbody></tbody></table>
