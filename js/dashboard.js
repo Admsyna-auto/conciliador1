@@ -82,7 +82,7 @@ function _dLegend(position='top') {
 function showDashTab(tab, btn) {
   document.querySelectorAll('.dash-itab').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  ['tx','pag','fin'].forEach(t => {
+  ['tx','pag','fin','tarj'].forEach(t => {
     const el = document.getElementById(`dash-tab-${t}`);
     if (el) el.style.display = t === tab ? '' : 'none';
   });
@@ -369,9 +369,10 @@ function renderDashboard() {
         parseFloat(pctMonto)>=90?DASH_CLR.ok:parseFloat(pctMonto)>=70?DASH_CLR.malFact:DASH_CLR.sm);
   }
 
-  // Renderizar tab pagos y financiero
+  // Renderizar tabs pagos, financiero y tarjetas
   _renderDashPagos();
   _renderDashFin();
+  _renderDashTarj();
 
   // ── 9. BAR — Monto sin match por sucursal (top 15) ─────────────────
   const sucSMmonto = {};
@@ -1091,4 +1092,309 @@ function _renderDashFin() {
       }
     }
   });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// RENDER TARJETAS — Análisis completo por tipo de tarjeta (Skylab)
+// ════════════════════════════════════════════════════════════════════
+function _renderDashTarj() {
+  const hasRes = typeof RESULTADO !== 'undefined' && RESULTADO.length > 0;
+  const hasCob = typeof COBROS_RESULT !== 'undefined' && COBROS_RESULT.length > 0;
+
+  const TARJ_IDS = ['ch-tarj-donut','ch-tarj-monto','ch-tarj-estado',
+                    'ch-tarj-tasa','ch-tarj-evol','ch-tarj-promedio',
+                    'ch-tarj-cuotas','ch-tarj-cobros'];
+
+  function _tarjNoData(show) {
+    TARJ_IDS.forEach(id => {
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      canvas.style.display = show ? 'none' : '';
+      const wrap = canvas.parentElement;
+      if (!wrap) return;
+      let ov = wrap.querySelector('.tarj-nodata');
+      if (show) {
+        if (!ov) {
+          ov = document.createElement('div');
+          ov.className = 'tarj-nodata';
+          ov.style.cssText = 'padding:30px;text-align:center;color:var(--m2);font-size:10px';
+          ov.textContent = 'Ejecutá el cruce para ver el análisis por tarjeta';
+          wrap.appendChild(ov);
+        }
+        ov.style.display = '';
+      } else if (ov) {
+        ov.style.display = 'none';
+      }
+    });
+  }
+
+  if (!hasRes) { _tarjNoData(true); return; }
+  _tarjNoData(false);
+
+  // ── Dataset base: ops activas (no negativas, no integradas) ─────────
+  const ops = RESULTADO.filter(r => !r.sky.esNeg && !r.sky.integrado);
+
+  // ── Agrupar por tarjeta ─────────────────────────────────────────────
+  const tarjMap = {};  // tarjeta → { ops, monto, neto, ok, sm, mal, com, otros, cuotas:{} }
+  const isOK = r => r.estado?.startsWith('OK') || r.estado?.startsWith('CORREGIDO');
+  ops.forEach(r => {
+    const t = (r.sky.tarjeta || 'Sin tarjeta').trim() || 'Sin tarjeta';
+    if (!tarjMap[t]) tarjMap[t] = { ops:0, monto:0, neto:0, ok:0, sm:0, mal:0, com:0, otros:0, cuotasMap:{} };
+    const e = tarjMap[t];
+    const m = Math.abs(r.sky.monto);
+    e.ops++;
+    e.monto += m;
+    e.neto  += Math.abs(r.sky.neto || m);
+    if      (isOK(r))                        e.ok++;
+    else if (r.estado === 'SIN MATCH')        e.sm++;
+    else if (r.estado?.startsWith('MAL'))     e.mal++;
+    else if (r.estado === 'COM. ERRADO')      e.com++;
+    else                                      e.otros++;
+    const c = String(r.sky.cuotas||1);
+    e.cuotasMap[c] = (e.cuotasMap[c]||0) + m;
+  });
+
+  // Ordenar tarjetas por volumen de ops (desc)
+  const tarjetas = Object.keys(tarjMap).sort((a,b) => tarjMap[b].ops - tarjMap[a].ops);
+  const topT     = tarjetas.slice(0, 12);   // máx 12 tarjetas en gráficos
+  const pal      = TARJ_PALETTE;
+
+  // ── KPIs tarjetas ──────────────────────────────────────────────────
+  const _tk = (id, v) => { const e = document.getElementById(id); if(e) e.textContent = v; };
+  const totalOps  = ops.length;
+  const totalMon  = ops.reduce((s,r) => s+Math.abs(r.sky.monto),0);
+  const topTarj   = tarjetas[0] || '—';
+  const topTMon   = tarjetas.sort((a,b)=>tarjMap[b].monto-tarjMap[a].monto)[0] || '—';
+  // restaurar orden por ops para gráficos
+  tarjetas.sort((a,b) => tarjMap[b].ops - tarjMap[a].ops);
+  const bestTasa  = tarjetas.slice(0,8).sort((a,b)=>{
+    const ra = tarjMap[a].ok/tarjMap[a].ops, rb = tarjMap[b].ok/tarjMap[b].ops;
+    return rb-ra;
+  })[0] || '—';
+
+  _tk('tkpi-tarjetas',  Object.keys(tarjMap).length);
+  _tk('tkpi-top-ops',   topTarj);
+  _tk('tkpi-top-monto', topTMon);
+  _tk('tkpi-top-tasa',  bestTasa !== '—' ? `${bestTasa} (${(tarjMap[bestTasa].ok/tarjMap[bestTasa].ops*100).toFixed(1)}%)` : '—');
+  _tk('tkpi-total-ops', totalOps.toLocaleString('es-AR'));
+  _tk('tkpi-total-mon', _dFmtM(totalMon));
+
+  // ── 1. DONUT — Distribución de ops por tarjeta ──────────────────────
+  _dashCharts.tarjDonut = new Chart(document.getElementById('ch-tarj-donut'), {
+    type: 'doughnut',
+    data: {
+      labels: topT,
+      datasets: [{ data: topT.map(t=>tarjMap[t].ops),
+        backgroundColor: topT.map((_,i)=>pal[i%pal.length]+'dd'),
+        borderWidth:1, borderColor:'#111827', hoverOffset:8 }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, cutout:'55%',
+      plugins: {
+        legend: _dLegend('right'),
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${ctx.parsed.toLocaleString('es-AR')} ops (${totalOps?(ctx.parsed/totalOps*100).toFixed(1):0}%)` } }
+      }
+    }
+  });
+
+  // ── 2. BAR — Monto total por tarjeta ────────────────────────────────
+  const tarjByMonto = [...tarjetas].sort((a,b)=>tarjMap[b].monto-tarjMap[a].monto).slice(0,12);
+  _dashCharts.tarjMonto = new Chart(document.getElementById('ch-tarj-monto'), {
+    type: 'bar',
+    data: {
+      labels: tarjByMonto,
+      datasets: [{ label:'Monto total ($)',
+        data: tarjByMonto.map(t=>tarjMap[t].monto),
+        backgroundColor: tarjByMonto.map((_,i)=>pal[i%pal.length]+'cc'),
+        borderRadius:4, borderWidth:0 }]
+    },
+    options: {
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false },
+        tooltip:{ callbacks:{ label: ctx => ` ${_dFmtPeso(ctx.parsed.x)}` } } },
+      scales: {
+        x: { ticks:{ color:DASH_CLR.txt, font:{size:8}, callback:v=>_dFmtM(v) }, grid:{ color:DASH_CLR.grid } },
+        y: { ticks:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'} }, grid:{ display:false } }
+      }
+    }
+  });
+
+  // ── 3. STACKED BAR — Estado de conciliación por tarjeta ─────────────
+  _dashCharts.tarjEstado = new Chart(document.getElementById('ch-tarj-estado'), {
+    type: 'bar',
+    data: {
+      labels: topT,
+      datasets: [
+        { label:'OK',          data: topT.map(t=>tarjMap[t].ok),    backgroundColor:'#34d399cc', borderWidth:0 },
+        { label:'Sin Match',   data: topT.map(t=>tarjMap[t].sm),    backgroundColor:'#f87171cc', borderWidth:0 },
+        { label:'Mal Fact.',   data: topT.map(t=>tarjMap[t].mal),   backgroundColor:'#fbbf24cc', borderWidth:0 },
+        { label:'Com. Errado', data: topT.map(t=>tarjMap[t].com),   backgroundColor:'#fb923ccc', borderWidth:0 },
+        { label:'Otros',       data: topT.map(t=>tarjMap[t].otros), backgroundColor:'#94a3b8cc', borderWidth:0 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+      scales: {
+        x: { stacked:true, ticks:{ color:DASH_CLR.txt, font:{size:8}, maxRotation:30 }, grid:{ color:DASH_CLR.grid } },
+        y: { stacked:true, ticks:{ color:DASH_CLR.txt, font:{size:8} }, grid:{ color:DASH_CLR.grid } }
+      }
+    }
+  });
+
+  // ── 4. H-BAR — Tasa de conciliación % por tarjeta ──────────────────
+  const tarjTasa = topT.map(t => ({
+    t, pct: parseFloat((tarjMap[t].ok / tarjMap[t].ops * 100).toFixed(1))
+  })).sort((a,b)=>b.pct-a.pct);
+
+  _dashCharts.tarjTasa = new Chart(document.getElementById('ch-tarj-tasa'), {
+    type: 'bar',
+    data: {
+      labels: tarjTasa.map(x=>x.t),
+      datasets: [{ label:'% OK conciliado',
+        data: tarjTasa.map(x=>x.pct),
+        backgroundColor: tarjTasa.map(x => x.pct>=90?'#34d399cc':x.pct>=70?'#fbbf24cc':'#f87171cc'),
+        borderRadius:4, borderWidth:0 }]
+    },
+    options: {
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false },
+        tooltip:{ callbacks:{ label: ctx=>' '+ctx.parsed.x+'% OK' } } },
+      scales: {
+        x: { max:100, ticks:{ color:DASH_CLR.txt, font:{size:8}, callback:v=>v+'%' }, grid:{ color:DASH_CLR.grid } },
+        y: { ticks:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'} }, grid:{ display:false } }
+      }
+    }
+  });
+
+  // ── 5. LINE — Evolución mensual de ops por tarjeta (top 5) ──────────
+  const toMonth = d => d ? String(d).slice(0,7) : null;
+  const top5T   = topT.slice(0,5);
+  const allMonths = [...new Set(ops.map(r=>toMonth(r.sky.fecha)).filter(Boolean))].sort();
+  const evolData = {};
+  top5T.forEach(t => {
+    evolData[t] = {};
+    allMonths.forEach(m => evolData[t][m] = 0);
+  });
+  ops.forEach(r => {
+    const t = (r.sky.tarjeta||'Sin tarjeta').trim();
+    const m = toMonth(r.sky.fecha);
+    if (top5T.includes(t) && m) evolData[t][m]++;
+  });
+
+  _dashCharts.tarjEvol = new Chart(document.getElementById('ch-tarj-evol'), {
+    type: 'line',
+    data: {
+      labels: allMonths,
+      datasets: top5T.map((t,i) => ({
+        label: t,
+        data: allMonths.map(m=>evolData[t][m]||0),
+        borderColor: pal[i%pal.length],
+        backgroundColor: 'transparent',
+        borderWidth:2, tension:0.3, pointRadius:2
+      }))
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+      scales: {
+        x: { ticks:{ color:DASH_CLR.txt, font:{size:8} }, grid:{ color:DASH_CLR.grid } },
+        y: { ticks:{ color:DASH_CLR.txt, font:{size:8} }, grid:{ color:DASH_CLR.grid } }
+      }
+    }
+  });
+
+  // ── 6. BAR — Ticket promedio por tarjeta ────────────────────────────
+  const tarjProm = topT.map(t => ({
+    t, avg: parseFloat((tarjMap[t].monto / tarjMap[t].ops).toFixed(2))
+  })).sort((a,b)=>b.avg-a.avg);
+
+  _dashCharts.tarjPromedio = new Chart(document.getElementById('ch-tarj-promedio'), {
+    type: 'bar',
+    data: {
+      labels: tarjProm.map(x=>x.t),
+      datasets: [{ label:'Ticket promedio ($)',
+        data: tarjProm.map(x=>x.avg),
+        backgroundColor: tarjProm.map((_,i)=>pal[i%pal.length]+'bb'),
+        borderRadius:4, borderWidth:0 }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false },
+        tooltip:{ callbacks:{ label: ctx=>` ${_dFmtPeso(ctx.parsed.y)}` } } },
+      scales: {
+        x: { ticks:{ color:DASH_CLR.txt, font:{size:8}, maxRotation:30 }, grid:{ color:DASH_CLR.grid } },
+        y: { ticks:{ color:DASH_CLR.txt, font:{size:8}, callback:v=>_dFmtM(v) }, grid:{ color:DASH_CLR.grid } }
+      }
+    }
+  });
+
+  // ── 7. GROUPED BAR — Distribución de cuotas por tarjeta (top 6) ─────
+  const top6T  = topT.slice(0,6);
+  const cuotaLabels = ['1','3','6','12','18','24'];
+  const cuotaNames  = { '1':'Contado','3':'3c','6':'6c','12':'12c','18':'18c','24':'24c' };
+
+  _dashCharts.tarjCuotas = new Chart(document.getElementById('ch-tarj-cuotas'), {
+    type: 'bar',
+    data: {
+      labels: top6T,
+      datasets: cuotaLabels.map((c,i) => ({
+        label: cuotaNames[c] || `${c}c`,
+        data: top6T.map(t => tarjMap[t].cuotasMap[c]||0),
+        backgroundColor: pal[i%pal.length]+'bb',
+        borderRadius:3, borderWidth:0,
+      }))
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+      scales: {
+        x: { stacked:true, ticks:{ color:DASH_CLR.txt, font:{size:9} }, grid:{ color:DASH_CLR.grid } },
+        y: { stacked:true, ticks:{ color:DASH_CLR.txt, font:{size:8}, callback:v=>_dFmtM(v) }, grid:{ color:DASH_CLR.grid } }
+      }
+    }
+  });
+
+  // ── 8. GROUPED BAR — Cobrado vs Pendiente por tarjeta (COBROS) ──────
+  if (hasCob) {
+    const cobByTarj = {}, penByTarj = {};
+    COBROS_RESULT.forEach(c => {
+      const t = (c.fila?.sky?.tarjeta||'Sin tarjeta').trim();
+      const m = Math.abs(c.fila?.sky?.monto||0);
+      if (c.estado === 'COBRADO')   cobByTarj[t] = (cobByTarj[t]||0) + m;
+      else if (c.estado !== 'RECHAZADO') penByTarj[t] = (penByTarj[t]||0) + m;
+    });
+    const allTarjCob = [...new Set([...Object.keys(cobByTarj),...Object.keys(penByTarj)])]
+      .sort((a,b) => ((cobByTarj[b]||0)+(penByTarj[b]||0)) - ((cobByTarj[a]||0)+(penByTarj[a]||0)));
+
+    _dashCharts.tarjCobros = new Chart(document.getElementById('ch-tarj-cobros'), {
+      type: 'bar',
+      data: {
+        labels: allTarjCob,
+        datasets: [
+          { label:'Cobrado',   data: allTarjCob.map(t=>cobByTarj[t]||0), backgroundColor:'#34d399cc', borderRadius:3, borderWidth:0 },
+          { label:'Pendiente', data: allTarjCob.map(t=>penByTarj[t]||0), backgroundColor:'#f87171cc', borderRadius:3, borderWidth:0 },
+        ]
+      },
+      options: {
+        responsive:true, maintainAspectRatio:false,
+        plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+        scales: {
+          x: { ticks:{ color:DASH_CLR.txt, font:{size:8}, maxRotation:30 }, grid:{ color:DASH_CLR.grid } },
+          y: { ticks:{ color:DASH_CLR.txt, font:{size:8}, callback:v=>_dFmtM(v) }, grid:{ color:DASH_CLR.grid } }
+        }
+      }
+    });
+  } else {
+    // sin cobros — ocultar canvas
+    const el = document.getElementById('ch-tarj-cobros');
+    if (el) {
+      el.style.display = 'none';
+      const ov = document.createElement('div');
+      ov.className = 'tarj-nodata';
+      ov.style.cssText = 'padding:30px;text-align:center;color:var(--m2);font-size:10px';
+      ov.textContent = 'Cargá Liquidaciones para ver cobrado vs pendiente por tarjeta';
+      el.parentElement?.appendChild(ov);
+    }
+  }
 }

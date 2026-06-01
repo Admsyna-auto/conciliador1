@@ -961,6 +961,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
             <button class="dash-itab active" onclick="showDashTab('tx',this)">📊 Transacciones</button>
             <button class="dash-itab" onclick="showDashTab('pag',this)">💳 Pagos</button>
             <button class="dash-itab" onclick="showDashTab('fin',this)">📈 Financiero</button>
+            <button class="dash-itab" onclick="showDashTab('tarj',this)">🃏 Tarjetas</button>
           </div>
           <div style="display:flex;align-items:center;gap:12px">
             <div style="font-size:10px;color:var(--m2)">
@@ -1238,6 +1239,91 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 
           </div><!-- .dash-grid financiero -->
         </div><!-- #dash-tab-fin -->
+
+        <!-- ── TAB: TARJETAS ─────────────────────────── -->
+        <div id="dash-tab-tarj" style="display:none">
+
+          <!-- KPI cards tarjetas -->
+          <div class="dash-kpis" style="grid-template-columns:repeat(6,1fr)">
+            <div class="kpi-card kpi-hi">
+              <div class="kpi-lbl">Tipos de tarjeta</div>
+              <div class="kpi-val cyn" id="tkpi-tarjetas">—</div>
+              <div class="kpi-sub">distintas en Skylab</div>
+            </div>
+            <div class="kpi-card" style="border-color:rgba(79,142,247,.25)">
+              <div class="kpi-lbl">Mayor volumen</div>
+              <div class="kpi-val" style="color:var(--acc);font-size:14px" id="tkpi-top-ops">—</div>
+              <div class="kpi-sub">más operaciones</div>
+            </div>
+            <div class="kpi-card" style="border-color:rgba(251,191,36,.25)">
+              <div class="kpi-lbl">Mayor monto</div>
+              <div class="kpi-val" style="color:var(--yel);font-size:14px" id="tkpi-top-monto">—</div>
+              <div class="kpi-sub">mayor facturación</div>
+            </div>
+            <div class="kpi-card kpi-ok">
+              <div class="kpi-lbl">Mejor tasa</div>
+              <div class="kpi-val" style="color:var(--grn);font-size:12px" id="tkpi-top-tasa">—</div>
+              <div class="kpi-sub">mayor % conciliado</div>
+            </div>
+            <div class="kpi-card kpi-hi">
+              <div class="kpi-lbl">Total ops</div>
+              <div class="kpi-val cyn" id="tkpi-total-ops">—</div>
+              <div class="kpi-sub">operaciones activas</div>
+            </div>
+            <div class="kpi-card" style="border-color:rgba(167,139,250,.25)">
+              <div class="kpi-lbl">Total facturado</div>
+              <div class="kpi-val" style="color:var(--vio)" id="tkpi-total-mon">—</div>
+              <div class="kpi-sub">monto bruto</div>
+            </div>
+          </div>
+
+          <!-- Charts grid tarjetas -->
+          <div class="dash-grid">
+
+            <!-- Fila 1: Donut ops + Monto por tarjeta -->
+            <div class="dash-card">
+              <div class="dash-card-title">Distribución de operaciones <span>por tarjeta</span></div>
+              <div class="dash-cw h220"><canvas id="ch-tarj-donut"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Monto total facturado <span>por tarjeta ($)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-tarj-monto"></canvas></div>
+            </div>
+
+            <!-- Fila 2: Estado de conciliación + Tasa % -->
+            <div class="dash-card">
+              <div class="dash-card-title">Estado de conciliación <span>por tarjeta (apilado)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-tarj-estado"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Tasa de conciliación <span>% OK por tarjeta</span></div>
+              <div class="dash-cw h220"><canvas id="ch-tarj-tasa"></canvas></div>
+            </div>
+
+            <!-- Fila 3: Evolución mensual (ancho completo) -->
+            <div class="dash-card dash-card-full">
+              <div class="dash-card-title">Evolución mensual de operaciones <span>por tarjeta (top 5)</span></div>
+              <div class="dash-cw h180"><canvas id="ch-tarj-evol"></canvas></div>
+            </div>
+
+            <!-- Fila 4: Ticket promedio + Distribución cuotas -->
+            <div class="dash-card">
+              <div class="dash-card-title">Ticket promedio <span>por tarjeta ($)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-tarj-promedio"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Mix de cuotas <span>monto por plan de pago (top 6 tarjetas)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-tarj-cuotas"></canvas></div>
+            </div>
+
+            <!-- Fila 5: Cobrado vs Pendiente por tarjeta (ancho completo) -->
+            <div class="dash-card dash-card-full">
+              <div class="dash-card-title">Cobrado vs Pendiente <span>por tarjeta — cruce con Liquidaciones ($)</span></div>
+              <div class="dash-cw h180"><canvas id="ch-tarj-cobros"></canvas></div>
+            </div>
+
+          </div><!-- .dash-grid tarjetas -->
+        </div><!-- #dash-tab-tarj -->
 
       </div><!-- .dash-scroll -->
     </div><!-- #dash-content -->
