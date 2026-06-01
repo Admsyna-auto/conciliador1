@@ -910,6 +910,28 @@ function filtrarSinMatch() {
   return rows;
 }
 
+// Tipo de operación (Venta / Devolución / Anulación)
+function _tipoOp(r) {
+  if (r.esDevolucion)   return { label:'DEVOLUCION', color:'#38bdf8' };
+  if (r.esAnulSinCobro) return { label:'ANULACION',  color:'#fb923c' };
+  if (r.sky?.esNeg)     return { label:'NEGATIVO',   color:'#f87171' };
+  return                       { label:'VENTA',      color:'#34d399' };
+}
+
+// Resetear cualquier fila a SIN MATCH (sin importar si está en CORREGIDAS)
+function resetearFila(idx) {
+  idx = parseInt(idx);
+  const fila = RESULTADO[idx]; if (!fila) return;
+  const key = _skyKey(fila.sky);
+  if (CORREGIDAS[key]) delete CORREGIDAS[key];
+  fila.proc = null; fila.metodo = 'SIN MATCH'; fila.estado = 'SIN MATCH';
+  fila.procEncontrada = ''; fila.comOK = ''; fila.sucOK = '';
+  fila.matchParcial = ''; fila.correccionManual = null;
+  renderTablas(); updateCounts(); renderFilas();
+  renderTablaCorrecciones(); renderTablaUrgente(); renderTablaRefacturado();
+  scheduleAutoSave();
+}
+
 function renderFilas() {
   const filtrados=filtrarSinMatch();
   const total=RESULTADO.filter(r=>r.estado==='SIN MATCH').length;
@@ -931,15 +953,24 @@ function renderFilas() {
     const s=r.sky, cor=CORREGIDAS[_skyKey(s)]||{};
     const applied=!!cor.cupon;
     const procDef=s.esGETPos?'GETPOS':'FISERV';
+    const tipo=_tipoOp(r);
+    const montoColor = s.monto < 0 ? 'var(--red)' : 'var(--grn)';
+    const montoFmt   = s.monto < 0
+      ? `−${fmtARS(Math.abs(s.monto))}`
+      : fmtARS(s.monto);
     return `<div class="fix-row" id="fr-${s.idx}">
       <div><div class="fix-cell-lbl">Suc · Asiento · Cupón</div>
         <div class="fix-cell-val"><b style="color:var(--cyn)">${s.suc}</b> · ${s.asiento??'—'} · <b>${s.cupon}</b></div>
-        <div class="fix-cell-sub">${s.tarjeta}</div></div>
+        <div class="fix-cell-sub" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+          <span>${s.tarjeta}</span>
+          <span style="font-size:7px;padding:1px 5px;border-radius:3px;
+            color:${tipo.color};border:1px solid ${tipo.color}55;background:${tipo.color}18">${tipo.label}</span>
+        </div></div>
       <div><div class="fix-cell-lbl">Plan · Lote</div>
         <div class="fix-cell-val">${s.plan} · Lote ${s.lote}</div>
         <div class="fix-cell-sub">${s.vendedor??''}</div></div>
       <div><div class="fix-cell-lbl">Monto · Fecha</div>
-        <div class="fix-cell-val fix-monto">${fmtARS(Math.abs(s.monto))}</div>
+        <div class="fix-cell-val fix-monto" style="color:${montoColor}">${montoFmt}</div>
         <div class="fix-cell-sub">${s.fecha}</div></div>
       <div><input class="fix-inp" id="fi-cup-${s.idx}" placeholder="Cupón / Autorización" value="${cor.cupon||''}"></div>
       <div>
@@ -1479,7 +1510,7 @@ function renderTablaCom(filas) {
 // TABLAS REVISIÓN URGENTE Y REFACTURADO
 // ══════════════════════════════════════════════════════════════════
 const HDR_URGENTE = [
-  'Fecha','Suc','Vendedor','Tarjeta','Plan','Monto',
+  'Fecha','Suc','Vendedor','Tarjeta','Tipo','Plan','Monto',
   'Cupón SKY','Lote','Nro.Comercio','Proc. esperada','Detalle','Acciones'
 ];
 
@@ -1503,24 +1534,36 @@ function renderTablaUrgente() {
     `<tr>${HDR_URGENTE.map(h=>`<th>${h}</th>`).join('')}</tr>`;
   tbl.querySelector('tbody').innerHTML = filas.map(r => {
     const s = r.sky;
-    const cor = CORREGIDAS[_skyKey(s)] || {};
+    const cor  = CORREGIDAS[_skyKey(s)] || {};
+    const tipo = _tipoOp(r);
+    const montoColor = s.monto < 0 ? 'var(--red)' : 'var(--org)';
+    const montoFmt   = s.monto < 0 ? `−${fmtARS(Math.abs(s.monto))}` : fmtARS(s.monto);
+    const detalle    = r.matchParcial || (cor.cupon ? `Cupón probado: ${cor.cupon}` : '—');
     return `<tr class="row-urgente">
       <td>${s.fecha}</td>
       <td>${s.suc}</td>
       <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis">${s.vendedor||'—'}</td>
       <td>${s.tarjeta}</td>
+      <td><span style="font-size:8px;padding:2px 7px;border-radius:3px;
+        color:${tipo.color};border:1px solid ${tipo.color}55;background:${tipo.color}18">${tipo.label}</span></td>
       <td>${s.plan}</td>
-      <td class="num" style="color:var(--org);font-weight:600">${fmtARS(Math.abs(s.monto))}</td>
+      <td class="num" style="color:${montoColor};font-weight:600">${montoFmt}</td>
       <td class="num" style="font-family:var(--mono)">${s.cupon}</td>
       <td>${s.lote}</td>
       <td style="font-size:9px">${s.nroCom||'—'}</td>
       <td><span class="st ${s.esGETPos?'st-gp':'st-fis'}">${r.procEsperada||'—'}</span></td>
       <td style="font-size:9px;color:var(--m2);max-width:200px;overflow:hidden;text-overflow:ellipsis"
-        title="${r.matchParcial||''}">${r.matchParcial||cor.cupon?`Cupón probado: ${cor.cupon}`:'—'}</td>
-      <td style="white-space:nowrap">
-        <button onclick="eliminarCorreccion(${s.idx})" title="Quitar estado y volver a Sin Match"
+        title="${detalle}">${detalle}</td>
+      <td style="white-space:nowrap;display:flex;gap:4px;align-items:center">
+        <button onclick="resetearFila(${s.idx})" title="Quitar y devolver a Sin Match"
           style="background:none;border:1px solid var(--b2);border-radius:3px;color:var(--m2);
-            font-size:9px;cursor:pointer;padding:2px 7px;margin-right:3px"
+            font-size:11px;cursor:pointer;width:22px;height:22px;display:flex;align-items:center;justify-content:center"
+          onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
+          onmouseout="this.style.borderColor='var(--b2)';this.style.color='var(--m2)'">×</button>
+        <button onclick="showMod('revision',document.getElementById('mbtn-revision'))"
+          title="Ir a revisión manual para corregir"
+          style="background:none;border:1px solid var(--b2);border-radius:3px;color:var(--m2);
+            font-size:9px;cursor:pointer;padding:2px 7px"
           onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'"
           onmouseout="this.style.borderColor='var(--b2)';this.style.color='var(--m2)'">Reintentar</button>
       </td>
@@ -1529,7 +1572,7 @@ function renderTablaUrgente() {
 }
 
 const HDR_REFACT = [
-  'Fecha','Suc','Vendedor','Tarjeta','Plan','Monto',
+  'Fecha','Suc','Vendedor','Tarjeta','Tipo','Plan','Monto',
   'Cupón SKY','Lote','Nro.Comercio','Proc. esperada','Observación','Acciones'
 ];
 
@@ -1553,20 +1596,31 @@ function renderTablaRefacturado() {
     `<tr>${HDR_REFACT.map(h=>`<th>${h}</th>`).join('')}</tr>`;
   tbl.querySelector('tbody').innerHTML = filas.map(r => {
     const s = r.sky;
+    const tipo = _tipoOp(r);
+    const montoColor = s.monto < 0 ? 'var(--red)' : 'var(--vio)';
+    const montoFmt   = s.monto < 0 ? `−${fmtARS(Math.abs(s.monto))}` : fmtARS(s.monto);
     return `<tr class="row-refact">
       <td>${s.fecha}</td>
       <td>${s.suc}</td>
       <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis">${s.vendedor||'—'}</td>
       <td>${s.tarjeta}</td>
+      <td><span style="font-size:8px;padding:2px 7px;border-radius:3px;
+        color:${tipo.color};border:1px solid ${tipo.color}55;background:${tipo.color}18">${tipo.label}</span></td>
       <td>${s.plan}</td>
-      <td class="num" style="color:var(--vio);font-weight:600">${fmtARS(Math.abs(s.monto))}</td>
+      <td class="num" style="color:${montoColor};font-weight:600">${montoFmt}</td>
       <td class="num" style="font-family:var(--mono)">${s.cupon}</td>
       <td>${s.lote}</td>
       <td style="font-size:9px">${s.nroCom||'—'}</td>
       <td><span class="st ${s.esGETPos?'st-gp':'st-fis'}">${r.procEsperada||'—'}</span></td>
       <td style="font-size:9px;color:var(--m2)">${r.matchParcial||'Marcado manualmente como refacturado'}</td>
-      <td>
-        <button onclick="eliminarCorreccion(${s.idx})" title="Quitar estado y volver a Sin Match"
+      <td style="white-space:nowrap;display:flex;gap:4px;align-items:center">
+        <button onclick="resetearFila(${s.idx})" title="Quitar y devolver a Sin Match"
+          style="background:none;border:1px solid var(--b2);border-radius:3px;color:var(--m2);
+            font-size:11px;cursor:pointer;width:22px;height:22px;display:flex;align-items:center;justify-content:center"
+          onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
+          onmouseout="this.style.borderColor='var(--b2)';this.style.color='var(--m2)'">×</button>
+        <button onclick="showMod('revision',document.getElementById('mbtn-revision'))"
+          title="Ir a revisión manual"
           style="background:none;border:1px solid var(--b2);border-radius:3px;color:var(--m2);
             font-size:9px;cursor:pointer;padding:2px 7px"
           onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'"
@@ -1580,7 +1634,7 @@ function exportarUrgente() {
   const filas = RESULTADO.filter(r => r.estado === 'REVISION URGENTE');
   const HDR = ['Fecha','Sucursal','Vendedor','Tarjeta','Plan','Monto','Cupón SKY','Lote','Nro.Comercio','Proc.Esperada','Detalle'];
   const data = filas.map(r => {
-    const s = r.sky, cor = CORREGIDAS[s.idx] || {};
+    const s = r.sky, cor = CORREGIDAS[_skyKey(s)] || {};
     return [s.fecha, s.suc, s.vendedor||'', s.tarjeta, s.plan,
       Math.abs(s.monto), s.cupon, s.lote, s.nroCom||'',
       r.procEsperada||'', cor.cupon?`Cupón probado: ${cor.cupon}`:r.matchParcial||''];
