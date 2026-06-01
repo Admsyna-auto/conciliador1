@@ -178,7 +178,7 @@ input[type=file]{display:none}
 .tb .cnt{margin-left:4px;background:var(--b1);color:var(--m2);
   padding:1px 5px;border-radius:3px;font-size:7px}
 .tb.active .cnt{background:rgba(56,189,248,.15);color:var(--cyn)}
-.tab-body{display:none;flex:1;min-height:0;overflow:hidden}
+.tab-body{display:none;flex:1;min-height:0}
 .tab-body.active{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
 
 /* ══ DASHBOARD ═══════════════════════════════════════ */
@@ -241,7 +241,7 @@ input[type=file]{display:none}
 
 /* ══ TABLE ═══════════════════════════════════════════ */
 .tbl-wrap{flex:1;overflow:auto;min-height:0}
-table{width:100%;border-collapse:collapse;font-size:10px}
+table{width:max-content;min-width:100%;border-collapse:collapse;font-size:10px}
 thead{position:sticky;top:0;z-index:5}
 thead th{
   background:#161b26;color:var(--m2);font-weight:500;
