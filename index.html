@@ -978,6 +978,9 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       <button class="tb" onclick="showTab('t-dif-proc','tab-strip-dif',this)" style="border-color:rgba(248,113,113,.3)">
         ⚠ Dif. Procesadora <span class="cnt" id="cnt-dif-proc" style="background:rgba(248,113,113,.12);color:#f87171">0</span>
       </button>
+      <button class="tb" onclick="showTab('t-dif-monto','tab-strip-dif',this)" style="border-color:rgba(251,191,36,.3)">
+        💰 Dif. Monto Real <span class="cnt" id="cnt-dif-monto" style="background:rgba(251,191,36,.12);color:#fbbf24">0</span>
+      </button>
     </div>
     <div class="tab-body active" id="t-dif-main" style="display:flex;flex-direction:column;flex:1;min-height:0">
     <div id="mod-dif" style="display:flex;flex-direction:column;flex:1;min-height:0">
@@ -1034,6 +1037,20 @@ tr.row-int td{background:rgba(52,211,153,.02)}
         </div>
       </div>
       <div class="tbl-wrap"><table id="tbl-dif-proc"><thead></thead><tbody></tbody></table></div>
+    </div>
+
+    <!-- Tab: Diferencias de monto real -->
+    <div class="tab-body" id="t-dif-monto" style="flex-direction:column;flex:1;min-height:0">
+      <div class="cor-hdr-bar" style="border-left:3px solid var(--yel)">
+        <span class="cor-hdr-title" style="color:var(--yel)">💰 Diferencias de monto real cobrado</span>
+        <span class="cor-stats" id="dif-monto-stats"></span>
+        <div style="margin-left:auto;display:flex;gap:6px;align-items:center">
+          <span style="font-size:8px;color:var(--m2)">Registradas en Revisión Manual</span>
+          <button class="dl-btn" style="background:#2d2000;color:#fbbf24;border:1px solid rgba(251,191,36,.3)"
+            onclick="exportarDifMontoReal()">⬇ Exportar Excel</button>
+        </div>
+      </div>
+      <div class="tbl-wrap"><table id="tbl-dif-monto"><thead></thead><tbody></tbody></table></div>
     </div>
 
   </div>
@@ -1572,6 +1589,7 @@ function showTab(id, stripId, btn) {
   if (id==='t-dif-gp')                    renderNoCruzadasGp();
   if (id==='t-dif-cuotas')               renderDifCuotas();
   if (id==='t-dif-proc')                 renderDifProcesadora();
+  if (id==='t-dif-monto')               renderDifMontoReal();
   if (id==='t-ref' && RESULTADO.length)  renderTablaRefacturado();
   if (id==='t-cor')                       renderTablaCorrecciones();
 }

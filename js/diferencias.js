@@ -176,6 +176,8 @@ function renderModuloDiferencias() {
   if (cntCuotas) cntCuotas.textContent = _getDifCuotasRows().length;
   const cntProc = document.getElementById('cnt-dif-proc');
   if (cntProc) cntProc.textContent = _getDifProcRows().length;
+  const cntMonto = document.getElementById('cnt-dif-monto');
+  if (cntMonto) cntMonto.textContent = _getFilasDifMonto().filter(f => f.dif !== 0).length;
 }
 
 function renderTablaDif() {
@@ -601,4 +603,101 @@ function exportarNoCruzadasGp() {
   const data = rows.map(r => [r.fecha||'', r.nombre||'', r.suc||'', r.marca||r.tarjeta||'',
     r.plan||'', r.monto||0, r.aut||'', r.cupon||'']);
   _exportXlsx([HDR_GP_NC, ...data], 'GETPOS Sin Cruce', `GETPOS_SinCruce_${hoy()}.xlsx`);
+}
+
+// ════════════════════════════════════════════════════════════════════
+// DIFERENCIAS DE MONTO REAL — operaciones donde el monto cobrado
+// difiere del facturado en Skylab (registrado en Revisión Manual)
+// ════════════════════════════════════════════════════════════════════
+function _getFilasDifMonto() {
+  const filas = [];
+  for (const [key, cor] of Object.entries(CORREGIDAS)) {
+    if (cor.montoReal == null) continue;
+    const idx = RESULTADO.findIndex(r => _skyKey(r.sky) === key);
+    if (idx < 0) continue;
+    const fila   = RESULTADO[idx];
+    const montoSKY  = Math.abs(fila.sky.monto);
+    const montoReal = parseFloat(cor.montoReal);
+    if (isNaN(montoReal)) continue;
+    filas.push({ fila, cor, montoSKY, montoReal, dif: +(montoReal - montoSKY).toFixed(2) });
+  }
+  return filas.sort((a, b) => Math.abs(b.dif) - Math.abs(a.dif));
+}
+
+function renderDifMontoReal() {
+  const filas = _getFilasDifMonto();
+  const tbl   = document.getElementById('tbl-dif-monto');
+  const stats = document.getElementById('dif-monto-stats');
+  const cnt   = document.getElementById('cnt-dif-monto');
+
+  const conDif    = filas.filter(f => f.dif !== 0);
+  const totalDif  = filas.reduce((s, f) => s + f.dif, 0);
+  const totalContra = filas.filter(f => f.dif > 0).reduce((s, f) => s + f.dif, 0);
+  const totalFav    = filas.filter(f => f.dif < 0).reduce((s, f) => s + Math.abs(f.dif), 0);
+
+  if (cnt)   cnt.textContent = conDif.length;
+  if (stats) stats.innerHTML =
+    `<b>${filas.length}</b> con monto real registrado · `+
+    `<b style="color:var(--red)">${fmtARS(totalContra)} en contra</b> · `+
+    `<b style="color:var(--grn)">${fmtARS(totalFav)} a favor</b>`;
+
+  if (!tbl) return;
+
+  const HDR = ['Fecha','Suc','Vendedor','Tarjeta','Plan',
+               'Monto facturado','Monto real cobrado','Diferencia','Impacto',
+               'Asiento','Cupón'];
+
+  tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
+
+  if (!filas.length) {
+    tbl.querySelector('tbody').innerHTML =
+      `<tr><td colspan="${HDR.length}" style="padding:30px;text-align:center;color:var(--m2);font-size:10px">
+        No hay correcciones con monto real registrado.<br>
+        Usá el campo <b style="color:var(--cyn)">"Monto real cobrado"</b> en Revisión Manual para registrarlos.
+      </td></tr>`;
+    return;
+  }
+
+  tbl.querySelector('tbody').innerHTML = filas.map(({ fila, cor, montoSKY, montoReal, dif }) => {
+    const s = fila.sky;
+    const difColor = dif > 0 ? 'var(--red)' : dif < 0 ? 'var(--grn)' : 'var(--m2)';
+    const impacto  = dif > 0
+      ? `<span class="badge-accion badge-red">▲ EN CONTRA</span>`
+      : dif < 0
+      ? `<span class="badge-accion badge-grn">▼ A FAVOR</span>`
+      : `<span class="badge-accion" style="background:rgba(107,114,128,.1);color:#9ca3af;border:1px solid rgba(107,114,128,.2)">= SIN DIF</span>`;
+    const rowCls   = dif > 0 ? 'row-mal' : dif < 0 ? 'row-ok' : '';
+    const difFmt   = (dif > 0 ? '+' : '') + '$' + dif.toLocaleString('es-AR',{minimumFractionDigits:2});
+    return `<tr class="${rowCls}">
+      <td>${s.fecha}</td>
+      <td>${s.suc}</td>
+      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis">${s.vendedor||'—'}</td>
+      <td>${s.tarjeta}</td>
+      <td>${s.plan}</td>
+      <td class="num">$${montoSKY.toLocaleString('es-AR',{minimumFractionDigits:2})}</td>
+      <td class="num" style="color:var(--yel);font-weight:600">$${montoReal.toLocaleString('es-AR',{minimumFractionDigits:2})}</td>
+      <td class="num" style="color:${difColor};font-weight:700">${difFmt}</td>
+      <td>${impacto}</td>
+      <td style="font-size:9px;color:var(--m2)">${s.asiento||'—'}</td>
+      <td class="num" style="font-family:var(--mono);font-size:9px">${s.cupon}</td>
+    </tr>`;
+  }).join('');
+}
+
+function exportarDifMontoReal() {
+  const filas = _getFilasDifMonto();
+  if (!filas.length) { alert('No hay diferencias de monto real para exportar.'); return; }
+  const HDR = ['Fecha','Sucursal','Vendedor','Tarjeta','Plan',
+               'Monto facturado','Monto real cobrado','Diferencia','Impacto',
+               'Asiento','Cupón SKY','Estado corrección'];
+  const data = filas.map(({ fila, cor, montoSKY, montoReal, dif }) => {
+    const s = fila.sky;
+    return [
+      s.fecha, s.suc, s.vendedor||'', s.tarjeta, s.plan,
+      montoSKY, montoReal, dif,
+      dif > 0 ? 'EN CONTRA' : dif < 0 ? 'A FAVOR' : 'SIN DIFERENCIA',
+      s.asiento||'', s.cupon, cor.resultado||''
+    ];
+  });
+  _exportXlsx([HDR, ...data], 'Dif. Monto Real', `DifMontoReal_${hoy()}.xlsx`);
 }
