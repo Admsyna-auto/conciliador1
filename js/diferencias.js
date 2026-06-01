@@ -632,14 +632,14 @@ function renderDifMontoReal() {
 
   const conDif    = filas.filter(f => f.dif !== 0);
   const totalDif  = filas.reduce((s, f) => s + f.dif, 0);
-  const totalContra = filas.filter(f => f.dif > 0).reduce((s, f) => s + f.dif, 0);
-  const totalFav    = filas.filter(f => f.dif < 0).reduce((s, f) => s + Math.abs(f.dif), 0);
+  const totalFav    = filas.filter(f => f.dif > 0).reduce((s, f) => s + f.dif, 0);
+  const totalContra = filas.filter(f => f.dif < 0).reduce((s, f) => s + Math.abs(f.dif), 0);
 
   if (cnt)   cnt.textContent = conDif.length;
   if (stats) stats.innerHTML =
     `<b>${filas.length}</b> con monto real registrado · `+
-    `<b style="color:var(--red)">${fmtARS(totalContra)} en contra</b> · `+
-    `<b style="color:var(--grn)">${fmtARS(totalFav)} a favor</b>`;
+    `<b style="color:var(--grn)">▲ ${fmtARS(totalFav)} a favor</b> · `+
+    `<b style="color:var(--red)">▼ ${fmtARS(totalContra)} en contra</b>`;
 
   if (!tbl) return;
 
@@ -660,13 +660,13 @@ function renderDifMontoReal() {
 
   tbl.querySelector('tbody').innerHTML = filas.map(({ fila, cor, montoSKY, montoReal, dif }) => {
     const s = fila.sky;
-    const difColor = dif > 0 ? 'var(--red)' : dif < 0 ? 'var(--grn)' : 'var(--m2)';
+    const difColor = dif > 0 ? 'var(--grn)' : dif < 0 ? 'var(--red)' : 'var(--m2)';
     const impacto  = dif > 0
-      ? `<span class="badge-accion badge-red">▲ EN CONTRA</span>`
+      ? `<span class="badge-accion badge-grn">▲ A FAVOR</span>`
       : dif < 0
-      ? `<span class="badge-accion badge-grn">▼ A FAVOR</span>`
+      ? `<span class="badge-accion badge-red">▼ EN CONTRA</span>`
       : `<span class="badge-accion" style="background:rgba(107,114,128,.1);color:#9ca3af;border:1px solid rgba(107,114,128,.2)">= SIN DIF</span>`;
-    const rowCls   = dif > 0 ? 'row-mal' : dif < 0 ? 'row-ok' : '';
+    const rowCls   = dif > 0 ? 'row-ok' : dif < 0 ? 'row-mal' : '';
     const difFmt   = (dif > 0 ? '+' : '') + '$' + dif.toLocaleString('es-AR',{minimumFractionDigits:2});
     return `<tr class="${rowCls}">
       <td>${s.fecha}</td>
@@ -695,7 +695,7 @@ function exportarDifMontoReal() {
     return [
       s.fecha, s.suc, s.vendedor||'', s.tarjeta, s.plan,
       montoSKY, montoReal, dif,
-      dif > 0 ? 'EN CONTRA' : dif < 0 ? 'A FAVOR' : 'SIN DIFERENCIA',
+      dif > 0 ? 'A FAVOR' : dif < 0 ? 'EN CONTRA' : 'SIN DIFERENCIA',
       s.asiento||'', s.cupon, cor.resultado||''
     ];
   });
