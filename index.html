@@ -1726,30 +1726,36 @@ function _shiftL(hex, delta) {
 }
 
 function applyBgColor(bg) {
-  const r = document.documentElement;
-  r.style.setProperty('--bg', bg);
-  // derivar escala de panels a partir del fondo
-  r.style.setProperty('--s1', _shiftL(bg, -22));
-  r.style.setProperty('--s2', _shiftL(bg, -18));
-  r.style.setProperty('--s3', _shiftL(bg, -13));
-  r.style.setProperty('--s4', _shiftL(bg, -8));
-  r.style.setProperty('--b1', _shiftL(bg, -12));
-  r.style.setProperty('--b2', _shiftL(bg, -6));
-  r.style.setProperty('--b3', _shiftL(bg, -1));
-  // marcar swatch activo
-  document.querySelectorAll('#cfg-bg-swatches .cfg-swatch').forEach(s =>
-    s.classList.toggle('active', s.dataset.bg === bg));
-  document.getElementById('cfg-bg-custom').value = bg.startsWith('#') ? bg : '#4f5359';
-  localStorage.setItem('cfg_bg', bg);
+  if (!bg || !bg.startsWith('#')) return;   // ignorar valores inválidos
+  try {
+    const r = document.documentElement;
+    r.style.setProperty('--bg', bg);
+    r.style.setProperty('--s1', _shiftL(bg, -22));
+    r.style.setProperty('--s2', _shiftL(bg, -18));
+    r.style.setProperty('--s3', _shiftL(bg, -13));
+    r.style.setProperty('--s4', _shiftL(bg, -8));
+    r.style.setProperty('--b1', _shiftL(bg, -12));
+    r.style.setProperty('--b2', _shiftL(bg, -6));
+    r.style.setProperty('--b3', _shiftL(bg, -1));
+    document.querySelectorAll('#cfg-bg-swatches .cfg-swatch').forEach(s =>
+      s.classList.toggle('active', s.dataset.bg === bg));
+    const inp = document.getElementById('cfg-bg-custom');
+    if (inp) inp.value = bg;
+    localStorage.setItem('cfg_bg', bg);
+  } catch(e) { console.warn('applyBgColor error:', e); }
 }
 
 function applyAccColor(acc) {
-  document.documentElement.style.setProperty('--acc', acc);
-  document.documentElement.style.setProperty('--cyn', _shiftL(acc, 8));
-  document.querySelectorAll('#cfg-acc-swatches .cfg-swatch').forEach(s =>
-    s.classList.toggle('active', s.dataset.acc === acc));
-  document.getElementById('cfg-acc-custom').value = acc.startsWith('#') ? acc : '#4f8ef7';
-  localStorage.setItem('cfg_acc', acc);
+  if (!acc || !acc.startsWith('#')) return;  // ignorar valores inválidos
+  try {
+    document.documentElement.style.setProperty('--acc', acc);
+    document.documentElement.style.setProperty('--cyn', _shiftL(acc, 8));
+    document.querySelectorAll('#cfg-acc-swatches .cfg-swatch').forEach(s =>
+      s.classList.toggle('active', s.dataset.acc === acc));
+    const inp = document.getElementById('cfg-acc-custom');
+    if (inp) inp.value = acc;
+    localStorage.setItem('cfg_acc', acc);
+  } catch(e) { console.warn('applyAccColor error:', e); }
 }
 
 function applyBg(el)  { applyBgColor(el.dataset.bg); }
@@ -1783,10 +1789,14 @@ function _cfgOutside(e) {
 }
 
 function _loadTheme() {
-  const bg  = localStorage.getItem('cfg_bg')  || CFG_DEFAULTS.bg;
-  const acc = localStorage.getItem('cfg_acc') || CFG_DEFAULTS.acc;
-  applyBgColor(bg);
-  applyAccColor(acc);
+  try {
+    const bg  = localStorage.getItem('cfg_bg')  || CFG_DEFAULTS.bg;
+    const acc = localStorage.getItem('cfg_acc') || CFG_DEFAULTS.acc;
+    applyBgColor(bg);
+    applyAccColor(acc);
+  } catch(e) {
+    console.warn('_loadTheme error (ignorado):', e);
+  }
 }
 
 // ══ INIT ═════════════════════════════════════════════
