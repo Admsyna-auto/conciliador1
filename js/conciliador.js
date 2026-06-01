@@ -529,17 +529,25 @@ function detectarAnulaciones(resultado) {
   }
 }
 
+// ── CLAVE ESTABLE POR ASIENTO (sobrevive re-ejecuciones del cruce) ──
+// Usa Nro.Asiento si existe; si no, compone clave por fecha+cupon+monto.
+function _skyKey(sky) {
+  const a = String(sky?.asiento ?? '').trim();
+  if (a && a !== 'null' && a !== '0' && a !== 'undefined') return `A:${a}`;
+  return `K:${sky?.fecha}_${sky?.cupon}_${Math.abs(sky?.monto ?? 0).toFixed(2)}`;
+}
+
 // ── CORRECCIONES MANUALES ────────────────────────────────
 function aplicarCorreccionesManuales() {
-  for (const [idx, cor] of Object.entries(CORREGIDAS)) {
-    const fila=RESULTADO[parseInt(idx)];
+  for (const [key, cor] of Object.entries(CORREGIDAS)) {
+    const idx = RESULTADO.findIndex(r => _skyKey(r.sky) === key);
+    const fila = idx >= 0 ? RESULTADO[idx] : null;
     if (!fila) continue;
     fila.correccionManual=cor;
     fila.estado=`CORREGIDO MANUAL (${cor.proc})`;
     fila.procEncontrada=cor.proc; fila.metodo='MANUAL';
-    // Re-cruzar para obtener fila.proc y que quede excluida de "sin cruce"
     if (!fila.proc && cor.cupon && cor.proc && (_FIS_NORM.length || _GP_NORM.length)) {
-      const res = recruzarFila(parseInt(idx), cor.cupon, cor.proc, cor.metodo || '');
+      const res = recruzarFila(idx, cor.cupon, cor.proc, cor.metodo || '');
       if (res?.ok) {
         fila.proc   = res.match;
         fila.comOK  = res.comOK;
@@ -874,8 +882,8 @@ function marcarRevision(idx, estado) {
     ? 'Marcado manualmente como refacturado — no coincide por refacturación'
     : 'Marcado manualmente como revisión urgente — venta sin pago encontrado';
   // Guardar en CORREGIDAS con estado especial
-  const cor = CORREGIDAS[idx] || {};
-  CORREGIDAS[idx] = { ...cor, cupon: cor.cupon||'—', proc: cor.proc||fila.procEsperada,
+  const cor = CORREGIDAS[_skyKey(fila.sky)] || {};
+  CORREGIDAS[_skyKey(fila.sky)] = { ...cor, cupon: cor.cupon||'—', proc: cor.proc||fila.procEsperada,
     resultado: estado, metodo: estado };
   renderTablas(); updateCounts(); renderFilas(); renderTablaCorrecciones();
   renderTablaUrgente(); renderTablaRefacturado();
@@ -905,7 +913,7 @@ function filtrarSinMatch() {
 function renderFilas() {
   const filtrados=filtrarSinMatch();
   const total=RESULTADO.filter(r=>r.estado==='SIN MATCH').length;
-  const corr=filtrados.filter(r=>!!CORREGIDAS[r.sky.idx]).length;
+  const corr=filtrados.filter(r=>!!CORREGIDAS[_skyKey(r.sky)]).length;
   const pend=filtrados.length-corr;
   const stats=document.getElementById('fix-stats');
   if (stats) stats.innerHTML=`Mostrando <b>${filtrados.length}</b> / <b>${total}</b> · `+
@@ -920,7 +928,7 @@ function renderFilas() {
     <div>Monto / Fecha</div><div>Cupón procesadora</div>
     <div>Procesadora</div><div>Método de cruce</div><div></div></div>`;
   cont.innerHTML=hdr+filtrados.map(r=>{
-    const s=r.sky, cor=CORREGIDAS[s.idx]||{};
+    const s=r.sky, cor=CORREGIDAS[_skyKey(s)]||{};
     const applied=!!cor.cupon;
     const procDef=s.esGETPos?'GETPOS':'FISERV';
     return `<div class="fix-row" id="fr-${s.idx}">
@@ -970,12 +978,13 @@ function aplicarCorreccion(idx) {
   if (!cupon||!proc) { alert('Completá el cupón y seleccioná la procesadora.'); return; }
 
   const fila=RESULTADO[idx];
-  const antes=CORREGIDAS[idx]||{};
+  const key=_skyKey(fila.sky);
+  const antes=CORREGIDAS[key]||{};
 
   // Re-cruzar inmediatamente con el cupón ingresado
   const res = (_FIS_NORM.length || _GP_NORM.length) ? recruzarFila(idx, cupon, proc, metodo) : null;
 
-  CORREGIDAS[idx]={cupon, proc, metodo, difMonto: res?.difMonto ?? null,
+  CORREGIDAS[key]={cupon, proc, metodo, difMonto: res?.difMonto ?? null,
     resultado: res ? (res.ok ? 'CRUZADO' : 'NO CRUZADO') : 'PENDIENTE',
     metodo: res?.met || '',
     motivo: res?.motivo || ''
@@ -998,13 +1007,13 @@ function aplicarCorreccion(idx) {
       fila.comOK          = res.comOK;
       fila.sucOK          = res.sucOK;
       fila.matchParcial   = `Manual: ${cupon}`;
-      fila.correccionManual = CORREGIDAS[idx];
+      fila.correccionManual = CORREGIDAS[key];
     } else {
       fila.estado         = 'REVISION URGENTE';
       fila.procEncontrada = proc;
       fila.metodo         = 'REVISION URGENTE';
       fila.matchParcial   = res?.motivo || `Cupón manual: ${cupon}`;
-      fila.correccionManual = CORREGIDAS[idx];
+      fila.correccionManual = CORREGIDAS[key];
     }
   }
 
@@ -1185,8 +1194,11 @@ const HDR_COR = ['Estado cruce','Método','Fecha','Suc','Vendedor','Tarjeta','Pl
 // Eliminar una corrección y devolver la fila a SIN MATCH
 function eliminarCorreccion(idx) {
   idx = parseInt(idx);
-  if (!CORREGIDAS[idx]) return;
-  delete CORREGIDAS[idx];
+  const fila = RESULTADO[idx];
+  if (!fila) return;
+  const key = _skyKey(fila.sky);
+  if (!CORREGIDAS[key]) return;
+  delete CORREGIDAS[key];
   // Restaurar la fila a SIN MATCH
   const fila = RESULTADO[idx];
   if (fila) {
@@ -1206,21 +1218,22 @@ function eliminarCorreccion(idx) {
 
 function reprocesarCorrecciones() {
   let ok=0, fail=0;
-  for (const [idxStr, cor] of Object.entries(CORREGIDAS)) {
-    const idx=parseInt(idxStr);
-    const fila=RESULTADO[idx]; if (!fila) continue;
+  for (const [key, cor] of Object.entries(CORREGIDAS)) {
+    const idx = RESULTADO.findIndex(r => _skyKey(r.sky) === key);
+    if (idx < 0) continue;
+    const fila = RESULTADO[idx];
     const res=recruzarFila(idx, cor.cupon, cor.proc, cor.metodo||'');
-    CORREGIDAS[idx] = {...cor, difMonto: res.ok ? (res.difMonto ?? null) : null,
+    CORREGIDAS[key] = {...cor, difMonto: res.ok ? (res.difMonto ?? null) : null,
       resultado: res.ok ? 'CRUZADO' : 'NO CRUZADO',
       metodo: res.met||'', motivo: res.motivo||''};
     if (res.ok) {
       fila.proc=res.match; fila.metodo=res.met; fila.estado=res.estado;
       fila.procEncontrada=cor.proc; fila.comOK=res.comOK; fila.sucOK=res.sucOK;
-      fila.matchParcial=`Manual: ${cor.cupon}`; fila.correccionManual=CORREGIDAS[idx];
+      fila.matchParcial=`Manual: ${cor.cupon}`; fila.correccionManual=CORREGIDAS[key];
       ok++;
     } else {
       fila.metodo='REVISION URGENTE'; fila.estado='REVISION URGENTE';
-      fila.matchParcial=res.motivo; fila.correccionManual=CORREGIDAS[idx]; fail++;
+      fila.matchParcial=res.motivo; fila.correccionManual=CORREGIDAS[key]; fail++;
     }
   }
   return {ok, fail};
@@ -1250,9 +1263,9 @@ function renderTablaCorrecciones() {
     return;
   }
   tbl.querySelector('thead').innerHTML=`<tr>${HDR_COR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
-  tbl.querySelector('tbody').innerHTML=entries.map(([idxStr,cor])=>{
-    const idx=parseInt(idxStr);
-    const fila=RESULTADO[idx]; if (!fila) return '';
+  tbl.querySelector('tbody').innerHTML=entries.map(([key,cor])=>{
+    const idx=RESULTADO.findIndex(r=>_skyKey(r.sky)===key);
+    const fila=idx>=0?RESULTADO[idx]:null; if (!fila) return '';
     const s=fila.sky, p=fila.proc;
     const res=cor.resultado;
     const bc=res==='CRUZADO'?'st st-ok':res==='NO CRUZADO'?'st st-mal':'st st-ver';
@@ -1491,7 +1504,7 @@ function renderTablaUrgente() {
     `<tr>${HDR_URGENTE.map(h=>`<th>${h}</th>`).join('')}</tr>`;
   tbl.querySelector('tbody').innerHTML = filas.map(r => {
     const s = r.sky;
-    const cor = CORREGIDAS[s.idx] || {};
+    const cor = CORREGIDAS[_skyKey(s)] || {};
     return `<tr class="row-urgente">
       <td>${s.fecha}</td>
       <td>${s.suc}</td>
@@ -1656,24 +1669,30 @@ function exportarCorrecciones() {
   const entries = Object.entries(CORREGIDAS);
   if (!entries.length) { alert('No hay correcciones manuales para exportar.'); return; }
 
+  // NOTA: la primera columna "Nro.Asiento" es la clave de reimportación.
+  // Al importar este archivo, el sistema re-aplica las correcciones por asiento.
   const HDR = [
-    // Skylab
+    'Nro.Asiento',   // ← clave de reimportación (no eliminar)
+    // Skylab (referencia)
     'Fecha SKY','Sucursal','Vendedor','Tarjeta SKY','Plan','Cuotas SKY',
     'Monto SKY','Cupón SKY','Lote','Nro.Comercio SKY',
-    // Corrección
+    // Corrección (las columnas que se reimportan)
     'Procesadora','Cupón ingresado','Método cruce','Estado cruce',
     // Procesadora
     'Monto Proc.','DIF $','Tarjeta Proc.','Cuotas Proc.',
     'Lote Proc.','Ticket Proc.','Com.FIS','Cód.Auth.','Suc.Proc.','Com.OK'
   ];
 
-  const data = entries.map(([idxStr, cor]) => {
-    const idx  = parseInt(idxStr);
-    const fila = RESULTADO[idx];
+  const data = entries.map(([key, cor]) => {
+    const idx  = RESULTADO.findIndex(r => _skyKey(r.sky) === key);
+    const fila = idx >= 0 ? RESULTADO[idx] : null;
     if (!fila) return null;
     const s = fila.sky;
     const p = fila.proc;
+    // Extraer asiento del key (A:12345 → 12345)
+    const asiento = key.startsWith('A:') ? key.slice(2) : (s.asiento ?? key);
     return [
+      asiento,
       // Skylab
       s.fecha, s.suc, s.vendedor ?? '', s.tarjeta, s.plan, s.cuotas ?? '',
       Math.abs(s.monto), s.cupon, s.lote, s.nroCom ?? '',
@@ -1689,6 +1708,68 @@ function exportarCorrecciones() {
   }).filter(Boolean);
 
   _exportXlsx([HDR, ...data], 'Correcciones', `Correcciones_Manuales_${hoy()}.xlsx`);
+}
+
+// ── IMPORTAR correcciones desde Excel exportado previamente ─────────
+function importarCorrecciones(input) {
+  const file = input.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const wb   = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
+      if (!rows.length) { alert('El archivo no tiene datos.'); return; }
+
+      let importadas = 0, noEncontradas = 0, sinAsiento = 0;
+      rows.forEach(row => {
+        const asientoRaw = String(row['Nro.Asiento'] ?? row['Nro. Asiento'] ?? '').trim();
+        const cupon      = String(row['Cupón ingresado'] ?? row['Cupon ingresado'] ?? '').trim();
+        const proc       = String(row['Procesadora'] ?? '').trim();
+        const metodo     = String(row['Método cruce'] ?? row['Metodo cruce'] ?? '').trim();
+
+        if (!cupon || !proc) return;
+        if (!asientoRaw || asientoRaw === 'null') { sinAsiento++; return; }
+
+        const key = `A:${asientoRaw}`;
+        // Verificar si existe en el RESULTADO actual
+        const existe = RESULTADO.some(r => _skyKey(r.sky) === key);
+        if (!existe) { noEncontradas++; }
+
+        // Guardar/sobreescribir la corrección (se aplicará al re-procesar)
+        CORREGIDAS[key] = {
+          cupon, proc, metodo,
+          resultado: 'PENDIENTE',
+          motivo:    'Importado desde Excel'
+        };
+        importadas++;
+      });
+
+      // Re-aplicar todas las correcciones con los datos actuales
+      if (importadas > 0 && (_FIS_NORM.length || _GP_NORM.length)) {
+        reprocesarCorrecciones();
+        renderTodo();
+        updateCounts();
+      }
+      scheduleAutoSave();
+
+      const msg = [
+        `✓ ${importadas} correcciones importadas`,
+        noEncontradas ? `⚠ ${noEncontradas} sin fila en el RESULTADO actual (se guardan igual)` : '',
+        sinAsiento    ? `ℹ ${sinAsiento} filas sin Nro.Asiento ignoradas` : '',
+      ].filter(Boolean).join('\n');
+      typeof _showToast === 'function'
+        ? _showToast(`✓ ${importadas} correcciones importadas`)
+        : alert(msg);
+      if (noEncontradas || sinAsiento) console.warn('[IMPORT COR]', msg);
+
+    } catch(err) {
+      alert('Error leyendo el archivo: ' + err.message);
+      console.error(err);
+    }
+  };
+  r.readAsArrayBuffer(file);
+  input.value = '';
 }
 
 function exportarNoCruzadasFis() {

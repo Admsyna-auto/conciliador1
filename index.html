@@ -897,8 +897,12 @@ tr.row-int td{background:rgba(52,211,153,.02)}
           ↺ Re-procesar todas
         </button>
         <button class="dl-btn" style="background:#14532d;color:#86efac;margin-left:6px" onclick="exportarCorrecciones()">
-          ⬇ Exportar Excel
+          ⬇ Exportar
         </button>
+        <label class="dl-btn" style="background:#1e3a5f;color:#93c5fd;border:1px solid #2d5a8e;cursor:pointer;margin-left:4px" title="Importar correcciones exportadas previamente">
+          ⬆ Importar
+          <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarCorrecciones(this)">
+        </label>
       </div>
       <div class="cor-table-wrap">
         <table id="tbl-cor"><thead></thead><tbody></tbody></table>
