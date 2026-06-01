@@ -1200,7 +1200,6 @@ function eliminarCorreccion(idx) {
   if (!CORREGIDAS[key]) return;
   delete CORREGIDAS[key];
   // Restaurar la fila a SIN MATCH
-  const fila = RESULTADO[idx];
   if (fila) {
     fila.proc           = null;
     fila.metodo         = 'SIN MATCH';
