@@ -227,29 +227,17 @@ function parseContracargosGetpos(wb) {
   return _CTR_GP;
 }
 
-// ── Cruzar con RESULTADO (si está disponible) ───────────────────────
+// ── Cruce con RESULTADO — deshabilitado automáticamente ─────────────
+// Razones:
+//  1. FISERV: "Nrto Cupón" en contracargo = cupón de liquidación del BANCO,
+//     no el cupón original de la procesadora → produce false matches
+//  2. "Nro Autoriz" tiene formato de celda especial (inline string) →
+//     SheetJS no lo lee correctamente → match por auth falla
+//  3. Montos difieren (cuotas parciales vs total de venta)
+// El usuario puede buscar la transacción original manualmente con "🔍 Buscar"
 function _cruzarContracargos() {
-  if (!RESULTADO || !RESULTADO.length) return;
-
-  // FISERV: cruzar por cupón (ticket) + lote
-  _CTR_FIS.forEach(ctr => {
-    if (ctr.matchIdx !== null) return;
-    const idx = RESULTADO.findIndex(r =>
-      r.proc && r.procEncontrada === 'FISERV' &&
-      (norm(r.proc.ticket) === ctr.cupon || (ctr.aut && norm(r.proc.aut) === ctr.aut))
-    );
-    ctr.matchIdx = idx >= 0 ? idx : null;
-  });
-
-  // GETPOS: cruzar por auth
-  _CTR_GP.forEach(ctr => {
-    if (ctr.matchIdx !== null) return;
-    const idx = RESULTADO.findIndex(r =>
-      r.proc && r.procEncontrada === 'GETPOS' &&
-      ctr.aut && norm(r.proc.aut) === ctr.aut
-    );
-    ctr.matchIdx = idx >= 0 ? idx : null;
-  });
+  // No-op: auto-match disabled to avoid false positives
+  // Manual lookup available via "🔍 Buscar en SKY" button in the table
 }
 
 // ── Lista unificada de todos los contracargos ───────────────────────
@@ -427,8 +415,8 @@ function renderTablaCtrSeguimiento() {
   if (fltEst)  filas = filas.filter(c => _getCtrSeg(c.id).estado === fltEst);
   if (fltProc) filas = filas.filter(c => c.proc === fltProc);
 
-  const HDR = ['Estado','Proc.','Fecha Tx','Vencimiento','Tarjeta','Motivo','Monto',
-               'Match SKY','Monto recuperado','Notas','Fecha respuesta',''];
+  const HDR = ['Estado','Proc.','Fecha Tx','Vencimiento','Tarjeta','Nro Tarjeta','Motivo','Monto',
+               'Monto recuperado','Notas','Fecha respuesta',''];
   tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
 
   if (!filas.length) {
@@ -439,16 +427,15 @@ function renderTablaCtrSeguimiento() {
   }
 
   tbl.querySelector('tbody').innerHTML = filas.map(c => {
-    const seg   = _getCtrSeg(c.id);
-    const match = c.matchIdx !== null ? RESULTADO[c.matchIdx] : null;
-    const matchCell = match
-      ? `<span style="font-size:8px;color:var(--grn)">✓ ${match.sky.fecha} · ${match.sky.suc} · ${fmtARS(Math.abs(match.sky.monto))}</span>`
-      : `<span style="font-size:8px;color:var(--m2)">—</span>`;
+    const seg = _getCtrSeg(c.id);
+    // Búsqueda manual en Mod 1: buscar por últimos 4 dígitos de tarjeta + fecha
+    const ultimos4 = c.nroTarjeta ? c.nroTarjeta.replace(/[^0-9]/g,'').slice(-4) : '';
+    const buscarQuery = [c.fechaTx, ultimos4, c.aut && c.aut !== '0' ? c.aut : ''].filter(Boolean).join(' ');
 
     return `<tr>
       <td>
         ${_ctrBadge(seg.estado)}
-        <select onchange="guardarSeguimientoCtr('${c.id}','estado',this.value);renderModuloContracargos()"
+        <select onchange="guardarSeguimientoCtr('${c.id}','estado',this.value);renderTablaCtrSeguimiento()"
           style="margin-top:4px;display:block;width:100%;background:var(--s3);border:1px solid var(--b2);
             border-radius:3px;color:var(--txt);font-family:var(--mono);font-size:8px;padding:2px 4px">
           ${CTR_EST_LIST.map(e=>`<option value="${e}" ${seg.estado===e?'selected':''}>${e}</option>`).join('')}
@@ -458,10 +445,10 @@ function renderTablaCtrSeguimiento() {
       <td style="font-size:9px">${c.fechaTx}</td>
       <td>${c.proc==='GETPOS' ? _vencBadge(c.fechaVenc) : '<span style="color:var(--m2);font-size:9px">N/A</span>'}</td>
       <td style="font-size:9px">${c.tarjeta}</td>
+      <td style="font-size:9px;font-family:var(--mono);color:var(--m2)">${c.nroTarjeta || '—'}</td>
       <td style="font-size:9px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
         title="${c.motivoDesc}">${c.motivoCodigo ? `<b style="color:var(--yel)">${c.motivoCodigo}</b> ` : ''}${c.motivoDesc || c.motivo}</td>
       <td class="num" style="color:var(--red);font-weight:600">${fmtARS(c.importe)}</td>
-      <td>${matchCell}</td>
       <td>
         <input type="number" step="0.01" placeholder="0"
           value="${seg.montoRecuperado || ''}"
@@ -483,15 +470,33 @@ function renderTablaCtrSeguimiento() {
           style="background:var(--s3);border:1px solid var(--b2);border-radius:3px;
             color:var(--txt);font-family:var(--mono);font-size:9px;padding:3px 6px">
       </td>
-      <td>
+      <td style="white-space:nowrap">
+        <button title="Buscar en Módulo 1 por fecha y tarjeta"
+          onclick="buscarCtrEnSky('${c.fechaTx}','${ultimos4}')"
+          style="background:none;border:1px solid var(--b2);border-radius:3px;color:var(--cyn);
+            font-size:9px;cursor:pointer;padding:2px 7px;margin-bottom:3px;display:block;width:100%"
+          onmouseover="this.style.borderColor='var(--cyn)'"
+          onmouseout="this.style.borderColor='var(--b2)'">🔍 SKY</button>
         <button onclick="resetearCtr('${c.id}')" title="Resetear seguimiento"
           style="background:none;border:1px solid var(--b2);border-radius:3px;color:var(--m2);
-            font-size:9px;cursor:pointer;padding:2px 7px"
+            font-size:9px;cursor:pointer;padding:2px 7px;display:block;width:100%"
           onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
           onmouseout="this.style.borderColor='var(--b2)';this.style.color='var(--m2)'">↺</button>
       </td>
     </tr>`;
   }).join('');
+}
+
+// Navega a Módulo 1 y pre-rellena la búsqueda con fecha y últimos 4 de tarjeta
+function buscarCtrEnSky(fecha, ultimos4) {
+  showMod('revision', document.getElementById('mbtn-revision'));
+  setTimeout(() => {
+    const inp = document.getElementById('flt-search');
+    if (inp) {
+      inp.value = [fecha, ultimos4].filter(Boolean).join(' ');
+      if (typeof aplicarFiltros === 'function') aplicarFiltros();
+    }
+  }, 200);
 }
 
 function resetearCtr(id) {
@@ -503,20 +508,21 @@ function resetearCtr(id) {
 // ── Tabla FISERV ─────────────────────────────────────────────────────
 function _renderTablaCtrFis() {
   const tbl = document.getElementById('tbl-ctr-fis'); if (!tbl) return;
-  const HDR = ['Fecha Tx','Fecha Debitado','Terminal','Tarjeta','Lote','Cupón','Aut.',
-               'Cuotas','Importe','Motivo cód.','Detalle motivo','Arancel','Match SKY','Estado'];
+  const HDR = ['Fecha Tx','Fecha Debitado','Fecha Debitado','Terminal','Tarjeta','Nro Tarjeta',
+               'Lote','Cupón','Cuotas','Importe','Motivo cód.','Detalle motivo','Arancel','Estado'];
   tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
   tbl.querySelector('tbody').innerHTML = _CTR_FIS.map(c => {
-    const match = c.matchIdx !== null ? RESULTADO[c.matchIdx] : null;
-    const seg   = _getCtrSeg(c.id);
+    const seg = _getCtrSeg(c.id);
+    const ultimos4 = c.nroTarjeta ? c.nroTarjeta.replace(/[^0-9]/g,'').slice(-4) : '';
     return `<tr>
       <td>${c.fechaTx}</td>
       <td>${c.fechaDebitado}</td>
+      <td>${c.fechaPresent}</td>
       <td style="font-size:9px">${c.terminal}</td>
       <td>${c.tarjeta}</td>
+      <td style="font-size:9px;font-family:var(--mono);color:var(--m2)">${c.nroTarjeta || '—'}</td>
       <td class="num">${c.lote}</td>
       <td class="num">${c.cupon}</td>
-      <td class="num" style="font-size:9px">${c.aut || '—'}</td>
       <td class="num">${c.cuotas}</td>
       <td class="num" style="color:var(--red);font-weight:600">${fmtARS(c.importe)}</td>
       <td><span style="font-size:8px;padding:1px 5px;border-radius:3px;background:rgba(251,191,36,.15);
@@ -524,10 +530,14 @@ function _renderTablaCtrFis() {
       <td style="font-size:9px;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
         title="${c.motivoDesc}">${c.motivoDesc}</td>
       <td class="num" style="font-size:9px;color:var(--m2)">${c.arancel ? fmtARS(c.arancel) : '—'}</td>
-      <td style="font-size:9px">${match
-        ? `<span style="color:var(--grn)">✓ Suc.${match.sky.suc} ${match.sky.fecha}</span>`
-        : '<span style="color:var(--m2)">—</span>'}</td>
-      <td>${_ctrBadge(seg.estado)}</td>
+      <td>
+        ${_ctrBadge(seg.estado)}
+        <button onclick="buscarCtrEnSky('${c.fechaTx}','${ultimos4}')" title="Buscar en Revisión Manual"
+          style="margin-top:3px;background:none;border:1px solid var(--b2);border-radius:3px;
+            color:var(--cyn);font-size:8px;cursor:pointer;padding:1px 6px"
+          onmouseover="this.style.borderColor='var(--cyn)'"
+          onmouseout="this.style.borderColor='var(--b2)'">🔍</button>
+      </td>
     </tr>`;
   }).join('');
 }
@@ -536,13 +546,12 @@ function _renderTablaCtrFis() {
 function _renderTablaCtrGp() {
   const tbl = document.getElementById('tbl-ctr-gp'); if (!tbl) return;
   const HDR = ['Fecha Tx','Vencimiento','Código disputa','Marca','Auth.','ARN',
-               'Monto','Estatus proc.','Motivo','Emisor','Match SKY','Estado'];
+               'Monto','Estatus proc.','Motivo','Emisor','Estado'];
   tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
   tbl.querySelector('tbody').innerHTML = _CTR_GP.map(c => {
-    const match = c.matchIdx !== null ? RESULTADO[c.matchIdx] : null;
-    const seg   = _getCtrSeg(c.id);
-    const d     = _diasHasta(c.fechaVenc);
-    const rowCls= d !== null && d < 0 ? 'row-mal' : d !== null && d <= 7 ? 'row-com' : '';
+    const seg    = _getCtrSeg(c.id);
+    const d      = _diasHasta(c.fechaVenc);
+    const rowCls = d !== null && d < 0 ? 'row-mal' : d !== null && d <= 7 ? 'row-com' : '';
     return `<tr class="${rowCls}">
       <td>${c.fechaTx}</td>
       <td>${_vencBadge(c.fechaVenc)}</td>
@@ -555,10 +564,14 @@ function _renderTablaCtrGp() {
       <td style="font-size:9px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
         title="${c.motivo}">${c.motivo}</td>
       <td style="font-size:9px;max-width:140px;overflow:hidden;text-overflow:ellipsis">${c.emisor}</td>
-      <td style="font-size:9px">${match
-        ? `<span style="color:var(--grn)">✓ Suc.${match.sky.suc} ${match.sky.fecha}</span>`
-        : '<span style="color:var(--m2)">—</span>'}</td>
-      <td>${_ctrBadge(seg.estado)}</td>
+      <td>
+        ${_ctrBadge(seg.estado)}
+        <button onclick="buscarCtrEnSky('${c.fechaTx}','')" title="Buscar en Revisión Manual"
+          style="margin-top:3px;background:none;border:1px solid var(--b2);border-radius:3px;
+            color:var(--cyn);font-size:8px;cursor:pointer;padding:1px 6px"
+          onmouseover="this.style.borderColor='var(--cyn)'"
+          onmouseout="this.style.borderColor='var(--b2)'">🔍 SKY</button>
+      </td>
     </tr>`;
   }).join('');
 }
