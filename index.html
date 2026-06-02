@@ -179,7 +179,7 @@ input[type=file]{display:none}
   padding:1px 5px;border-radius:3px;font-size:7px}
 .tb.active .cnt{background:rgba(56,189,248,.15);color:var(--cyn)}
 .tab-body{display:none;flex:1;min-height:0}
-.tab-body.active{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
+.tab-body.active{display:flex;flex-direction:column;flex:1;min-height:0}
 
 /* ══ DASHBOARD ═══════════════════════════════════════ */
 .dashboard{
@@ -240,7 +240,7 @@ input[type=file]{display:none}
 .log-line.warn{color:var(--yel)}.log-line.err{color:var(--red)}
 
 /* ══ TABLE ═══════════════════════════════════════════ */
-.tbl-wrap{flex:1;overflow:auto;min-height:0}
+.tbl-wrap{flex:1;overflow:auto;min-height:0;width:0}
 table{width:max-content;min-width:100%;border-collapse:collapse;font-size:10px}
 thead{position:sticky;top:0;z-index:5}
 thead th{
@@ -453,7 +453,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 }
 .btn-reprocesar:not(:disabled):hover{border-color:var(--cyn);color:var(--cyn)}
 .btn-reprocesar:disabled{opacity:.35;cursor:not-allowed}
-.cor-table-wrap{flex:1;overflow:auto;min-height:0}
+.cor-table-wrap{flex:1;overflow:auto;min-height:0;width:0}
 
 /* ══ DIFERENCIAS ═════════════════════════════════════ */
 .dif-layout{display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden}
