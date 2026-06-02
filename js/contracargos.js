@@ -349,20 +349,41 @@ function renderModuloContracargos() {
       <div class="tab-body active" id="ctr-seguimiento" style="flex-direction:column;flex:1;min-height:0">
         <div class="cor-hdr-bar" style="border-left:3px solid var(--acc)">
           <span class="cor-hdr-title">Seguimiento de contracargos</span>
-          <span class="cor-stats">${all.length} total · ${fmtARS(totalMonto)} en riesgo</span>
-          <div style="margin-left:auto;display:flex;gap:6px">
-            <select class="filter-sel" id="ctr-flt-est" onchange="renderTablaCtrSeguimiento()" style="font-size:8px">
-              <option value="">Todos los estados</option>
-              ${CTR_EST_LIST.map(e=>`<option value="${e}">${e}</option>`).join('')}
-            </select>
-            <select class="filter-sel" id="ctr-flt-proc" onchange="renderTablaCtrSeguimiento()" style="font-size:8px">
-              <option value="">Ambas proc.</option>
-              <option value="FISERV">FISERV</option>
-              <option value="GETPOS">GETPOS</option>
-            </select>
+          <span class="cor-stats" id="ctr-seg-stats">${all.length} total · ${fmtARS(totalMonto)} en riesgo</span>
+          <div style="margin-left:auto">
             <button class="dl-btn" style="background:#14532d;color:#86efac"
               onclick="exportarContracargos()">⬇ Exportar</button>
           </div>
+        </div>
+        <!-- Barra de filtros -->
+        <div class="filter-bar" style="flex-shrink:0">
+          <span class="filter-lbl">Filtrar</span>
+          <select class="filter-sel" id="ctr-flt-proc" onchange="renderTablaCtrSeguimiento()">
+            <option value="">Ambas proc.</option>
+            <option value="FISERV">FISERV</option>
+            <option value="GETPOS">GETPOS</option>
+          </select>
+          <select class="filter-sel" id="ctr-flt-tarj" onchange="renderTablaCtrSeguimiento()">
+            <option value="">Todas las tarjetas</option>
+            ${[...new Set(all.map(c=>c.tarjeta).filter(Boolean))].sort()
+              .map(t=>`<option value="${t}">${t}</option>`).join('')}
+          </select>
+          <select class="filter-sel" id="ctr-flt-est" onchange="renderTablaCtrSeguimiento()">
+            <option value="">Todos los estados</option>
+            ${CTR_EST_LIST.map(e=>`<option value="${e}">${e}</option>`).join('')}
+          </select>
+          <select class="filter-sel" id="ctr-flt-venc" onchange="renderTablaCtrSeguimiento()">
+            <option value="">Todos los venc.</option>
+            <option value="vencido">🔴 Vencidos</option>
+            <option value="urgente">🟠 ≤7 días</option>
+            <option value="proximo">🟡 ≤14 días</option>
+            <option value="ok">🟢 OK</option>
+          </select>
+          <input class="filter-inp" id="ctr-flt-search"
+            placeholder="Tarjeta, motivo, notas, ID..."
+            oninput="renderTablaCtrSeguimiento()" style="width:180px">
+          <button class="btn-clear" onclick="limpiarFiltrosCtr()">✕ Limpiar</button>
+          <span class="filter-stats" id="ctr-filter-stats" style="margin-left:auto"></span>
         </div>
         <div class="tbl-wrap" id="ctr-seg-wrap">
           <table id="tbl-ctr-seg"><thead></thead><tbody></tbody></table>
@@ -373,7 +394,23 @@ function renderModuloContracargos() {
       <div class="tab-body" id="ctr-fis" style="flex-direction:column;flex:1;min-height:0">
         <div class="cor-hdr-bar" style="border-left:3px solid var(--acc)">
           <span class="cor-hdr-title" style="color:var(--acc)">Contracargos FISERV</span>
-          <span class="cor-stats">${_CTR_FIS.length} registros · ${fmtARS(_CTR_FIS.reduce((s,c)=>s+c.importe,0))}</span>
+          <span class="cor-stats" id="ctr-fis-stats">${_CTR_FIS.length} registros · ${fmtARS(_CTR_FIS.reduce((s,c)=>s+c.importe,0))}</span>
+        </div>
+        <div class="filter-bar" style="flex-shrink:0">
+          <span class="filter-lbl">Filtrar</span>
+          <select class="filter-sel" id="ctr-fis-tarj" onchange="_renderTablaCtrFis()">
+            <option value="">Todas las tarjetas</option>
+            ${[...new Set(_CTR_FIS.map(c=>c.tarjeta).filter(Boolean))].sort()
+              .map(t=>`<option value="${t}">${t}</option>`).join('')}
+          </select>
+          <select class="filter-sel" id="ctr-fis-cod" onchange="_renderTablaCtrFis()">
+            <option value="">Todos los motivos</option>
+            ${[...new Set(_CTR_FIS.map(c=>c.motivoCodigo).filter(Boolean))].sort()
+              .map(m=>`<option value="${m}">${m}</option>`).join('')}
+          </select>
+          <input class="filter-inp" id="ctr-fis-search" placeholder="Nro tarjeta, cupón, motivo..." oninput="_renderTablaCtrFis()" style="width:180px">
+          <button class="btn-clear" onclick="document.getElementById('ctr-fis-tarj').value='';document.getElementById('ctr-fis-cod').value='';document.getElementById('ctr-fis-search').value='';_renderTablaCtrFis()">✕</button>
+          <span class="filter-stats" id="ctr-fis-fstats" style="margin-left:auto"></span>
         </div>
         <div class="tbl-wrap"><table id="tbl-ctr-fis"><thead></thead><tbody></tbody></table></div>
       </div>
@@ -382,7 +419,30 @@ function renderModuloContracargos() {
       <div class="tab-body" id="ctr-gp" style="flex-direction:column;flex:1;min-height:0">
         <div class="cor-hdr-bar" style="border-left:3px solid var(--grn)">
           <span class="cor-hdr-title" style="color:var(--grn)">Contracargos GETPOS</span>
-          <span class="cor-stats">${_CTR_GP.length} disputas · ${fmtARS(_CTR_GP.reduce((s,c)=>s+c.importe,0))}</span>
+          <span class="cor-stats" id="ctr-gp-stats">${_CTR_GP.length} disputas · ${fmtARS(_CTR_GP.reduce((s,c)=>s+c.importe,0))}</span>
+        </div>
+        <div class="filter-bar" style="flex-shrink:0">
+          <span class="filter-lbl">Filtrar</span>
+          <select class="filter-sel" id="ctr-gp-marca" onchange="_renderTablaCtrGp()">
+            <option value="">Todas las marcas</option>
+            ${[...new Set(_CTR_GP.map(c=>c.tarjeta).filter(Boolean))].sort()
+              .map(t=>`<option value="${t}">${t}</option>`).join('')}
+          </select>
+          <select class="filter-sel" id="ctr-gp-est" onchange="_renderTablaCtrGp()">
+            <option value="">Todos los estados</option>
+            ${[...new Set(_CTR_GP.map(c=>c.estatusProc).filter(Boolean))].sort()
+              .map(e=>`<option value="${e}">${e}</option>`).join('')}
+          </select>
+          <select class="filter-sel" id="ctr-gp-venc" onchange="_renderTablaCtrGp()">
+            <option value="">Todos los venc.</option>
+            <option value="vencido">🔴 Vencidos</option>
+            <option value="urgente">🟠 ≤7 días</option>
+            <option value="proximo">🟡 ≤14 días</option>
+            <option value="ok">🟢 OK</option>
+          </select>
+          <input class="filter-inp" id="ctr-gp-search" placeholder="Auth, ARN, motivo, emisor..." oninput="_renderTablaCtrGp()" style="width:180px">
+          <button class="btn-clear" onclick="['ctr-gp-marca','ctr-gp-est','ctr-gp-venc','ctr-gp-search'].forEach(id=>{const e=document.getElementById(id);if(e)e.value=''});_renderTablaCtrGp()">✕</button>
+          <span class="filter-stats" id="ctr-gp-fstats" style="margin-left:auto"></span>
         </div>
         <div class="tbl-wrap"><table id="tbl-ctr-gp"><thead></thead><tbody></tbody></table></div>
       </div>
@@ -405,15 +465,60 @@ function renderModuloContracargos() {
   if (urgentes.length + vencidos.length > 0) _renderTablaCtrAlertas(urgentes, vencidos);
 }
 
+function limpiarFiltrosCtr() {
+  ['ctr-flt-proc','ctr-flt-tarj','ctr-flt-est','ctr-flt-venc','ctr-flt-search'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  renderTablaCtrSeguimiento();
+}
+
 // ── Tabla de seguimiento unificada ──────────────────────────────────
 function renderTablaCtrSeguimiento() {
-  const tbl    = document.getElementById('tbl-ctr-seg'); if (!tbl) return;
-  const fltEst  = document.getElementById('ctr-flt-est')?.value  || '';
-  const fltProc = document.getElementById('ctr-flt-proc')?.value || '';
+  const tbl = document.getElementById('tbl-ctr-seg'); if (!tbl) return;
 
-  let filas = _allCtr();
-  if (fltEst)  filas = filas.filter(c => _getCtrSeg(c.id).estado === fltEst);
-  if (fltProc) filas = filas.filter(c => c.proc === fltProc);
+  const fltProc   = document.getElementById('ctr-flt-proc')?.value   || '';
+  const fltTarj   = document.getElementById('ctr-flt-tarj')?.value   || '';
+  const fltEst    = document.getElementById('ctr-flt-est')?.value    || '';
+  const fltVenc   = document.getElementById('ctr-flt-venc')?.value   || '';
+  const fltSearch = (document.getElementById('ctr-flt-search')?.value || '').toLowerCase().trim();
+
+  const all = _allCtr();
+  let filas = all;
+
+  if (fltProc)   filas = filas.filter(c => c.proc === fltProc);
+  if (fltTarj)   filas = filas.filter(c => c.tarjeta === fltTarj);
+  if (fltEst)    filas = filas.filter(c => _getCtrSeg(c.id).estado === fltEst);
+  if (fltVenc) {
+    filas = filas.filter(c => {
+      const d = _diasHasta(c.fechaVenc);
+      if (fltVenc === 'vencido')  return d !== null && d < 0;
+      if (fltVenc === 'urgente')  return d !== null && d >= 0 && d <= 7;
+      if (fltVenc === 'proximo')  return d !== null && d >= 0 && d <= 14;
+      if (fltVenc === 'ok')       return d === null || d > 14;
+      return true;
+    });
+  }
+  if (fltSearch) {
+    filas = filas.filter(c => {
+      const seg = _getCtrSeg(c.id);
+      const hay = [c.nroTarjeta||'', c.tarjeta, c.motivo, c.motivoDesc||'',
+                   c.id, c.aut||'', seg.notas||'', c.emisor||'']
+        .join(' ').toLowerCase();
+      return hay.includes(fltSearch);
+    });
+  }
+
+  // Stats
+  const stats = document.getElementById('ctr-filter-stats');
+  if (stats) stats.textContent = filas.length < all.length
+    ? `Mostrando ${filas.length} de ${all.length}` : '';
+  const segStats = document.getElementById('ctr-seg-stats');
+  if (segStats) {
+    const montoFiltrado = filas.reduce((s,c)=>s+c.importe,0);
+    segStats.innerHTML = filas.length < all.length
+      ? `${filas.length} de ${all.length} · ${fmtARS(montoFiltrado)} en riesgo`
+      : `${all.length} total · ${fmtARS(montoFiltrado)} en riesgo`;
+  }
 
   const HDR = ['Estado','Proc.','Fecha Tx','Vencimiento','Tarjeta','Nro Tarjeta','Motivo','Monto',
                'Monto recuperado','Notas','Fecha respuesta',''];
@@ -508,10 +613,37 @@ function resetearCtr(id) {
 // ── Tabla FISERV ─────────────────────────────────────────────────────
 function _renderTablaCtrFis() {
   const tbl = document.getElementById('tbl-ctr-fis'); if (!tbl) return;
-  const HDR = ['Fecha Tx','Fecha Debitado','Fecha Debitado','Terminal','Tarjeta','Nro Tarjeta',
+
+  const fTarj   = document.getElementById('ctr-fis-tarj')?.value   || '';
+  const fCod    = document.getElementById('ctr-fis-cod')?.value    || '';
+  const fSearch = (document.getElementById('ctr-fis-search')?.value || '').toLowerCase().trim();
+
+  let filas = _CTR_FIS;
+  if (fTarj)   filas = filas.filter(c => c.tarjeta === fTarj);
+  if (fCod)    filas = filas.filter(c => c.motivoCodigo === fCod);
+  if (fSearch) filas = filas.filter(c =>
+    [c.nroTarjeta||'', c.cupon, c.lote, c.motivoDesc||'', c.motivo||'', c.terminal||'']
+      .join(' ').toLowerCase().includes(fSearch));
+
+  const fStats = document.getElementById('ctr-fis-fstats');
+  if (fStats) fStats.textContent = filas.length < _CTR_FIS.length
+    ? `Mostrando ${filas.length} de ${_CTR_FIS.length}` : '';
+  const hdrStats = document.getElementById('ctr-fis-stats');
+  if (hdrStats) hdrStats.textContent =
+    `${filas.length}${filas.length<_CTR_FIS.length?' de '+_CTR_FIS.length:''} registros · ${fmtARS(filas.reduce((s,c)=>s+c.importe,0))}`;
+
+  const HDR = ['Fecha Tx','Fecha Debitado','Fecha Present.','Terminal','Tarjeta','Nro Tarjeta',
                'Lote','Cupón','Cuotas','Importe','Motivo cód.','Detalle motivo','Arancel','Estado'];
   tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
-  tbl.querySelector('tbody').innerHTML = _CTR_FIS.map(c => {
+
+  if (!filas.length) {
+    tbl.querySelector('tbody').innerHTML =
+      `<tr><td colspan="${HDR.length}" style="padding:20px;text-align:center;color:var(--m2);font-size:10px">
+        Sin resultados para los filtros seleccionados.</td></tr>`;
+    return;
+  }
+
+  tbl.querySelector('tbody').innerHTML = filas.map(c => {
     const seg = _getCtrSeg(c.id);
     const ultimos4 = c.nroTarjeta ? c.nroTarjeta.replace(/[^0-9]/g,'').slice(-4) : '';
     return `<tr>
@@ -545,10 +677,48 @@ function _renderTablaCtrFis() {
 // ── Tabla GETPOS ─────────────────────────────────────────────────────
 function _renderTablaCtrGp() {
   const tbl = document.getElementById('tbl-ctr-gp'); if (!tbl) return;
+
+  const fMarca  = document.getElementById('ctr-gp-marca')?.value  || '';
+  const fEst    = document.getElementById('ctr-gp-est')?.value    || '';
+  const fVenc   = document.getElementById('ctr-gp-venc')?.value   || '';
+  const fSearch = (document.getElementById('ctr-gp-search')?.value || '').toLowerCase().trim();
+
+  let filas = _CTR_GP;
+  if (fMarca) filas = filas.filter(c => c.tarjeta === fMarca);
+  if (fEst)   filas = filas.filter(c => c.estatusProc === fEst);
+  if (fVenc) {
+    filas = filas.filter(c => {
+      const d = _diasHasta(c.fechaVenc);
+      if (fVenc === 'vencido') return d !== null && d < 0;
+      if (fVenc === 'urgente') return d !== null && d >= 0 && d <= 7;
+      if (fVenc === 'proximo') return d !== null && d >= 0 && d <= 14;
+      if (fVenc === 'ok')      return d === null || d > 14;
+      return true;
+    });
+  }
+  if (fSearch) filas = filas.filter(c =>
+    [c.aut||'', c.arn||'', c.motivo||'', c.emisor||'', c.id||'', c.tarjeta||'']
+      .join(' ').toLowerCase().includes(fSearch));
+
+  const fStats = document.getElementById('ctr-gp-fstats');
+  if (fStats) fStats.textContent = filas.length < _CTR_GP.length
+    ? `Mostrando ${filas.length} de ${_CTR_GP.length}` : '';
+  const hdrStats = document.getElementById('ctr-gp-stats');
+  if (hdrStats) hdrStats.textContent =
+    `${filas.length}${filas.length<_CTR_GP.length?' de '+_CTR_GP.length:''} disputas · ${fmtARS(filas.reduce((s,c)=>s+c.importe,0))}`;
+
   const HDR = ['Fecha Tx','Vencimiento','Código disputa','Marca','Auth.','ARN',
                'Monto','Estatus proc.','Motivo','Emisor','Estado'];
   tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
-  tbl.querySelector('tbody').innerHTML = _CTR_GP.map(c => {
+
+  if (!filas.length) {
+    tbl.querySelector('tbody').innerHTML =
+      `<tr><td colspan="${HDR.length}" style="padding:20px;text-align:center;color:var(--m2);font-size:10px">
+        Sin resultados para los filtros seleccionados.</td></tr>`;
+    return;
+  }
+
+  tbl.querySelector('tbody').innerHTML = filas.map(c => {
     const seg    = _getCtrSeg(c.id);
     const d      = _diasHasta(c.fechaVenc);
     const rowCls = d !== null && d < 0 ? 'row-mal' : d !== null && d <= 7 ? 'row-com' : '';
