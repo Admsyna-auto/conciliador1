@@ -158,6 +158,7 @@ function buildSnapshot() {
     corregidas:       { ...CORREGIDAS },
     comErradoMarcas:  { ...(typeof COM_ERRADO_MARCAS !== 'undefined' ? COM_ERRADO_MARCAS : {}) },
     logAudit:         [...LOG_AUDIT],
+    ctrSeguimiento:   { ...(typeof CTR_SEGUIMIENTO !== 'undefined' ? CTR_SEGUIMIENTO : {}) },
   };
 }
 
@@ -198,6 +199,7 @@ function restaurarSnapshot(snap) {
     CORREGIDAS = snap.corregidas || {};
     if (typeof COM_ERRADO_MARCAS !== 'undefined') Object.assign(COM_ERRADO_MARCAS, snap.comErradoMarcas || {});
     LOG_AUDIT  = snap.logAudit   || [];
+    if (typeof CTR_SEGUIMIENTO !== 'undefined') Object.assign(CTR_SEGUIMIENTO, snap.ctrSeguimiento || {});
     return true;
   } catch(e) {
     console.error('Error restaurando snapshot:', e);

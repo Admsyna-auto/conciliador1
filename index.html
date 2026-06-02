@@ -740,6 +740,9 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   <button class="mod-btn" id="mbtn-dashboard" onclick="showMod('dashboard',this)">
     6 · Dashboard
   </button>
+  <button class="mod-btn" id="mbtn-ctr" onclick="showMod('ctr',this)">
+    7 · Contracargos <span class="cnt" id="mcnt-ctr">—</span>
+  </button>
 </div>
 
 <div class="app-body">
@@ -786,6 +789,21 @@ tr.row-int td{background:rgba(52,211,153,.02)}
         <span class="fc-name">Bajada comercial</span><span class="fc-req opt">OPC</span></div>
       <div class="fc-st" id="st-baj">Opcional</div>
     </label><input type="file" id="i-baj" accept=".xlsx,.xls" onchange="loadFile(this,'baj')"></div>
+  </div>
+
+  <div class="sb-sec">
+    <div class="sb-lbl">Contracargos</div>
+    <div class="fc opt" id="fc-ctr-fis"><label for="i-ctr-fis">
+      <div class="fc-top"><div class="fc-dot d-fis">C</div>
+        <span class="fc-name">CTR FISERV</span><span class="fc-req opt">OPC</span></div>
+      <div class="fc-st" id="st-ctr-fis">Opcional</div>
+    </label><input type="file" id="i-ctr-fis" accept=".xlsx,.xls" onchange="loadContracargos(this,'fis')"></div>
+
+    <div class="fc opt" id="fc-ctr-gp"><label for="i-ctr-gp">
+      <div class="fc-top"><div class="fc-dot d-gp">C</div>
+        <span class="fc-name">CTR GETPOS</span><span class="fc-req opt">OPC</span></div>
+      <div class="fc-st" id="st-ctr-gp">Opcional</div>
+    </label><input type="file" id="i-ctr-gp" accept=".xlsx,.xls" onchange="loadContracargos(this,'gp')"></div>
   </div>
 
   <div class="sb-sec">
@@ -1506,6 +1524,21 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 
   <!-- ── LOG AUDITORÍA (pestaña en revisión) ─────────── -->
 
+  <!-- ── MÓDULO 7: CONTRACARGOS ─────────────────────────── -->
+  <div class="mod-panel" id="mod-ctr">
+    <div id="mod-ctr-inner" style="display:flex;flex:1;min-height:0;overflow:hidden;flex-direction:column">
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+        height:100%;gap:14px;color:var(--m2);text-align:center;padding:40px">
+        <div style="font-size:42px;opacity:.15">🛡</div>
+        <div style="font-family:var(--head);font-size:16px;font-weight:700;color:var(--txt);opacity:.4">Módulo de Contracargos</div>
+        <p style="font-size:10px;max-width:400px;line-height:1.8">
+          Cargá los archivos de contracargos de <b style="color:var(--acc)">FISERV</b>
+          y/o <b style="color:var(--grn)">GETPOS</b> desde el panel izquierdo.
+        </p>
+      </div>
+    </div>
+  </div>
+
   <!-- DOWNBAR -->
   <div class="dl-bar" id="dl-bar">
     <div class="dl-info"><b id="dl-resumen">—</b></div>
@@ -1539,6 +1572,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 <script src="js/diferencias.js"></script>
 <script src="js/cobros.js"></script>
 <script src="js/conciliador.js"></script>
+<script src="js/contracargos.js"></script>
 <script src="js/dashboard.js"></script>
 <script>
 
@@ -1555,6 +1589,7 @@ function showMod(mod, btn) {
   if (mod === 'cruce' && RESULTADO.length) { renderTablaUrgente(); renderTablaRefacturado(); }
   if (mod === 'dashboard')   { renderDashboard(); }
   if (mod === 'cobros')      { renderModuloCobros(); }
+  if (mod === 'ctr')         { renderModuloContracargos(); }
 }
 
 // ══ SIDEBAR EQUIV ══════════════════════════════════════

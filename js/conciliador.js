@@ -1159,6 +1159,38 @@ function loadLiquidaciones(input) {
   r.readAsArrayBuffer(file);
 }
 
+// ── CARGA CONTRACARGOS ────────────────────────────────────────────
+function loadContracargos(input, tipo) {
+  const file = input.files[0]; if (!file) return;
+  const fc = document.getElementById(`fc-ctr-${tipo}`);
+  const st = document.getElementById(`st-ctr-${tipo}`);
+  if (st) { st.textContent = '↻ Cargando...'; st.className = 'fc-st'; }
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      if (tipo === 'fis') {
+        parseContrarcargosFiserv(wb);
+        const n = _CTR_FIS.length;
+        if (fc) fc.classList.add('ok');
+        if (st) { st.textContent = `✓ ${file.name} (${n} registros)`; st.className = 'fc-st ok'; }
+      } else {
+        parseContracargosGetpos(wb);
+        const n = _CTR_GP.length;
+        if (fc) fc.classList.add('ok');
+        if (st) { st.textContent = `✓ ${file.name} (${n} disputas)`; st.className = 'fc-st ok'; }
+      }
+      if (document.getElementById('mod-ctr')?.closest('.mod-panel.active')) {
+        renderModuloContracargos();
+      }
+    } catch(err) {
+      if (st) { st.textContent = '✗ Error al leer'; st.className = 'fc-st'; }
+      console.error('[CTR] Error:', err);
+    }
+  };
+  r.readAsArrayBuffer(file);
+}
+
 function checkReady() {
   const ok=FILES.sky&&FILES.fis&&FILES.gp&&FILES.ter;
   document.getElementById('run-btn').disabled=!ok;
