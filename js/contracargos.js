@@ -54,6 +54,21 @@ function _vencBadge(fechaStr) {
     border:1px solid ${color}55;background:${color}18" title="${fechaStr}">${label}</span>`;
 }
 
+// ── Parsear importe de contracargo (FISERV guarda como float US: -714406.35)
+// Si tiene coma → formato argentino "1.234.567,89" → quitar puntos, reemplazar coma
+// Sin coma → float numérico "714406.35" → usar directo (NO quitar el punto decimal)
+function _parseCtrImporte(raw) {
+  if (raw === null || raw === undefined || raw === '') return 0;
+  const s = String(raw).trim().replace(/\s/g,'');
+  let n;
+  if (s.includes(',')) {
+    n = parseFloat(s.replace(/\./g,'').replace(',','.'));
+  } else {
+    n = parseFloat(s.replace(/[^0-9.-]/g,''));
+  }
+  return Math.abs(isNaN(n) ? 0 : n);
+}
+
 // ── Limpiar texto con _x000D_ y "undefined - " ─────────────────────
 function _cleanCtrText(s) {
   return String(s || '').replace(/_x000D_/g,'').replace(/^undefined\s*-\s*/i,'').trim();
@@ -110,8 +125,7 @@ function parseContrarcargosFiserv(wb) {
   const g = (r, k) => (k && r[k] !== undefined) ? r[k] : null;
 
   _CTR_FIS = rows.map((r, i) => {
-    const impRaw   = String(g(r, K.importe) || '0').replace(/\./g,'').replace(',','.');
-    const importe  = Math.abs(parseFloat(impRaw) || 0);
+    const importe  = _parseCtrImporte(g(r, K.importe));
     const lot      = norm(g(r, K.lote));
     const cup      = norm(g(r, K.cupon));
     const motDet   = _parseMotivoFis(g(r, K.detalle));
@@ -179,8 +193,7 @@ function parseContracargosGetpos(wb) {
   const g = (r, k) => (k && r[k] !== undefined) ? r[k] : null;
 
   _CTR_GP = rows.map((r, i) => {
-    const montoRaw = String(g(r, K.monto) || '0').replace(/\./g,'').replace(',','.');
-    const monto    = Math.abs(parseFloat(montoRaw) || 0);
+    const monto    = _parseCtrImporte(g(r, K.monto));
 
     return {
       id:          String(g(r, K.codigoDisp) || `GP_${i}`).trim(),
