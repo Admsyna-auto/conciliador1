@@ -1308,16 +1308,15 @@ function loadContracargos(input, tipo) {
 }
 
 function checkReady() {
-  // Base siempre requerida
+  // Solo Skylab + Terminales son requeridos; las procesadoras son opcionales
+  // (sin archivos de proc, todas las ops quedan SIN MATCH — es un estado válido)
   const base = FILES.sky && FILES.ter;
-  // Al menos una procesadora habilitada con su archivo
-  const fisFok = isProcEnabled('FISERV')    && !!FILES.fis;
-  const gpOk   = isProcEnabled('GETPOS')    && !!FILES.gp;
-  const gocOk  = isProcEnabled('GOCUOTAS')  &&
-    typeof _GOC_PAGOS !== 'undefined' && _GOC_PAGOS.length > 0;
+  const ok   = !!base;
 
-  const procOk = fisFok || gpOk || gocOk;
-  const ok = base && procOk;
+  const fisFok = isProcEnabled('FISERV')   && !!FILES.fis;
+  const gpOk   = isProcEnabled('GETPOS')   && !!FILES.gp;
+  const gocOk  = isProcEnabled('GOCUOTAS') &&
+    typeof _GOC_PAGOS !== 'undefined' && _GOC_PAGOS.length > 0;
 
   document.getElementById('run-btn').disabled = !ok;
   document.getElementById('hdr-chip-files')?.remove();
@@ -1343,9 +1342,8 @@ function checkReady() {
   // Mensaje de lo que falta
   if (!ok) {
     const miss = [];
-    if (!FILES.sky)  miss.push('Skylab');
-    if (!FILES.ter)  miss.push('Terminales');
-    if (!procOk)     miss.push('al menos 1 procesadora');
+    if (!FILES.sky) miss.push('Skylab');
+    if (!FILES.ter) miss.push('Terminales');
     document.getElementById('save-indicator').textContent =
       `⚠ Falta: ${miss.join(', ')}`;
   } else {
