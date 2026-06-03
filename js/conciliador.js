@@ -468,17 +468,39 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
     }
 
     // ── Go Cuotas: match por Número de Orden O por Referencia Externa
-    // Suc 251 y 097 usan Referencia Externa como cupón en Skylab
+    // Suc 251 y 097 usan Referencia Externa como cupón en Skylab.
+    // Siempre validamos que el monto no difiera más del 50% para evitar
+    // matches incorrectos (mismo nro. de orden en distintos períodos, etc.)
     if (s.esGOCUOTAS && gocEnabled && (Object.keys(idxGoC).length || Object.keys(idxGoCRef).length)) {
-      const cup = norm(s.cupon);
+      const cup      = norm(s.cupon);
+      const skyMonto = Math.abs(s.monto);
+
+      const _validarMonto = (hit) => {
+        if (!hit) return false;
+        const gocMonto = Math.abs(hit.importe);
+        if (skyMonto === 0 || gocMonto === 0) return true;
+        const ratio = Math.max(skyMonto, gocMonto) / Math.min(skyMonto, gocMonto);
+        return ratio <= 1.5; // tolerancia del 50%
+      };
+
       // Primero buscar por Número de Orden (mayoría de sucursales)
       let hit = idxGoC[cup];
       let met = 'GoC:Orden';
-      // Si no encontró, buscar por Referencia Externa (suc 251, 097 y similares)
-      if (!hit && idxGoCRef[cup]) {
-        hit = idxGoCRef[cup];
-        met = 'GoC:RefExt';
+
+      if (hit && !_validarMonto(hit)) {
+        // Match por orden encontrado pero monto muy diferente → buscar por RefExt
+        hit = null;
       }
+
+      // Si no encontró por orden (o monto no coincide), buscar por Referencia Externa
+      if (!hit && idxGoCRef[cup]) {
+        const hitRef = idxGoCRef[cup];
+        if (_validarMonto(hitRef)) {
+          hit = hitRef;
+          met = 'GoC:RefExt';
+        }
+      }
+
       if (hit) return armarFilaGoC(s, hit, procEsp, met);
     }
 
