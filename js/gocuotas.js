@@ -645,9 +645,9 @@ function _renderGocTablaRes(tipo, filasIn) {
   if (fltSuc)  rows = rows.filter(r => r.sky?.suc === fltSuc);
   if (fltPlan) rows = rows.filter(r => r.sky?.plan === fltPlan);
   if (fltImei) {
-    // El filtro IMEI solo aplica a filas con plan GO CELULAR
+    // El filtro IMEI aplica a filas cruzadas con GOCELULAR o con plan GO CELULAR
     rows = rows.filter(r => {
-      const esCel = /CELULAR|GOCELU/i.test(r.sky?.plan||'');
+      const esCel = r.procEncontrada === 'GOCELULAR' || /CELULAR|GOCELU/i.test(r.sky?.plan||'');
       if (!esCel) return fltImei !== 'ok'; // no celular → no tiene IMEI → excluir si filtro=ok
       const vArr = ventaIdx[norm(r.sky?.cupon||'')] || ventaIdx[norm(r.sky?.asiento||'')] || [];
       const hasImei = vArr.some(v => v.trazabilidad && v.trazabilidad !== '0' && v.trazabilidad !== '-');
@@ -678,8 +678,9 @@ function _renderGocTablaRes(tipo, filasIn) {
     const ok   = isOK(r);
     const stColor = ok ? 'var(--grn)' : r.estado==='SIN MATCH' ? 'var(--red)' : 'var(--yel)';
 
-    // Artículos/IMEI SOLO para plan GO CELULAR
-    const esCelular = /CELULAR|GOCELU/i.test(s?.plan||'');
+    // Artículos/IMEI: para cualquier operación cruzada con el CSV de Go Celular
+    // O para operaciones con plan GO CELULAR aunque hayan cruzado con GoC estándar
+    const esCelular = r.procEncontrada === 'GOCELULAR' || /CELULAR|GOCELU/i.test(s?.plan||'');
     let ventaCell = '';
     if (esCelular) {
       const cup    = norm(s?.cupon||'');
@@ -807,7 +808,7 @@ function exportarGoCuotas(tipo) {
         r.proc?.fecha||'',
       ];
 
-      const esCelular = /CELULAR|GOCELU/i.test(s?.plan||'');
+      const esCelular = r.procEncontrada === 'GOCELULAR' || /CELULAR|GOCELU/i.test(s?.plan||'');
       if (esCelular) {
         const cup    = norm(s?.cupon||'');
         const ast    = norm(s?.asiento||'');
