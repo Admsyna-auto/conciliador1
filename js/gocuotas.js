@@ -768,15 +768,25 @@ function exportarGoCuotas(tipo) {
     const ventaIdx = window._GOC_VENTAS_IDX || {};
 
     HDR = ['Estado cruce','Método','Fuente GoC','Nro. Asiento SKY','Fecha venta',
-           'Sucursal','Vendedor','Plan','Nro. Orden/Cupon SKY',
-           'Order ID GoC','Cuotas GoC',
-           'Importe SKY','Monto proc. GoC','Fecha pago GoC',
+           'Sucursal','Vendedor','Plan','Cuotas SKY','Nro. Orden/Cupon SKY',
+           'Order ID GoC','Cuotas GoC','Dif. Cuotas',
+           'Importe SKY','Monto proc. GoC','Dif. Monto','Fecha pago GoC',
            'Artículo','IMEI / Trazabilidad'];
 
     // Una fila por artículo si es Go Celular; una fila por operación si no
     const rows = [];
     filas.forEach(r => {
       const s    = r.sky;
+      // Cuotas: extraer número del plan SKY ("6 CUOTAS" → 6) o usar sky.cuotas
+      const cuotasSky = s?.cuotas || parseInt(String(s?.plan||'').match(/(\d+)/)?.[1]||'0') || 0;
+      const cuotasGoC = parseInt(r.proc?.cuotas) || 0;
+      const difCuotas = (cuotasSky && cuotasGoC) ? cuotasGoC - cuotasSky : '';
+
+      // Monto
+      const montoSky  = Math.abs(s?.monto||0);
+      const montoGoC  = r.proc ? Math.abs(r.proc.monto||0) : null;
+      const difMonto  = montoGoC !== null ? +(montoGoC - montoSky).toFixed(2) : '';
+
       const base = [
         r.estado,
         r.metodo||'',
@@ -786,11 +796,14 @@ function exportarGoCuotas(tipo) {
         s?.suc||'',
         s?.vendedor||'',
         s?.plan||'',
+        cuotasSky || '',                       // Cuotas SKY
         s?.cupon||'',                          // Nro Orden/Cupon en SKY
         r.proc?.ticket || r.proc?.cupon || '', // Order ID del CSV GoC
-        r.proc?.cuotas || '',                  // Cuotas según CSV GoC
-        Math.abs(s?.monto||0),
-        r.proc ? Math.abs(r.proc.monto||0) : '',
+        cuotasGoC || '',                       // Cuotas según CSV GoC
+        difCuotas,                             // Diferencia de cuotas
+        montoSky,
+        montoGoC ?? '',
+        difMonto,                              // Diferencia de monto
         r.proc?.fecha||'',
       ];
 
