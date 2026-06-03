@@ -3,6 +3,21 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const APP_VERSION = '1.0.0';
+
+// ── Procesadoras habilitadas (se persiste en localStorage) ──────────
+let PROCS_ENABLED = (function(){
+  try {
+    const saved = JSON.parse(localStorage.getItem('procs_enabled') || '{}');
+    return { FISERV: true, GETPOS: true, GOCUOTAS: false, ...saved };
+  } catch { return { FISERV: true, GETPOS: true, GOCUOTAS: false }; }
+})();
+
+function toggleProc(id) {
+  PROCS_ENABLED[id] = !PROCS_ENABLED[id];
+  localStorage.setItem('procs_enabled', JSON.stringify(PROCS_ENABLED));
+}
+
+function isProcEnabled(id) { return PROCS_ENABLED[id] !== false; }
 const DB_NAME     = 'ConciliadorDB';
 const DB_VERSION  = 2;   // v2: added 'periodos' store
 

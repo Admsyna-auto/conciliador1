@@ -147,7 +147,8 @@ function parseSkylab(wb) {
       })(),
       montoN:   normMonto(r['Venta Bruta']),
       neto:     parseFloat(r['Neto a Cobrar'])||0,
-      esGETPos: String(r['Tarjeta']??'').trim().toUpperCase()==='GETPOS',
+      esGETPos:    String(r['Tarjeta']??'').trim().toUpperCase()==='GETPOS',
+      esGOCUOTAS:  String(r['Tarjeta']??'').trim().toUpperCase()==='GO CUOTAS',
       esNeg:    (parseFloat(String(r['Venta Bruta']||'').replace(/,/g,''))||0) < 0,
       integrado,
     };
@@ -378,13 +379,20 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
   const idxGN=buildIndexGp(gpNorm),   idxGR=buildIndexGp(gpRev);
   const used=new Set();
 
-  return skyRows.map(s => {
-    // ── INTEGRADO: se cruza igual que las demás (como en Python)
-    // Solo se reporta el campo integrado=true para referencia, no se excluye del cruce
+  // Índice Go Cuotas: orden → pago (se usa si _GOC_PAGOS está cargado)
+  const idxGoC = {};
+  if (typeof _GOC_PAGOS !== 'undefined' && _GOC_PAGOS.length) {
+    _GOC_PAGOS.forEach(p => { idxGoC[p.orden] = p; });
+  }
+  const gocEnabled = typeof PROCS_ENABLED !== 'undefined'
+    ? (PROCS_ENABLED.GOCUOTAS !== false)
+    : true;
 
+  return skyRows.map(s => {
     const idxFis = s.esNeg ? idxFR : idxFN;
     const idxGp  = s.esNeg ? idxGR : idxGN;
-    const procEsp = s.esGETPos ? 'GETPOS' : 'FISERV';
+    const procEsp = s.esGETPos    ? 'GETPOS'    :
+                    s.esGOCUOTAS  ? 'GOCUOTAS'  : 'FISERV';
     const {lote:ln,cupon:cn,suc:sn,fecha:fn,montoN:mn} = s;
 
     // ── Devoluciones: MN1 y MN2
@@ -452,10 +460,55 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
       }
     }
 
+    // ── Go Cuotas: match directo por Número de Orden (cupon SKY = orden GoC)
+    if (s.esGOCUOTAS && gocEnabled && Object.keys(idxGoC).length) {
+      const cup  = norm(s.cupon);
+      const hit  = idxGoC[cup];
+      if (hit) return armarFilaGoC(s, hit, procEsp);
+    }
+
     return { sky:s, proc:null, metodo:'SIN MATCH', estado:'SIN MATCH',
       procEncontrada:'', procEsperada:procEsp, comOK:'', sucOK:'',
       matchParcial:'', esDevolucion:'NO', esAnulSinCobro:'NO' };
   });
+}
+
+// ── Armar fila de resultado para Go Cuotas ──────────────────────────
+function armarFilaGoC(s, pago, procEsp) {
+  const procObj = {
+    ticket:  pago.orden,
+    aut:     pago.orden,
+    cupon:   pago.orden,
+    monto:   pago.importe,
+    montoN:  normMonto(pago.importe),
+    fecha:   pago.fechaOrigen,
+    suc:     pago.sucNombre || '',
+    tarjeta: 'Go Cuotas',
+    cuotas:  pago.cuotas || 1,
+    comFis:  '',
+    nombre:  pago.nombre || '',
+    marca:   'GOCUOTAS',
+    plan:    pago.cuotas ? `${pago.cuotas} cuotas` : '',
+    equipo:  '',
+    pos:     '',
+    tipo:    'Venta',
+    arancel: 0, cfo: 0,
+  };
+  const difMonto = Math.abs(Math.abs(s.monto) - Math.abs(pago.importe));
+  return {
+    sky: s, proc: procObj,
+    metodo:        'GoC:Orden',
+    estado:        'OK (GoC)',
+    procEncontrada:'GOCUOTAS',
+    procEsperada:  procEsp,
+    comOK:         'OK',
+    sucOK:         'OK',
+    matchParcial:  '',
+    esDevolucion:  'NO',
+    esAnulSinCobro:'NO',
+    difMonto:      difMonto > 0.5 ? +difMonto.toFixed(2) : 0,
+    procMontoNorm: normMonto(pago.importe),
+  };
 }
 
 function armarFila(s, proc, procReal, metodo, procEsp) {
@@ -591,29 +644,40 @@ async function conciliar() {
     }
     window._debugSkyRows = skyRows; // debug
 
-    log('Parseando FISERV...'); setP(28); await delay(20);
-    const {norm:fisNorm,rev:fisRev}=parseFiserv(FILES.fis.wb,term2suc);
-    log(`${fisNorm.length.toLocaleString()} compras · ${fisRev.length} reversos`,'ok');
-    if (fisNorm.length > 0) {
-      const f0 = fisNorm[0];
-      log(`  [DEBUG] FIS[0]: suc=${f0.suc} lote=${f0.lote} ticket=${f0.ticket} montoN=${f0.montoN} fecha=${f0.fecha}`);
-    } else if (window._debugFisRawRow) {
-      log(`  [DEBUG] FIS raw keys: ${Object.keys(window._debugFisRawRow).join(', ')}`,'warn');
+    // ── FISERV (si habilitado y archivo cargado)
+    let fisNorm=[], fisRev=[];
+    if (isProcEnabled('FISERV') && FILES.fis) {
+      log('Parseando FISERV...'); setP(28); await delay(20);
+      const r=parseFiserv(FILES.fis.wb,term2suc); fisNorm=r.norm; fisRev=r.rev;
+      log(`${fisNorm.length.toLocaleString()} compras · ${fisRev.length} reversos`,'ok');
+      window._debugFisRows = fisNorm;
+    } else {
+      log(isProcEnabled('FISERV') ? 'FISERV: sin archivo (saltando)' : 'FISERV: deshabilitado','warn');
     }
-    window._debugFisRows = fisNorm;
     _FIS_NORM = fisNorm; _FIS_REV = fisRev;
 
-    log('Parseando GETPOS...'); setP(40); await delay(20);
-    const {norm:gpNorm,rev:gpRev}=parseGetpos(FILES.gp.wb,nombre2suc);
-    log(`${gpNorm.length.toLocaleString()} ventas · ${gpRev.length} devoluciones`,'ok');
-    if (gpNorm.length > 0) {
-      const g0 = gpNorm[0];
-      log(`  [DEBUG] GP[0]: suc=${g0.suc} aut=${g0.aut} cupon=${g0.cupon} montoN=${g0.montoN} fecha=${g0.fecha}`);
+    // ── GETPOS (si habilitado y archivo cargado)
+    let gpNorm=[], gpRev=[];
+    if (isProcEnabled('GETPOS') && FILES.gp) {
+      log('Parseando GETPOS...'); setP(40); await delay(20);
+      const r=parseGetpos(FILES.gp.wb,nombre2suc); gpNorm=r.norm; gpRev=r.rev;
+      log(`${gpNorm.length.toLocaleString()} ventas · ${gpRev.length} devoluciones`,'ok');
+      window._debugGpRows = gpNorm;
+    } else {
+      log(isProcEnabled('GETPOS') ? 'GETPOS: sin archivo (saltando)' : 'GETPOS: deshabilitado','warn');
     }
-    window._debugGpRows = gpNorm;
     _GP_NORM = gpNorm; _GP_REV = gpRev;
 
-    log('Aplicando 13 métodos de cruce en cascada...'); setP(58); await delay(20);
+    // ── Go Cuotas (si habilitado y datos cargados)
+    const gocCount = (typeof _GOC_PAGOS !== 'undefined') ? _GOC_PAGOS.length : 0;
+    if (isProcEnabled('GOCUOTAS') && gocCount > 0) {
+      log(`Go Cuotas: ${gocCount} órdenes cargadas`,'ok');
+    } else if (isProcEnabled('GOCUOTAS')) {
+      log('Go Cuotas: sin archivo CSV (las ops quedarán Sin Match)','warn');
+    }
+
+    log(`Aplicando cascada de cruce (FIS:${fisNorm.length} GP:${gpNorm.length} GoC:${gocCount})...`);
+    setP(58); await delay(20);
     RESULTADO=conciliarRows(skyRows,fisNorm,fisRev,gpNorm,gpRev);
     // Guardar operaciones de procesadora sin cruce con SKY
     const _usedFis = new Set(RESULTADO.filter(r=>r.proc&&r.procEncontrada==='FISERV').map(r=>r.proc));
@@ -1244,10 +1308,49 @@ function loadContracargos(input, tipo) {
 }
 
 function checkReady() {
-  const ok=FILES.sky&&FILES.fis&&FILES.gp&&FILES.ter;
-  document.getElementById('run-btn').disabled=!ok;
+  // Base siempre requerida
+  const base = FILES.sky && FILES.ter;
+  // Al menos una procesadora habilitada con su archivo
+  const fisFok = isProcEnabled('FISERV')    && !!FILES.fis;
+  const gpOk   = isProcEnabled('GETPOS')    && !!FILES.gp;
+  const gocOk  = isProcEnabled('GOCUOTAS')  &&
+    typeof _GOC_PAGOS !== 'undefined' && _GOC_PAGOS.length > 0;
+
+  const procOk = fisFok || gpOk || gocOk;
+  const ok = base && procOk;
+
+  document.getElementById('run-btn').disabled = !ok;
   document.getElementById('hdr-chip-files')?.remove();
-  document.getElementById('save-indicator').textContent=ok?'':'⚠ Faltan archivos';
+
+  // Badge de procesadoras activas bajo el botón
+  const procsDiv = document.getElementById('run-procs');
+  if (procsDiv) {
+    const badges = [];
+    const C = { FISERV:'var(--acc)', GETPOS:'var(--grn)', GOCUOTAS:'var(--yel)' };
+    const L = { FISERV:'FISERV', GETPOS:'GETPOS', GOCUOTAS:'GoC' };
+    ['FISERV','GETPOS','GOCUOTAS'].forEach(id => {
+      if (!isProcEnabled(id)) return;
+      const color = C[id];
+      const ready = (id==='FISERV'&&FILES.fis)||(id==='GETPOS'&&FILES.gp)||
+                    (id==='GOCUOTAS'&&typeof _GOC_PAGOS!=='undefined'&&_GOC_PAGOS.length>0);
+      badges.push(`<span style="padding:1px 6px;border-radius:3px;font-size:7px;
+        color:${color};border:1px solid ${color}55;background:${color}18;
+        opacity:${ready?'1':'0.4'}">${L[id]}${ready?'':' ○'}</span>`);
+    });
+    procsDiv.innerHTML = badges.join('');
+  }
+
+  // Mensaje de lo que falta
+  if (!ok) {
+    const miss = [];
+    if (!FILES.sky)  miss.push('Skylab');
+    if (!FILES.ter)  miss.push('Terminales');
+    if (!procOk)     miss.push('al menos 1 procesadora');
+    document.getElementById('save-indicator').textContent =
+      `⚠ Falta: ${miss.join(', ')}`;
+  } else {
+    document.getElementById('save-indicator').textContent = '';
+  }
 }
 
 // ── LOG ──────────────────────────────────────────────────

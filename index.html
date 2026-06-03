@@ -532,6 +532,20 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 .dl-sin{background:#422006;color:#fed7aa}
 .dl-res{background:#14532d;color:#86efac}
 
+/* ══ PROCESADORAS SIDEBAR ════════════════════════════ */
+.proc-group{border:1px solid var(--b1);border-radius:var(--r6);margin-bottom:5px;overflow:hidden}
+.proc-group.enabled{border-color:var(--b2)}
+.proc-toggle{display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;background:var(--s2);user-select:none}
+.proc-toggle:hover{background:var(--s3)}
+.proc-dot{width:8px;height:8px;border-radius:50%;background:var(--b2);flex-shrink:0;transition:background .2s}
+.proc-group.enabled .proc-dot{background:var(--grn)}
+.proc-toggle-label{font-size:9px;font-weight:600;font-family:var(--mono);color:var(--m2);flex:1;letter-spacing:.3px}
+.proc-group.enabled .proc-toggle-label{color:var(--txt)}
+.proc-check{font-size:9px;color:var(--b3)}
+.proc-group.enabled .proc-check{color:var(--grn)}
+.proc-files{padding:4px 8px 8px}
+.proc-group:not(.enabled) .proc-files{display:none}
+
 /* ══ SCROLLBARS ══════════════════════════════════════ */
 ::-webkit-scrollbar{width:5px;height:5px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -755,29 +769,15 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 
 <!-- ══ SIDEBAR ══════════════════════════════════════── -->
 <div class="sidebar">
+  <!-- ARCHIVOS BASE -->
   <div class="sb-sec">
-    <div class="sb-lbl">Archivos transaccionales</div>
+    <div class="sb-lbl">Archivos base</div>
     <div class="fc" id="fc-sky"><label for="i-sky">
       <div class="fc-top"><div class="fc-dot d-sky">S</div>
         <span class="fc-name">Skylab</span><span class="fc-req">REQ</span></div>
       <div class="fc-st" id="st-sky">Sin archivo</div>
     </label><input type="file" id="i-sky" accept=".xlsx,.xls" onchange="loadFile(this,'sky')"></div>
 
-    <div class="fc" id="fc-fis"><label for="i-fis">
-      <div class="fc-top"><div class="fc-dot d-fis">F</div>
-        <span class="fc-name">FISERV</span><span class="fc-req">REQ</span></div>
-      <div class="fc-st" id="st-fis">Sin archivo</div>
-    </label><input type="file" id="i-fis" accept=".xlsx,.xls" onchange="loadFile(this,'fis')"></div>
-
-    <div class="fc" id="fc-gp"><label for="i-gp">
-      <div class="fc-top"><div class="fc-dot d-gp">G</div>
-        <span class="fc-name">GETPOS</span><span class="fc-req">REQ</span></div>
-      <div class="fc-st" id="st-gp">Sin archivo</div>
-    </label><input type="file" id="i-gp" accept=".xlsx,.xls" onchange="loadFile(this,'gp')"></div>
-  </div>
-
-  <div class="sb-sec">
-    <div class="sb-lbl">Referencia</div>
     <div class="fc" id="fc-ter"><label for="i-ter">
       <div class="fc-top"><div class="fc-dot d-ter">T</div>
         <span class="fc-name">Terminales</span><span class="fc-req">REQ</span></div>
@@ -797,25 +797,64 @@ tr.row-int td{background:rgba(52,211,153,.02)}
     </label><input type="file" id="i-baj" accept=".xlsx,.xls" onchange="loadFile(this,'baj')"></div>
   </div>
 
+  <!-- PROCESADORAS -->
   <div class="sb-sec">
-    <div class="sb-lbl">Go Cuotas</div>
-    <div class="fc" id="fc-goc-sky"><label for="i-goc-sky">
-      <div class="fc-top"><div class="fc-dot d-sky">GS</div>
-        <span class="fc-name">Skylab GoC</span><span class="fc-req">REQ</span></div>
-      <div class="fc-st" id="st-goc-sky">Sin archivo</div>
-    </label><input type="file" id="i-goc-sky" accept=".xlsx,.xls" onchange="loadGocSkylab(this)"></div>
+    <div class="sb-lbl">Procesadoras</div>
 
-    <div class="fc opt" id="fc-goc-pag"><label for="i-goc-pag">
-      <div class="fc-top"><div class="fc-dot" style="background:#0f2d20;color:#34d399">GP</div>
-        <span class="fc-name">Go Cuotas CSV</span><span class="fc-req opt">OPC</span></div>
-      <div class="fc-st" id="st-goc-pag">Opcional</div>
-    </label><input type="file" id="i-goc-pag" accept=".csv,.txt" onchange="loadGocPagos(this)"></div>
+    <!-- FISERV -->
+    <div class="proc-group enabled" id="proc-grp-FISERV">
+      <div class="proc-toggle" onclick="toggleProcUI('FISERV')">
+        <div class="proc-dot"></div>
+        <span class="proc-toggle-label">FISERV</span>
+        <span class="proc-check" id="proc-chk-FISERV">✓</span>
+      </div>
+      <div class="proc-files">
+        <div class="fc" id="fc-fis"><label for="i-fis">
+          <div class="fc-top"><div class="fc-dot d-fis">F</div>
+            <span class="fc-name">FISERV</span><span class="fc-req">REQ</span></div>
+          <div class="fc-st" id="st-fis">Sin archivo</div>
+        </label><input type="file" id="i-fis" accept=".xlsx,.xls" onchange="loadFile(this,'fis')"></div>
+      </div>
+    </div>
 
-    <div class="fc opt" id="fc-goc-ven"><label for="i-goc-ven">
-      <div class="fc-top"><div class="fc-dot" style="background:#1a1f10;color:#fbbf24">GV</div>
-        <span class="fc-name">Ventas</span><span class="fc-req opt">OPC</span></div>
-      <div class="fc-st" id="st-goc-ven">Opcional</div>
-    </label><input type="file" id="i-goc-ven" accept=".xlsx,.xls" onchange="loadGocVentas(this)"></div>
+    <!-- GETPOS -->
+    <div class="proc-group enabled" id="proc-grp-GETPOS">
+      <div class="proc-toggle" onclick="toggleProcUI('GETPOS')">
+        <div class="proc-dot"></div>
+        <span class="proc-toggle-label">GETPOS</span>
+        <span class="proc-check" id="proc-chk-GETPOS">✓</span>
+      </div>
+      <div class="proc-files">
+        <div class="fc" id="fc-gp"><label for="i-gp">
+          <div class="fc-top"><div class="fc-dot d-gp">G</div>
+            <span class="fc-name">GETPOS</span><span class="fc-req">REQ</span></div>
+          <div class="fc-st" id="st-gp">Sin archivo</div>
+        </label><input type="file" id="i-gp" accept=".xlsx,.xls" onchange="loadFile(this,'gp')"></div>
+      </div>
+    </div>
+
+    <!-- GO CUOTAS -->
+    <div class="proc-group" id="proc-grp-GOCUOTAS">
+      <div class="proc-toggle" onclick="toggleProcUI('GOCUOTAS')">
+        <div class="proc-dot"></div>
+        <span class="proc-toggle-label">Go Cuotas</span>
+        <span class="proc-check" id="proc-chk-GOCUOTAS">○</span>
+      </div>
+      <div class="proc-files">
+        <div class="fc opt" id="fc-goc-pag"><label for="i-goc-pag">
+          <div class="fc-top"><div class="fc-dot" style="background:#0f2d20;color:#34d399">GC</div>
+            <span class="fc-name">Go Cuotas CSV</span><span class="fc-req">REQ</span></div>
+          <div class="fc-st" id="st-goc-pag">Sin archivo</div>
+        </label><input type="file" id="i-goc-pag" accept=".csv,.txt" onchange="loadGocPagos(this)"></div>
+
+        <div class="fc opt" id="fc-goc-ven"><label for="i-goc-ven">
+          <div class="fc-top"><div class="fc-dot" style="background:#1a1f10;color:#fbbf24">GV</div>
+            <span class="fc-name">Ventas (IMEI)</span><span class="fc-req opt">OPC</span></div>
+          <div class="fc-st" id="st-goc-ven">Opcional</div>
+        </label><input type="file" id="i-goc-ven" accept=".xlsx,.xls" onchange="loadGocVentas(this)"></div>
+      </div>
+    </div>
+
   </div>
 
   <div class="sb-sec">
@@ -880,6 +919,8 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   <button class="run-btn" id="run-btn" disabled onclick="conciliar()">
     <span id="run-icon">▶</span> <span id="run-lbl">Conciliar</span>
   </button>
+  <div id="run-procs" style="padding:4px 12px 0;font-size:8px;color:var(--m2);
+    display:flex;gap:6px;flex-wrap:wrap;min-height:14px"></div>
   <div class="prog" id="prog"><div class="prog-bar" id="prog-bar"></div></div>
   <div style="height:14px"></div>
 </div>
@@ -1627,6 +1668,27 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 <script src="js/dashboard.js"></script>
 <script>
 
+// ══ PROCESADORAS — toggle sidebar ════════════════════
+function toggleProcUI(id) {
+  toggleProc(id);   // persiste en localStorage via state.js
+  const grp = document.getElementById(`proc-grp-${id}`);
+  const chk = document.getElementById(`proc-chk-${id}`);
+  const en  = isProcEnabled(id);
+  if (grp) grp.classList.toggle('enabled', en);
+  if (chk) chk.textContent = en ? '✓' : '○';
+  checkReady();
+}
+
+function _initProcGroups() {
+  ['FISERV','GETPOS','GOCUOTAS'].forEach(id => {
+    const en  = isProcEnabled(id);
+    const grp = document.getElementById(`proc-grp-${id}`);
+    const chk = document.getElementById(`proc-chk-${id}`);
+    if (grp) grp.classList.toggle('enabled', en);
+    if (chk) chk.textContent = en ? '✓' : '○';
+  });
+}
+
 // ══ MÓDULOS ════════════════════════════════════════════
 function showMod(mod, btn) {
   document.querySelectorAll('.mod-panel').forEach(p => p.classList.remove('active'));
@@ -1943,6 +2005,7 @@ function _loadTheme() {
 // ══ INIT ═════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   _loadTheme();
+  _initProcGroups();
   // Badge histórico
   listarPeriodos().then(ps => {
     const b = document.getElementById('mcnt-hist');
