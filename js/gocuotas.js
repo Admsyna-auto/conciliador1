@@ -157,11 +157,11 @@ function parseGocPagos(file, fuente) {
         };
         console.log('[GOC-PAGOS] Índices columnas:', IDX);
 
-        _GOC_PAGOS = lines.slice(1).map((line, i) => {
+        const rows = lines.slice(1).map((line, i) => {
           const cols = line.split(sep).map(c => c.trim());
           const g = (key) => IDX[key] >= 0 ? cols[IDX[key]] : '';
           const tipo = g('tipo').toLowerCase();
-          if (tipo.includes('total') || tipo.includes('subtotal')) return null; // fila de totales
+          if (tipo.includes('total') || tipo.includes('subtotal')) return null;
           return {
             idx:         i,
             tipo:        g('tipo'),
@@ -175,11 +175,10 @@ function parseGocPagos(file, fuente) {
             sucId:       g('sucId'),
             sucNombre:   g('sucNombre'),
             refExt:      g('refExt'),
-            fuente,      // 'GOCUOTAS' | 'GOCELULAR'
+            fuente,
           };
         }).filter(Boolean).filter(r => r.importe > 0 || r.orden !== '0');
 
-        // Guardar en el array correcto según fuente
         if (fuente === 'GOCELULAR') {
           _GOC_CELULAR = rows;
           console.log('[GOC-CELULAR] Parseados:', _GOC_CELULAR.length);
