@@ -379,21 +379,43 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
   const idxGN=buildIndexGp(gpNorm),   idxGR=buildIndexGp(gpRev);
   const used=new Set();
 
-  // Índice Go Cuotas — dos claves de búsqueda:
-  //   idxGoC[orden]  → para la mayoría de sucursales (Nro de Orden = Cupon SKY)
-  //   idxGoCRef[ref] → para suc. 251 y 097 (Referencia Externa = Cupon SKY)
-  const idxGoC    = {};
-  const idxGoCRef = {};
-  if (typeof _GOC_PAGOS !== 'undefined' && _GOC_PAGOS.length) {
+  // ── Índice Go Cuotas (cascada de 7 métodos)
+  // El Número de Orden puede vivir en sky.cupon, sky.lote, o sky.lote+sky.cupon.
+  // Prefijos de clave: O1/O2/O3 = por Orden, O4/O5 = por Cupon+Suc, R1/R2 = por RefExt
+  const gocIdx = {};
+  const gocEnabled = typeof PROCS_ENABLED !== 'undefined'
+    ? (PROCS_ENABLED.GOCUOTAS !== false) : true;
+
+  if (gocEnabled && typeof _GOC_PAGOS !== 'undefined' && _GOC_PAGOS.length) {
     _GOC_PAGOS.forEach(p => {
-      if (p.orden) idxGoC[p.orden] = p;
+      const mn  = normMonto(p.importe);
+      const fd  = p.fechaOrigen;
+      const ord = p.orden;
       const ref = String(p.refExt || '').trim();
-      if (ref && ref !== '-' && ref !== '0') idxGoCRef[ref] = p;
+      const sId = norm(String(p.sucId || ''));
+
+      const _add = (key) => { if (key) gocIdx[key] = p; };
+      // Tolerancia ±1 en monto (igual que FISERV/GETPOS)
+      const mnP = String(parseInt(mn)+1);
+      const mnM = String(Math.max(0,parseInt(mn)-1));
+
+      if (ord) {
+        for (const m of [mn, mnP, mnM]) {
+          _add(`O1|${ord}|${m}|${fd}`);  // Orden + Monto + Fecha
+          _add(`O2|${ord}|${m}`);         // Orden + Monto
+          _add(`O4|${ord}|${m}|${fd}|${sId}`); // Cupon + Monto + Fecha + Suc
+          _add(`O5|${ord}|${m}|${sId}`);  // Cupon + Monto + Suc
+        }
+        _add(`O3|${ord}|${fd}`);          // Orden + Fecha
+      }
+      if (ref && ref !== '-' && ref !== '0') {
+        for (const m of [mn, mnP, mnM]) {
+          _add(`R1|${ref}|${m}|${fd}`);  // RefExt + Monto + Fecha
+          _add(`R2|${ref}|${m}`);         // RefExt + Monto
+        }
+      }
     });
   }
-  const gocEnabled = typeof PROCS_ENABLED !== 'undefined'
-    ? (PROCS_ENABLED.GOCUOTAS !== false)
-    : true;
 
   return skyRows.map(s => {
     const idxFis = s.esNeg ? idxFR : idxFN;
@@ -467,38 +489,61 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
       }
     }
 
-    // ── Go Cuotas: match por Número de Orden O por Referencia Externa
-    // Suc 251 y 097 usan Referencia Externa como cupón en Skylab.
-    // Siempre validamos que el monto no difiera más del 50% para evitar
-    // matches incorrectos (mismo nro. de orden en distintos períodos, etc.)
-    if (s.esGOCUOTAS && gocEnabled && (Object.keys(idxGoC).length || Object.keys(idxGoCRef).length)) {
-      const cup      = norm(s.cupon);
-      const skyMonto = Math.abs(s.monto);
+    // ── Go Cuotas: cascada de 7 métodos
+    // El Número de Orden puede estar en sky.cupon, sky.lote, o sky.lote+sky.cupon.
+    if (s.esGOCUOTAS && gocEnabled && Object.keys(gocIdx).length) {
+      const cn   = norm(s.cupon);
+      const ln   = norm(s.lote);
+      const ltcn = norm(String(s.lote||'') + String(s.cupon||''));
+      const mn   = s.montoN;
+      const fn   = s.fecha;
+      const sn   = norm(s.suc);   // sucursal SKY (para O4/O5)
 
-      const _validarMonto = (hit) => {
-        if (!hit) return false;
-        const gocMonto = Math.abs(hit.importe);
-        if (skyMonto === 0 || gocMonto === 0) return true;
-        const ratio = Math.max(skyMonto, gocMonto) / Math.min(skyMonto, gocMonto);
-        return ratio <= 1.5; // tolerancia del 50%
-      };
+      // Los 3 posibles portadores del Número de Orden en Skylab
+      const ordenKeys = [...new Set([cn, ln, ltcn].filter(k => k && k !== '0'))];
 
-      // Primero buscar por Número de Orden (mayoría de sucursales)
-      let hit = idxGoC[cup];
-      let met = 'GoC:Orden';
+      let hit, met;
 
-      if (hit && !_validarMonto(hit)) {
-        // Match por orden encontrado pero monto muy diferente → buscar por RefExt
-        hit = null;
+      // GoC:Orden1 — Número de Orden + Monto + Fecha (más restrictivo)
+      for (const ok of ordenKeys) {
+        hit = gocIdx[`O1|${ok}|${mn}|${fn}`];
+        if (hit) { met='GoC:Orden1'; break; }
       }
 
-      // Si no encontró por orden (o monto no coincide), buscar por Referencia Externa
-      if (!hit && idxGoCRef[cup]) {
-        const hitRef = idxGoCRef[cup];
-        if (_validarMonto(hitRef)) {
-          hit = hitRef;
-          met = 'GoC:RefExt';
-        }
+      // GoC:Orden2 — Número de Orden + Monto (sin fecha)
+      if (!hit) for (const ok of ordenKeys) {
+        hit = gocIdx[`O2|${ok}|${mn}`];
+        if (hit) { met='GoC:Orden2'; break; }
+      }
+
+      // GoC:Orden3 — Número de Orden + Fecha (sin monto)
+      if (!hit) for (const ok of ordenKeys) {
+        hit = gocIdx[`O3|${ok}|${fn}`];
+        if (hit) { met='GoC:Orden3'; break; }
+      }
+
+      // GoC:Orden4 — Cupon + Monto + Fecha + Suc
+      if (!hit) {
+        hit = gocIdx[`O4|${cn}|${mn}|${fn}|${sn}`];
+        if (hit) met='GoC:Orden4';
+      }
+
+      // GoC:Orden5 — Cupon + Monto + Suc (sin fecha)
+      if (!hit) {
+        hit = gocIdx[`O5|${cn}|${mn}|${sn}`];
+        if (hit) met='GoC:Orden5';
+      }
+
+      // GoC:RefExt1 — Referencia Externa + Monto + Fecha
+      if (!hit) {
+        hit = gocIdx[`R1|${cn}|${mn}|${fn}`];
+        if (hit) met='GoC:RefExt1';
+      }
+
+      // GoC:RefExt2 — Referencia Externa + Monto (sin fecha)
+      if (!hit) {
+        hit = gocIdx[`R2|${cn}|${mn}`];
+        if (hit) met='GoC:RefExt2';
       }
 
       if (hit) return armarFilaGoC(s, hit, procEsp, met);
