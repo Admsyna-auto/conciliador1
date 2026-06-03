@@ -1159,6 +1159,58 @@ function loadLiquidaciones(input) {
   r.readAsArrayBuffer(file);
 }
 
+// ── CARGA GO CUOTAS ──────────────────────────────────────────────
+function loadGocSkylab(input) {
+  const file = input.files[0]; if (!file) return;
+  const st = document.getElementById('st-goc-sky');
+  if (st) { st.textContent = '↻ Cargando...'; st.className = 'fc-st'; }
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      parseGocSkylab(wb);
+      const n = _GOC_SKY.length;
+      document.getElementById('fc-goc-sky')?.classList.add('ok');
+      if (st) { st.textContent = `✓ ${file.name} (${n} ops)`; st.className = 'fc-st ok'; }
+      const badge = document.getElementById('mcnt-goc');
+      if (badge) badge.textContent = n || '—';
+      if (document.getElementById('mod-goc')?.closest('.mod-panel.active')) renderModuloGoCuotas();
+    } catch(err) { if (st) { st.textContent = '✗ Error'; st.className = 'fc-st'; } console.error(err); }
+  };
+  r.readAsArrayBuffer(file);
+}
+
+async function loadGocPagos(input) {
+  const file = input.files[0]; if (!file) return;
+  const st = document.getElementById('st-goc-pag');
+  if (st) { st.textContent = '↻ Cargando...'; st.className = 'fc-st'; }
+  try {
+    await parseGocPagos(file);
+    const n = _GOC_PAGOS.length;
+    document.getElementById('fc-goc-pag')?.classList.add('ok');
+    if (st) { st.textContent = `✓ ${file.name} (${n} pagos)`; st.className = 'fc-st ok'; }
+    if (document.getElementById('mod-goc')?.closest('.mod-panel.active')) renderModuloGoCuotas();
+  } catch(err) { if (st) { st.textContent = '✗ Error'; st.className = 'fc-st'; } console.error(err); }
+}
+
+function loadGocVentas(input) {
+  const file = input.files[0]; if (!file) return;
+  const st = document.getElementById('st-goc-ven');
+  if (st) { st.textContent = '↻ Cargando...'; st.className = 'fc-st'; }
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const wb = XLSX.read(e.target.result, { type:'array', cellDates:true });
+      parseGocVentas(wb);
+      const n = _GOC_VENTAS.length;
+      document.getElementById('fc-goc-ven')?.classList.add('ok');
+      if (st) { st.textContent = `✓ ${file.name} (${n} artículos)`; st.className = 'fc-st ok'; }
+      if (document.getElementById('mod-goc')?.closest('.mod-panel.active')) renderModuloGoCuotas();
+    } catch(err) { if (st) { st.textContent = '✗ Error'; st.className = 'fc-st'; } console.error(err); }
+  };
+  r.readAsArrayBuffer(file);
+}
+
 // ── CARGA CONTRACARGOS ────────────────────────────────────────────
 function loadContracargos(input, tipo) {
   const file = input.files[0]; if (!file) return;

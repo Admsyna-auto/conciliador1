@@ -740,6 +740,9 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   <button class="mod-btn" id="mbtn-dashboard" onclick="showMod('dashboard',this)">
     6 · Dashboard
   </button>
+  <button class="mod-btn" id="mbtn-goc" onclick="showMod('goc',this)">
+    7 · Go Cuotas <span class="cnt" id="mcnt-goc">—</span>
+  </button>
   <button class="mod-btn" id="mbtn-hist" onclick="showMod('hist',this)">
     8 · Histórico <span class="cnt" id="mcnt-hist">—</span>
   </button>
@@ -792,6 +795,27 @@ tr.row-int td{background:rgba(52,211,153,.02)}
         <span class="fc-name">Bajada comercial</span><span class="fc-req opt">OPC</span></div>
       <div class="fc-st" id="st-baj">Opcional</div>
     </label><input type="file" id="i-baj" accept=".xlsx,.xls" onchange="loadFile(this,'baj')"></div>
+  </div>
+
+  <div class="sb-sec">
+    <div class="sb-lbl">Go Cuotas</div>
+    <div class="fc" id="fc-goc-sky"><label for="i-goc-sky">
+      <div class="fc-top"><div class="fc-dot d-sky">GS</div>
+        <span class="fc-name">Skylab GoC</span><span class="fc-req">REQ</span></div>
+      <div class="fc-st" id="st-goc-sky">Sin archivo</div>
+    </label><input type="file" id="i-goc-sky" accept=".xlsx,.xls" onchange="loadGocSkylab(this)"></div>
+
+    <div class="fc opt" id="fc-goc-pag"><label for="i-goc-pag">
+      <div class="fc-top"><div class="fc-dot" style="background:#0f2d20;color:#34d399">GP</div>
+        <span class="fc-name">Go Cuotas CSV</span><span class="fc-req opt">OPC</span></div>
+      <div class="fc-st" id="st-goc-pag">Opcional</div>
+    </label><input type="file" id="i-goc-pag" accept=".csv,.txt" onchange="loadGocPagos(this)"></div>
+
+    <div class="fc opt" id="fc-goc-ven"><label for="i-goc-ven">
+      <div class="fc-top"><div class="fc-dot" style="background:#1a1f10;color:#fbbf24">GV</div>
+        <span class="fc-name">Ventas</span><span class="fc-req opt">OPC</span></div>
+      <div class="fc-st" id="st-goc-ven">Opcional</div>
+    </label><input type="file" id="i-goc-ven" accept=".xlsx,.xls" onchange="loadGocVentas(this)"></div>
   </div>
 
   <div class="sb-sec">
@@ -1539,6 +1563,11 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 
   <!-- ── LOG AUDITORÍA (pestaña en revisión) ─────────── -->
 
+  <!-- ── MÓDULO 7: GO CUOTAS ──────────────────────────────── -->
+  <div class="mod-panel" id="mod-goc">
+    <div id="mod-goc-inner" style="display:flex;flex:1;min-height:0;overflow:hidden;flex-direction:column"></div>
+  </div>
+
   <!-- ── MÓDULO 8: HISTÓRICO ──────────────────────────────── -->
   <div class="mod-panel" id="mod-hist">
     <div id="mod-hist-inner" style="display:flex;flex:1;min-height:0;overflow:hidden;flex-direction:column"></div>
@@ -1593,6 +1622,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 <script src="js/cobros.js"></script>
 <script src="js/conciliador.js"></script>
 <script src="js/contracargos.js"></script>
+<script src="js/gocuotas.js"></script>
 <script src="js/historico.js"></script>
 <script src="js/dashboard.js"></script>
 <script>
@@ -1611,6 +1641,7 @@ function showMod(mod, btn) {
   if (mod === 'dashboard')   { renderDashboard(); }
   if (mod === 'cobros')      { renderModuloCobros(); }
   if (mod === 'ctr')         { renderModuloContracargos(); }
+  if (mod === 'goc')         { renderModuloGoCuotas(); }
   if (mod === 'hist')        { renderModuloHistorico(); }
 }
 
