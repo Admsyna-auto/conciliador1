@@ -232,10 +232,11 @@ function parseGocVentas(wb) {
     };
   }).filter(r => r.comprobante);
 
-  // Índice por compNum para búsqueda rápida
+  // Índice por compNum — soporta MÚLTIPLES productos por comprobante
   window._GOC_VENTAS_IDX = {};
   _GOC_VENTAS.forEach(v => {
-    window._GOC_VENTAS_IDX[v.compNum] = v;
+    if (!window._GOC_VENTAS_IDX[v.compNum]) window._GOC_VENTAS_IDX[v.compNum] = [];
+    window._GOC_VENTAS_IDX[v.compNum].push(v);
   });
 
   console.log('[GOC-VENTAS] Ventas parseadas:', _GOC_VENTAS.length);
@@ -442,15 +443,15 @@ function renderModuloGoCuotas() {
 
     <!-- Tab bodies -->
     <div class="tab-body active" id="goc-todo" style="flex-direction:column;flex:1;min-height:0">
-      ${_gToolbar('todo')}
+      ${_gToolbar('todo', gocRows)}
       <div class="tbl-wrap"><table id="tbl-goc-todo"><thead></thead><tbody></tbody></table></div>
     </div>
     <div class="tab-body" id="goc-cobrados" style="flex-direction:column;flex:1;min-height:0">
-      ${_gToolbar('cobrados')}
+      ${_gToolbar('cobrados', cobrados)}
       <div class="tbl-wrap"><table id="tbl-goc-cobrados"><thead></thead><tbody></tbody></table></div>
     </div>
     <div class="tab-body" id="goc-pendientes" style="flex-direction:column;flex:1;min-height:0">
-      ${_gToolbar('pendientes')}
+      ${_gToolbar('pendientes', pendientes)}
       <div class="tbl-wrap"><table id="tbl-goc-pendientes"><thead></thead><tbody></tbody></table></div>
     </div>
     <div class="tab-body" id="goc-sinsky" style="flex-direction:column;flex:1;min-height:0">
@@ -485,20 +486,30 @@ function renderModuloGoCuotas() {
   if (badge) badge.textContent = _GOC_RESULT.length || '—';
 }
 
-function _gToolbar(tipo) {
-  return `<div class="cor-hdr-bar" style="border-left:3px solid var(--acc)">
-    <span class="cor-hdr-title" style="color:var(--acc)">Go Cuotas — ${tipo==='todo'?'Vista completa':tipo==='cobrados'?'Cobrados':'Pendientes de cobro'}</span>
-    <div style="margin-left:auto;display:flex;gap:6px">
-      <select class="filter-sel" id="goc-flt-${tipo}-suc" onchange="_renderGocTabla('${tipo}')" style="font-size:8px">
-        <option value="">Todas las suc.</option>
-        ${[...new Set(_GOC_RESULT.filter(r=>r.sky).map(r=>r.sky.sucursal).filter(Boolean))].sort()
-          .map(s=>`<option value="${s}">${s}</option>`).join('')}
-      </select>
-      <input class="filter-inp" id="goc-flt-${tipo}-search" placeholder="Nombre, orden, plan..."
-        oninput="_renderGocTabla('${tipo}')" style="width:160px">
-      <button class="dl-btn" style="background:#14532d;color:#86efac"
-        onclick="exportarGoCuotas('${tipo}')">⬇ Exportar</button>
-    </div>
+function _gToolbar(tipo, gocRows) {
+  const sucs = [...new Set((gocRows||[]).map(r=>r.sky?.suc).filter(Boolean))].sort((a,b)=>+a-+b);
+  const plans = [...new Set((gocRows||[]).map(r=>r.sky?.plan).filter(Boolean))].sort();
+  return `<div class="filter-bar" style="flex-shrink:0">
+    <span class="filter-lbl">Filtrar</span>
+    <select class="filter-sel" id="goc-flt-${tipo}-suc" onchange="_renderGocTablaRes('${tipo}')">
+      <option value="">Todas las suc.</option>
+      ${sucs.map(s=>`<option value="${s}">${s}</option>`).join('')}
+    </select>
+    <select class="filter-sel" id="goc-flt-${tipo}-plan" onchange="_renderGocTablaRes('${tipo}')">
+      <option value="">Todos los planes</option>
+      ${plans.map(p=>`<option value="${p}">${p}</option>`).join('')}
+    </select>
+    <select class="filter-sel" id="goc-flt-${tipo}-imei" onchange="_renderGocTablaRes('${tipo}')">
+      <option value="">IMEI: todos</option>
+      <option value="ok">✓ Con IMEI</option>
+      <option value="faltante">⚠ Sin IMEI</option>
+    </select>
+    <input class="filter-inp" id="goc-flt-${tipo}-search"
+      placeholder="Vendedor, orden, asiento..." oninput="_renderGocTablaRes('${tipo}')" style="width:160px">
+    <button class="btn-clear" onclick="['suc','plan','imei','search'].forEach(f=>{const e=document.getElementById('goc-flt-${tipo}-'+f);if(e)e.value=''});_renderGocTablaRes('${tipo}')">✕</button>
+    <span class="filter-stats" id="goc-flt-${tipo}-stats" style="margin-left:auto"></span>
+    <button class="dl-btn" style="background:#14532d;color:#86efac"
+      onclick="exportarGoCuotas('${tipo}')">⬇ Exportar</button>
   </div>`;
 }
 
@@ -596,25 +607,47 @@ function _renderGocImei(filas) {
 }
 
 // ── Tablas de RESULTADO para el módulo ──────────────────────────────
-function _renderGocTablaRes(tipo, filas) {
+function _renderGocTablaRes(tipo, filasIn) {
   const tbl = document.getElementById(`tbl-goc-${tipo}`); if (!tbl) return;
-  const fltSuc = document.getElementById(`goc-flt-${tipo}-suc`)?.value || '';
-  const fSearch= (document.getElementById(`goc-flt-${tipo}-search`)?.value||'').toLowerCase();
 
-  let rows = filas;
-  if (fltSuc)  rows = rows.filter(r => r.sky.suc === fltSuc);
+  // Si no se pasan filas, usar las guardadas en el módulo
+  const allRows = filasIn || window._gocLastView?.[tipo] || [];
+  if (filasIn) {
+    if (!window._gocLastView) window._gocLastView = {};
+    window._gocLastView[tipo] = filasIn;
+  }
+
+  const fltSuc   = document.getElementById(`goc-flt-${tipo}-suc`)?.value   || '';
+  const fltPlan  = document.getElementById(`goc-flt-${tipo}-plan`)?.value  || '';
+  const fltImei  = document.getElementById(`goc-flt-${tipo}-imei`)?.value  || '';
+  const fSearch  = (document.getElementById(`goc-flt-${tipo}-search`)?.value||'').toLowerCase();
+  const ventaIdx = window._GOC_VENTAS_IDX || {};
+
+  let rows = allRows;
+  if (fltSuc)  rows = rows.filter(r => r.sky?.suc === fltSuc);
+  if (fltPlan) rows = rows.filter(r => r.sky?.plan === fltPlan);
+  if (fltImei) {
+    rows = rows.filter(r => {
+      const vArr = ventaIdx[norm(r.sky?.cupon||'')] || ventaIdx[norm(r.sky?.asiento||'')] || [];
+      const hasImei = vArr.some(v => v.trazabilidad && v.trazabilidad !== '0');
+      return fltImei === 'ok' ? hasImei : !hasImei;
+    });
+  }
   if (fSearch) rows = rows.filter(r =>
-    [r.sky.asiento||'', r.sky.cupon, r.sky.plan||'', r.sky.vendedor||'',
-     r.sky.tarjeta, r.estado].join(' ').toLowerCase().includes(fSearch));
+    [r.sky?.asiento||'', r.sky?.cupon||'', r.sky?.plan||'',
+     r.sky?.vendedor||'', r.estado||'', r.metodo||''].join(' ').toLowerCase().includes(fSearch));
+
+  const stats = document.getElementById(`goc-flt-${tipo}-stats`);
+  if (stats) stats.textContent = rows.length < allRows.length
+    ? `Mostrando ${rows.length} de ${allRows.length}` : '';
 
   const isOK = r => r.estado?.includes('GoC') || r.estado?.startsWith('OK');
-  const HDR  = ['Estado cruce','Fecha venta','Suc.','Vendedor','Plan','Nro. Orden GoC',
-                'Importe SKY','Monto proc. GoC','Fecha pago GoC','Asiento'];
+  const HDR  = ['Estado','Método','Fecha','Suc.','Vendedor','Plan','Cupon/Orden','Importe','Proc. GoC','Fecha pago','Artículo(s) / IMEI'];
   tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
 
   if (!rows.length) {
     tbl.querySelector('tbody').innerHTML =
-      `<tr><td colspan="${HDR.length}" style="padding:20px;text-align:center;color:var(--m2);font-size:10px">Sin registros.</td></tr>`;
+      `<tr><td colspan="${HDR.length}" style="padding:20px;text-align:center;color:var(--m2);font-size:10px">Sin registros para los filtros seleccionados.</td></tr>`;
     return;
   }
 
@@ -623,18 +656,36 @@ function _renderGocTablaRes(tipo, filas) {
     const proc = r.proc;
     const ok   = isOK(r);
     const stColor = ok ? 'var(--grn)' : r.estado==='SIN MATCH' ? 'var(--red)' : 'var(--yel)';
+
+    // Buscar artículos en Ventas (puede haber múltiples por comprobante)
+    const cup  = norm(s?.cupon||'');
+    const ast  = norm(s?.asiento||'');
+    const ventas = ventaIdx[cup] || ventaIdx[ast] || [];
+    let ventaCell = '—';
+    if (ventas.length > 0) {
+      ventaCell = ventas.map(v => {
+        const imeiColor = v.trazabilidad && v.trazabilidad !== '0' ? 'var(--grn)' : 'var(--red)';
+        return `<div style="font-size:8px;padding:2px 0;border-bottom:1px solid var(--b1)">
+          <span style="color:var(--txt)">${v.descripcion||'—'}</span>
+          <span style="color:${imeiColor};margin-left:6px">
+            ${v.trazabilidad && v.trazabilidad !== '0' ? '📱 '+v.trazabilidad : '⚠ Sin IMEI'}</span>
+        </div>`;
+      }).join('');
+    }
+
     return `<tr class="${ok?'row-ok':'row-mal'}">
       <td><span style="font-size:8px;padding:2px 7px;border-radius:3px;color:${stColor};
         border:1px solid ${stColor}55;background:${stColor}18">${r.estado}</span></td>
-      <td>${s.fecha}</td>
-      <td>${s.suc}</td>
-      <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.vendedor||'—'}</td>
-      <td>${s.plan||'—'}</td>
-      <td class="num" style="font-family:var(--mono);color:var(--cyn)">${s.cupon}</td>
-      <td class="num" style="font-weight:600">${_gFmt(Math.abs(s.monto||0))}</td>
+      <td style="font-size:8px;color:var(--m2)">${r.metodo||'—'}</td>
+      <td>${s?.fecha||'—'}</td>
+      <td>${s?.suc||'—'}</td>
+      <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s?.vendedor||'—'}</td>
+      <td>${s?.plan||'—'}</td>
+      <td class="num" style="font-family:var(--mono);color:var(--cyn)">${s?.cupon||'—'}</td>
+      <td class="num" style="font-weight:600">${_gFmt(Math.abs(s?.monto||0))}</td>
       <td class="num" style="color:${ok?'var(--grn)':'var(--m2)'}">${proc?_gFmt(Math.abs(proc.monto||0)):'—'}</td>
       <td style="font-size:9px">${proc?.fecha||'—'}</td>
-      <td style="font-size:9px;color:var(--m2)">${s.asiento||'—'}</td>
+      <td style="min-width:200px">${ventaCell}</td>
     </tr>`;
   }).join('');
 }

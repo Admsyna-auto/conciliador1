@@ -528,17 +528,26 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
         if (hit) { met='GoC:Orden3'; break; }
       }
 
-      // GoC:W-Orden1 — W+Número de Orden + Monto + Fecha
-      // Skylab añade "W" al cupón en operaciones integradas (ej: sky.cupon="W15208704")
+      // GoC:W-RefExt1 — strip W → Referencia Externa + Monto + Fecha
+      // Skylab prefija "W" a la Referencia Externa para operaciones integradas
+      // Ej: sky.cupon="W217696" → strip W → "217696" = GoC.refExt
       if (!hit) for (const wk of ordenKeysNoW) {
-        hit = gocIdx[`O1|${wk}|${mn}|${fn}`];
-        if (hit) { met='GoC:W-Orden1'; break; }
+        hit = gocIdx[`R1|${wk}|${mn}|${fn}`];
+        if (hit) { met='GoC:W-RefExt1'; break; }
       }
 
-      // GoC:W-Orden2 — W+Número de Orden + Monto (sin fecha, fallback)
+      // GoC:W-RefExt2 — strip W → Referencia Externa + Monto (sin fecha, fallback)
       if (!hit) for (const wk of ordenKeysNoW) {
-        hit = gocIdx[`O2|${wk}|${mn}`];
-        if (hit) { met='GoC:W-Orden2'; break; }
+        hit = gocIdx[`R2|${wk}|${mn}`];
+        if (hit) { met='GoC:W-RefExt2'; break; }
+      }
+
+      // GoC:W-RefExt3 — strip W → Referencia Externa sola (tolerancia máxima)
+      if (!hit) for (const wk of ordenKeysNoW) {
+        const byRef = Object.values(gocIdx).find(p =>
+          p && norm(String(p.refExt||'')) === wk
+        );
+        if (byRef) { hit = byRef; met='GoC:W-RefExt3'; break; }
       }
 
       // GoC:Orden4 — Cupon + Monto + Fecha + Suc
