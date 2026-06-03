@@ -321,13 +321,13 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 }
 .fix-info b{color:var(--txt)}
 .fix-hdr{
-  display:grid;grid-template-columns:1.2fr 1.1fr 1fr 110px 120px 90px 145px 92px;
+  display:grid;grid-template-columns:1.2fr 1.1fr 1fr 110px 140px 90px 90px 92px;
   gap:6px;padding:7px 0 8px;
   font-size:8px;color:var(--m2);text-transform:uppercase;letter-spacing:.6px;
   border-bottom:1px solid var(--b2);margin-bottom:2px;
 }
 .fix-row{
-  display:grid;grid-template-columns:1.2fr 1.1fr 1fr 110px 120px 90px 145px 92px;
+  display:grid;grid-template-columns:1.2fr 1.1fr 1fr 110px 140px 90px 90px 92px;
   gap:6px;align-items:center;padding:9px 0;
   border-bottom:1px solid var(--b1);
 }
@@ -1065,9 +1065,10 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       <select class="filter-sel" id="flt-suc"    onchange="aplicarFiltros()"><option value="">Todas las suc.</option></select>
       <select class="filter-sel" id="flt-tar"    onchange="aplicarFiltros()"><option value="">Todas las tarjetas</option></select>
       <select class="filter-sel" id="flt-proc"   onchange="aplicarFiltros()">
-        <option value="">Ambas proc.</option>
+        <option value="">Todas las proc.</option>
         <option value="FISERV">FISERV</option>
         <option value="GETPOS">GETPOS</option>
+        <option value="GOCUOTAS">Go Cuotas</option>
       </select>
       <select class="filter-sel" id="flt-fecha"  onchange="aplicarFiltros()"><option value="">Todas las fechas</option></select>
       <select class="filter-sel" id="flt-vend"   onchange="aplicarFiltros()"><option value="">Todos los vendedores</option></select>

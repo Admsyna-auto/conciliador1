@@ -1046,7 +1046,14 @@ function filtrarSinMatch() {
   let rows=RESULTADO.filter(r=>['SIN MATCH','REVISION URGENTE','REFACTURADO'].includes(r.estado));
   if (FILTROS_FIX.suc)   rows=rows.filter(r=>r.sky.suc===FILTROS_FIX.suc);
   if (FILTROS_FIX.tar)   rows=rows.filter(r=>r.sky.tarjeta===FILTROS_FIX.tar);
-  if (FILTROS_FIX.proc)  rows=rows.filter(r=>r.sky.esGETPos===FILTROS_FIX.proc==='GETPOS'||(!r.sky.esGETPos)===FILTROS_FIX.proc==='FISERV');
+  if (FILTROS_FIX.proc) {
+    const p = FILTROS_FIX.proc;
+    rows = rows.filter(r =>
+      (p === 'GOCUOTAS' && r.sky.esGOCUOTAS) ||
+      (p === 'GETPOS'   && r.sky.esGETPos && !r.sky.esGOCUOTAS) ||
+      (p === 'FISERV'   && !r.sky.esGETPos && !r.sky.esGOCUOTAS)
+    );
+  }
   if (FILTROS_FIX.fecha) rows=rows.filter(r=>r.sky.fecha===FILTROS_FIX.fecha);
   if (FILTROS_FIX.vend)  rows=rows.filter(r=>r.sky.vendedor===FILTROS_FIX.vend);
   if (FILTROS_FIX.search) {
@@ -1113,6 +1120,76 @@ function renderFilas() {
     const montoFmt   = s.monto < 0
       ? `−${fmtARS(Math.abs(s.monto))}`
       : fmtARS(s.monto);
+    // ── Datos Ventas (GoC IMEI link) ──────────────────────────────
+    const ventaIdx = window._GOC_VENTAS_IDX || {};
+    const ventaInfo = s.esGOCUOTAS
+      ? (ventaIdx[_gNorm?.(s.cupon)||norm(s.cupon)] ||
+         ventaIdx[norm(s.asiento)] || null)
+      : null;
+
+    // ── Render según procesadora ───────────────────────────────────
+    if (s.esGOCUOTAS) {
+      // ── Fila especial para Go Cuotas ──────────────────────────
+      const gocApplied = !!cor.cupon;
+      const imeiInfo = ventaInfo
+        ? `<div style="font-size:8px;margin-top:4px;padding:4px 6px;background:var(--s3);border-radius:4px">
+            <div style="color:var(--m2)">Artículo</div>
+            <div style="color:var(--txt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${ventaInfo.descripcion||'—'}</div>
+            <div style="color:${ventaInfo.trazabilidad?'var(--grn)':'var(--red)'}">
+              IMEI: ${ventaInfo.trazabilidad||'⚠ Sin IMEI'}</div>
+          </div>`
+        : (window._GOC_VENTAS?.length ? `<div style="font-size:8px;color:var(--m2);margin-top:3px">Sin link en Ventas</div>` : '');
+
+      return `<div class="fix-row" id="fr-${s.idx}">
+        <div><div class="fix-cell-lbl">Suc · Asiento · Cupón GoC</div>
+          <div class="fix-cell-val"><b style="color:var(--cyn)">${s.suc}</b> · ${s.asiento??'—'} · <b style="color:var(--yel)">${s.cupon}</b></div>
+          <div class="fix-cell-sub" style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+            <span>${s.tarjeta}</span>
+            <span style="font-size:7px;padding:1px 5px;border-radius:3px;
+              color:${tipo.color};border:1px solid ${tipo.color}55;background:${tipo.color}18">${tipo.label}</span>
+          </div>
+          ${imeiInfo}
+        </div>
+        <div><div class="fix-cell-lbl">Plan · Lote</div>
+          <div class="fix-cell-val">${s.plan} · Lote ${s.lote}</div>
+          <div class="fix-cell-sub">${s.vendedor??''}</div></div>
+        <div><div class="fix-cell-lbl">Monto facturado · Fecha</div>
+          <div class="fix-cell-val fix-monto" style="color:${montoColor}">${montoFmt}</div>
+          <div class="fix-cell-sub">${s.fecha}</div></div>
+        <div>
+          <div class="fix-cell-lbl">Monto real cobrado</div>
+          <input class="fix-inp" id="fi-mon-${s.idx}" type="number" step="0.01"
+            placeholder="Igual al facturado"
+            value="${cor.montoReal != null ? cor.montoReal : ''}"
+            style="font-family:var(--mono);text-align:right">
+        </div>
+        <div>
+          <div class="fix-cell-lbl">Nro. Orden GoC (cupon / lote / lote+cupon)</div>
+          <input class="fix-inp" id="fi-cup-${s.idx}"
+            placeholder="Nro. de Orden GoC"
+            value="${cor.cupon||''}"
+            style="color:var(--yel)">
+        </div>
+        <div>
+          <span class="st st-gp" style="font-size:9px">Go Cuotas</span>
+          <input type="hidden" id="fi-proc-${s.idx}" value="GOCUOTAS">
+          <input type="hidden" id="fi-met-${s.idx}" value="GoC:Manual">
+        </div>
+        <div><div style="font-size:8px;color:var(--m2)">Método</div>
+          <div style="font-size:9px;color:var(--yel)">${r.metodo||'—'}</div></div>
+        <div style="display:flex;flex-direction:column;gap:4px">
+          <button class="fix-apply ${gocApplied?'applied':''}" id="fi-btn-${s.idx}"
+            onclick="aplicarCorreccionGoC(${s.idx})">
+            ${gocApplied?'✓ Ok':'Re-cruzar GoC'}</button>
+          <button class="fix-apply" style="background:var(--org);font-size:7px"
+            onclick="marcarRevision('${s.idx}','REVISION URGENTE')">⚠ Rev. Urgente</button>
+          <button class="fix-apply" style="background:#0369a1;font-size:7px"
+            onclick="marcarRevision('${s.idx}','ANULACION SIN COBRO')">✗ Anu. S/Cobro</button>
+        </div>
+      </div>`;
+    }
+
+    // ── Fila estándar para FISERV / GETPOS ─────────────────────────
     return `<div class="fix-row" id="fr-${s.idx}">
       <div><div class="fix-cell-lbl">Suc · Asiento · Cupón</div>
         <div class="fix-cell-val"><b style="color:var(--cyn)">${s.suc}</b> · ${s.asiento??'—'} · <b>${s.cupon}</b></div>
@@ -1169,6 +1246,73 @@ function renderFilas() {
 }
 
 function renderFixPanel() { poblarFiltros(); renderFilas(); }
+
+// ── Corrección manual para Go Cuotas ───────────────────────────────
+function aplicarCorreccionGoC(idx) {
+  const ordenManual = document.getElementById(`fi-cup-${idx}`)?.value?.trim();
+  const montoRealRaw = document.getElementById(`fi-mon-${idx}`)?.value?.trim();
+  const montoReal = montoRealRaw ? parseFloat(montoRealRaw.replace(',','.')) || null : null;
+
+  const fila = RESULTADO[idx]; if (!fila) return;
+  const key  = _skyKey(fila.sky);
+
+  // Si no ingresó orden, guardar como "pendiente de revisión"
+  if (!ordenManual) {
+    alert('Ingresá el Nro. de Orden de Go Cuotas para re-cruzar.');
+    return;
+  }
+
+  // Intentar cruzar con el orden ingresado usando la cascada GoC
+  const gocPagos = typeof _GOC_PAGOS !== 'undefined' ? _GOC_PAGOS : [];
+  const idxGoC    = {};
+  const idxGoCRef = {};
+  gocPagos.forEach(p => {
+    if (p.orden) idxGoC[p.orden] = p;
+    const ref = String(p.refExt||'').trim();
+    if (ref && ref !== '-' && ref !== '0') idxGoCRef[ref] = p;
+  });
+
+  const cup = norm(ordenManual);
+  let hit = idxGoC[cup] || idxGoCRef[cup];
+
+  // Guardar corrección
+  CORREGIDAS[key] = {
+    cupon: ordenManual, proc: 'GOCUOTAS', metodo: 'GoC:Manual',
+    montoReal,
+    resultado: hit ? 'CRUZADO' : 'NO CRUZADO',
+    motivo: hit ? '' : 'Orden no encontrada en GoC CSV',
+  };
+
+  if (hit) {
+    fila.proc = {
+      ticket: hit.orden, aut: hit.orden, cupon: hit.orden,
+      monto: hit.importe, montoN: normMonto(hit.importe),
+      fecha: hit.fechaOrigen, suc: hit.sucNombre||'',
+      tarjeta:'Go Cuotas', cuotas:hit.cuotas||1, comFis:'',
+      nombre:hit.nombre||'', marca:'GOCUOTAS', plan:'',
+      equipo:'', pos:'', tipo:'Venta', arancel:0, cfo:0,
+    };
+    fila.metodo        = 'GoC:Manual';
+    fila.estado        = 'OK (GoC)';
+    fila.procEncontrada= 'GOCUOTAS';
+    fila.matchParcial  = `Manual GoC: ${ordenManual}`;
+    fila.correccionManual = CORREGIDAS[key];
+  } else {
+    fila.estado = 'REVISION URGENTE';
+    fila.metodo = 'GoC:Manual';
+    fila.matchParcial = `Orden GoC ${ordenManual} no encontrada`;
+    fila.correccionManual = CORREGIDAS[key];
+  }
+
+  const btn = document.getElementById(`fi-btn-${idx}`);
+  if (btn) {
+    btn.textContent = hit ? '✓ Cruzado GoC' : '✗ No encontrado';
+    btn.classList.add('applied');
+  }
+
+  renderTablas(); updateCounts(); renderTablaCorrecciones(); renderFilas();
+  scheduleAutoSave();
+}
 
 function aplicarCorreccion(idx) {
   const cupon=document.getElementById(`fi-cup-${idx}`)?.value?.trim();
