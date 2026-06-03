@@ -379,10 +379,17 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
   const idxGN=buildIndexGp(gpNorm),   idxGR=buildIndexGp(gpRev);
   const used=new Set();
 
-  // Índice Go Cuotas: orden → pago (se usa si _GOC_PAGOS está cargado)
-  const idxGoC = {};
+  // Índice Go Cuotas — dos claves de búsqueda:
+  //   idxGoC[orden]  → para la mayoría de sucursales (Nro de Orden = Cupon SKY)
+  //   idxGoCRef[ref] → para suc. 251 y 097 (Referencia Externa = Cupon SKY)
+  const idxGoC    = {};
+  const idxGoCRef = {};
   if (typeof _GOC_PAGOS !== 'undefined' && _GOC_PAGOS.length) {
-    _GOC_PAGOS.forEach(p => { idxGoC[p.orden] = p; });
+    _GOC_PAGOS.forEach(p => {
+      if (p.orden) idxGoC[p.orden] = p;
+      const ref = String(p.refExt || '').trim();
+      if (ref && ref !== '-' && ref !== '0') idxGoCRef[ref] = p;
+    });
   }
   const gocEnabled = typeof PROCS_ENABLED !== 'undefined'
     ? (PROCS_ENABLED.GOCUOTAS !== false)
@@ -460,11 +467,19 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
       }
     }
 
-    // ── Go Cuotas: match directo por Número de Orden (cupon SKY = orden GoC)
-    if (s.esGOCUOTAS && gocEnabled && Object.keys(idxGoC).length) {
-      const cup  = norm(s.cupon);
-      const hit  = idxGoC[cup];
-      if (hit) return armarFilaGoC(s, hit, procEsp);
+    // ── Go Cuotas: match por Número de Orden O por Referencia Externa
+    // Suc 251 y 097 usan Referencia Externa como cupón en Skylab
+    if (s.esGOCUOTAS && gocEnabled && (Object.keys(idxGoC).length || Object.keys(idxGoCRef).length)) {
+      const cup = norm(s.cupon);
+      // Primero buscar por Número de Orden (mayoría de sucursales)
+      let hit = idxGoC[cup];
+      let met = 'GoC:Orden';
+      // Si no encontró, buscar por Referencia Externa (suc 251, 097 y similares)
+      if (!hit && idxGoCRef[cup]) {
+        hit = idxGoCRef[cup];
+        met = 'GoC:RefExt';
+      }
+      if (hit) return armarFilaGoC(s, hit, procEsp, met);
     }
 
     return { sky:s, proc:null, metodo:'SIN MATCH', estado:'SIN MATCH',
@@ -474,7 +489,8 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
 }
 
 // ── Armar fila de resultado para Go Cuotas ──────────────────────────
-function armarFilaGoC(s, pago, procEsp) {
+function armarFilaGoC(s, pago, procEsp, met) {
+  met = met || 'GoC:Orden';
   const procObj = {
     ticket:  pago.orden,
     aut:     pago.orden,
@@ -497,7 +513,7 @@ function armarFilaGoC(s, pago, procEsp) {
   const difMonto = Math.abs(Math.abs(s.monto) - Math.abs(pago.importe));
   return {
     sky: s, proc: procObj,
-    metodo:        'GoC:Orden',
+    metodo:        met,
     estado:        'OK (GoC)',
     procEncontrada:'GOCUOTAS',
     procEsperada:  procEsp,
