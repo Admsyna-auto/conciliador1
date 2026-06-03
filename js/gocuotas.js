@@ -772,7 +772,7 @@ function exportarGoCuotas(tipo) {
            'Sucursal','Vendedor','Plan','Cuotas SKY','Nro. Orden/Cupon SKY',
            'Order ID GoC','Cuotas GoC','Dif. Cuotas',
            'Importe SKY','Monto proc. GoC','Dif. Monto','Fecha pago GoC',
-           'Artículo','IMEI / Trazabilidad'];
+           'Nro. Factura','Artículo','IMEI / Trazabilidad'];
 
     // Una fila por artículo si es Go Celular; una fila por operación si no
     const rows = [];
@@ -815,13 +815,13 @@ function exportarGoCuotas(tipo) {
         const ventas = ventaIdx[cup] || ventaIdx[ast] || [];
         if (ventas.length > 0) {
           ventas.forEach(v => {
-            rows.push([...base, v.descripcion||'', v.trazabilidad||'']);
+            rows.push([...base, v.comprobante||'', v.descripcion||'', v.trazabilidad||'']);
           });
         } else {
-          rows.push([...base, 'Sin match en Ventas', '']);
+          rows.push([...base, '', 'Sin match en Ventas', '']);
         }
       } else {
-        rows.push([...base, '', '']);
+        rows.push([...base, '', '', '']);
       }
     });
     data = rows;
