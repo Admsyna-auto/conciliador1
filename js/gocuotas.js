@@ -765,11 +765,50 @@ function exportarGoCuotas(tipo) {
     data = filas.map(({pago}) => [pago.fechaOrigen, pago.fechaPago, pago.orden, pago.nombre,
       pago.cuotas, pago.importe, pago.totalCobrar, pago.sucNombre]);
   } else {
-    HDR = ['Estado cruce','Nro. Asiento SKY','Fecha venta','Sucursal','Vendedor',
-           'Plan','Nro. Orden GoC','Importe SKY','Monto proc. GoC','Fecha pago GoC'];
-    data = filas.map(r => [r.estado, r.sky?.asiento||'', r.sky?.fecha||'',
-      r.sky?.suc||'', r.sky?.vendedor||'', r.sky?.plan||'', r.sky?.cupon||'',
-      Math.abs(r.sky?.monto||0), r.proc?Math.abs(r.proc.monto||0):'', r.proc?.fecha||'']);
+    const ventaIdx = window._GOC_VENTAS_IDX || {};
+
+    HDR = ['Estado cruce','Método','Fuente GoC','Nro. Asiento SKY','Fecha venta',
+           'Sucursal','Vendedor','Plan','Nro. Orden/Cupon GoC',
+           'Importe SKY','Monto proc. GoC','Fecha pago GoC',
+           // Columnas artículos (solo Go Celular — una fila por artículo)
+           'Artículo','IMEI / Trazabilidad'];
+
+    // Una fila por artículo si es Go Celular; una fila por operación si no
+    const rows = [];
+    filas.forEach(r => {
+      const s    = r.sky;
+      const base = [
+        r.estado,
+        r.metodo||'',
+        r.procEncontrada||'',
+        s?.asiento||'',
+        s?.fecha||'',
+        s?.suc||'',
+        s?.vendedor||'',
+        s?.plan||'',
+        s?.cupon||'',
+        Math.abs(s?.monto||0),
+        r.proc ? Math.abs(r.proc.monto||0) : '',
+        r.proc?.fecha||'',
+      ];
+
+      const esCelular = /CELULAR|GOCELU/i.test(s?.plan||'');
+      if (esCelular) {
+        const cup    = norm(s?.cupon||'');
+        const ast    = norm(s?.asiento||'');
+        const ventas = ventaIdx[cup] || ventaIdx[ast] || [];
+        if (ventas.length > 0) {
+          ventas.forEach(v => {
+            rows.push([...base, v.descripcion||'', v.trazabilidad||'']);
+          });
+        } else {
+          rows.push([...base, 'Sin match en Ventas', '']);
+        }
+      } else {
+        rows.push([...base, '', '']);
+      }
+    });
+    data = rows;
   }
   _exportXlsx([HDR, ...data], 'Go Cuotas', `GoCuotas_${tipo}_${hoy()}.xlsx`);
 }
