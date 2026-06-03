@@ -125,13 +125,18 @@ function parseGocPagos(file, fuente) {
     const reader = new FileReader();
     reader.onload = e => {
       try {
-        const text  = e.target.result;
-        const lines = text.split(/\r?\n/).filter(l => l.trim());
-        if (lines.length < 2) { _GOC_PAGOS = []; res([]); return; }
+        // Quitar BOM (UTF-8 con BOM frecuente en Windows) y normalizar saltos
+        const text  = e.target.result.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        const lines = text.split('\n').filter(l => l.trim());
+        if (lines.length < 2) {
+          if (fuente === 'GOCELULAR') _GOC_CELULAR = []; else _GOC_PAGOS = [];
+          res([]); return;
+        }
 
-        const sep    = ';';
-        const hdrRaw = lines[0].split(sep).map(h => h.trim());
-        console.log('[GOC-PAGOS] Columnas CSV:', hdrRaw);
+        // Detectar separador: ; o ,
+        const sep = lines[0].includes(';') ? ';' : ',';
+        const hdrRaw = lines[0].split(sep).map(h => h.trim().replace(/^"|"$/g,''));
+        console.log(`[GOC-${fuente}] Separador='${sep}' Columnas:`, hdrRaw);
 
         // Mapeo flexible de columnas
         const fi = (names) => {
@@ -158,7 +163,7 @@ function parseGocPagos(file, fuente) {
         console.log('[GOC-PAGOS] Índices columnas:', IDX);
 
         const rows = lines.slice(1).map((line, i) => {
-          const cols = line.split(sep).map(c => c.trim());
+          const cols = line.split(sep).map(c => c.trim().replace(/^"|"$/g,''));
           const g = (key) => IDX[key] >= 0 ? cols[IDX[key]] : '';
           const tipo = g('tipo').toLowerCase();
           if (tipo.includes('total') || tipo.includes('subtotal')) return null;
@@ -187,7 +192,10 @@ function parseGocPagos(file, fuente) {
           console.log('[GOC-PAGOS] Parseados:', _GOC_PAGOS.length);
         }
         res(rows);
-      } catch(err) { rej(err); }
+      } catch(err) {
+        console.error(`[GOC-${fuente}] Error parseando CSV:`, err.message, err.stack);
+        rej(err);
+      }
     };
     reader.onerror = () => rej(new Error('Error leyendo CSV'));
     reader.readAsText(file, 'utf-8');
