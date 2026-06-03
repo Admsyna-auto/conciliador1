@@ -502,6 +502,12 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
       // Los 3 posibles portadores del Número de Orden en Skylab
       const ordenKeys = [...new Set([cn, ln, ltcn].filter(k => k && k !== '0'))];
 
+      // Variantes sin W: cuando Skylab agrega "W" delante del nro de orden
+      // (operaciones integradas). Ej: sky.cupon = "W15208704" → buscar "15208704"
+      const ordenKeysNoW = [...new Set(
+        ordenKeys.filter(k => /^w/i.test(k)).map(k => k.slice(1))
+      )];
+
       let hit, met;
 
       // GoC:Orden1 — Número de Orden + Monto + Fecha (más restrictivo)
@@ -520,6 +526,19 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
       if (!hit) for (const ok of ordenKeys) {
         hit = gocIdx[`O3|${ok}|${fn}`];
         if (hit) { met='GoC:Orden3'; break; }
+      }
+
+      // GoC:W-Orden1 — W+Número de Orden + Monto + Fecha
+      // Skylab añade "W" al cupón en operaciones integradas (ej: sky.cupon="W15208704")
+      if (!hit) for (const wk of ordenKeysNoW) {
+        hit = gocIdx[`O1|${wk}|${mn}|${fn}`];
+        if (hit) { met='GoC:W-Orden1'; break; }
+      }
+
+      // GoC:W-Orden2 — W+Número de Orden + Monto (sin fecha, fallback)
+      if (!hit) for (const wk of ordenKeysNoW) {
+        hit = gocIdx[`O2|${wk}|${mn}`];
+        if (hit) { met='GoC:W-Orden2'; break; }
       }
 
       // GoC:Orden4 — Cupon + Monto + Fecha + Suc
