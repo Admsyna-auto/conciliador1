@@ -4,7 +4,7 @@
 
 const APP_VERSION = '1.0.0';
 const DB_NAME     = 'ConciliadorDB';
-const DB_VERSION  = 1;
+const DB_VERSION  = 2;   // v2: added 'periodos' store
 
 // ── Estado de archivos cargados
 const FILES = { sky: null, fis: null, gp: null, ter: null, enu: null, baj: null, liq: null };
@@ -60,6 +60,8 @@ async function dbOpen() {
         db.createObjectStore('sesiones', { keyPath: 'id' });
       if (!db.objectStoreNames.contains('tablasMaestras'))
         db.createObjectStore('tablasMaestras', { keyPath: 'clave' });
+      if (!db.objectStoreNames.contains('periodos'))
+        db.createObjectStore('periodos', { keyPath: 'id' });
     };
     req.onsuccess  = e => { _db = e.target.result; res(_db); };
     req.onerror    = e => rej(e.target.error);
@@ -304,6 +306,50 @@ function registrarCorreccion({ skyIdx, campo, valorAntes, valorDespues, motivo, 
   LOG_AUDIT.push(entry);
   scheduleAutoSave();
   return entry;
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PERÍODOS HISTÓRICOS — base acumulativa de cierres de período
+// ════════════════════════════════════════════════════════════════════
+
+async function guardarPeriodo(periodo) {
+  await dbPut('periodos', periodo);
+}
+
+async function listarPeriodos() {
+  try { return (await dbGetAll('periodos')).sort((a,b) => a.periodoDesde < b.periodoDesde ? 1 : -1); }
+  catch { return []; }
+}
+
+async function eliminarPeriodo(id) {
+  await dbDelete('periodos', id);
+}
+
+function exportarPeriodoJSON(periodo) {
+  const json = JSON.stringify(periodo, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = `Periodo_${periodo.periodoDesde}_${periodo.periodoHasta}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importarPeriodoJSON(file) {
+  return new Promise((res, rej) => {
+    const reader = new FileReader();
+    reader.onload = async e => {
+      try {
+        const p = JSON.parse(e.target.result);
+        if (!p.id || !p.periodoDesde) { rej(new Error('Archivo de período inválido')); return; }
+        await guardarPeriodo(p);
+        res(p);
+      } catch(err) { rej(err); }
+    };
+    reader.onerror = () => rej(new Error('Error leyendo archivo'));
+    reader.readAsText(file);
+  });
 }
 
 // Init: cargar TM al arrancar

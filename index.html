@@ -740,8 +740,11 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   <button class="mod-btn" id="mbtn-dashboard" onclick="showMod('dashboard',this)">
     6 · Dashboard
   </button>
+  <button class="mod-btn" id="mbtn-hist" onclick="showMod('hist',this)">
+    8 · Histórico <span class="cnt" id="mcnt-hist">—</span>
+  </button>
   <button class="mod-btn" id="mbtn-tm"        onclick="showMod('tm',this)">
-    7 · Tablas maestras
+    9 · Tablas maestras
   </button>
 </div>
 
@@ -837,6 +840,18 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       </div>
     </div>
   </div>
+
+  <button onclick="cerrarPeriodo()" style="
+    margin:6px 12px 0;padding:9px;
+    background:linear-gradient(135deg,#065f46,#047857);
+    color:#d1fae5;border:none;border-radius:var(--r6);
+    font-family:var(--head);font-size:10px;font-weight:700;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:6px;
+    transition:opacity .2s;letter-spacing:.3px;"
+    onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'"
+    title="Consolidar el período actual y guardarlo en el historial acumulativo">
+    📅 Cerrar período
+  </button>
 
   <button class="run-btn" id="run-btn" disabled onclick="conciliar()">
     <span id="run-icon">▶</span> <span id="run-lbl">Conciliar</span>
@@ -1524,6 +1539,11 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 
   <!-- ── LOG AUDITORÍA (pestaña en revisión) ─────────── -->
 
+  <!-- ── MÓDULO 8: HISTÓRICO ──────────────────────────────── -->
+  <div class="mod-panel" id="mod-hist">
+    <div id="mod-hist-inner" style="display:flex;flex:1;min-height:0;overflow:hidden;flex-direction:column"></div>
+  </div>
+
   <!-- ── MÓDULO 7: CONTRACARGOS ─────────────────────────── -->
   <div class="mod-panel" id="mod-ctr">
     <div id="mod-ctr-inner" style="display:flex;flex:1;min-height:0;overflow:hidden;flex-direction:column">
@@ -1573,6 +1593,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 <script src="js/cobros.js"></script>
 <script src="js/conciliador.js"></script>
 <script src="js/contracargos.js"></script>
+<script src="js/historico.js"></script>
 <script src="js/dashboard.js"></script>
 <script>
 
@@ -1590,6 +1611,7 @@ function showMod(mod, btn) {
   if (mod === 'dashboard')   { renderDashboard(); }
   if (mod === 'cobros')      { renderModuloCobros(); }
   if (mod === 'ctr')         { renderModuloContracargos(); }
+  if (mod === 'hist')        { renderModuloHistorico(); }
 }
 
 // ══ SIDEBAR EQUIV ══════════════════════════════════════
@@ -1890,6 +1912,11 @@ function _loadTheme() {
 // ══ INIT ═════════════════════════════════════════════
 document.addEventListener('DOMContentLoaded', () => {
   _loadTheme();
+  // Badge histórico
+  listarPeriodos().then(ps => {
+    const b = document.getElementById('mcnt-hist');
+    if (b) b.textContent = ps.length || '—';
+  });
   renderSbEquiv();
   // Módulo TM
   document.getElementById('mod-tm-inner').innerHTML = '';
