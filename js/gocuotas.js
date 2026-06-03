@@ -768,9 +768,9 @@ function exportarGoCuotas(tipo) {
     const ventaIdx = window._GOC_VENTAS_IDX || {};
 
     HDR = ['Estado cruce','Método','Fuente GoC','Nro. Asiento SKY','Fecha venta',
-           'Sucursal','Vendedor','Plan','Nro. Orden/Cupon GoC',
+           'Sucursal','Vendedor','Plan','Nro. Orden/Cupon SKY',
+           'Order ID GoC','Cuotas GoC',
            'Importe SKY','Monto proc. GoC','Fecha pago GoC',
-           // Columnas artículos (solo Go Celular — una fila por artículo)
            'Artículo','IMEI / Trazabilidad'];
 
     // Una fila por artículo si es Go Celular; una fila por operación si no
@@ -786,7 +786,9 @@ function exportarGoCuotas(tipo) {
         s?.suc||'',
         s?.vendedor||'',
         s?.plan||'',
-        s?.cupon||'',
+        s?.cupon||'',                          // Nro Orden/Cupon en SKY
+        r.proc?.ticket || r.proc?.cupon || '', // Order ID del CSV GoC
+        r.proc?.cuotas || '',                  // Cuotas según CSV GoC
         Math.abs(s?.monto||0),
         r.proc ? Math.abs(r.proc.monto||0) : '',
         r.proc?.fecha||'',
