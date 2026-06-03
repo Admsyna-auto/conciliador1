@@ -305,43 +305,80 @@ function cruzarGoCuotas() {
 }
 
 // ════════════════════════════════════════════════════════════════════
-// RENDER MÓDULO
+// RENDER MÓDULO — ahora usa RESULTADO (GoC ya integrado en el cruce)
 // ════════════════════════════════════════════════════════════════════
 function renderModuloGoCuotas() {
   const panel = document.getElementById('mod-goc');
   if (!panel) return;
 
-  const hasSky  = _GOC_SKY.length   > 0;
-  const hasPag  = _GOC_PAGOS.length > 0;
-  const hasVen  = _GOC_VENTAS.length > 0;
+  // GoC rows vienen del Skylab principal → leer desde RESULTADO
+  const hasCruce = typeof RESULTADO !== 'undefined' && RESULTADO.length > 0;
+  const hasPag   = typeof _GOC_PAGOS !== 'undefined' && _GOC_PAGOS.length > 0;
 
-  if (!hasSky) {
+  if (!hasCruce) {
     panel.innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
         height:100%;gap:14px;color:var(--m2);text-align:center;padding:40px">
         <div style="font-size:42px;opacity:.15">💳</div>
         <div style="font-family:var(--head);font-size:16px;font-weight:700;color:var(--txt);opacity:.4">Go Cuotas</div>
         <p style="font-size:10px;max-width:420px;line-height:1.8">
-          Cargá los archivos desde el panel izquierdo:<br>
-          <b style="color:var(--grn)">Skylab Go Cuotas</b> (XLSX, requerido) ·
-          <b style="color:var(--acc)">Go Cuotas CSV</b> (pagos) ·
-          <b style="color:var(--yel)">Ventas</b> (artículos + IMEI)
+          Las filas de Go Cuotas se cruzan en el <b style="color:var(--cyn)">Módulo 1</b>.<br>
+          Habilitá <b style="color:var(--yel)">Go Cuotas</b> en el panel izquierdo,<br>
+          cargá el CSV de pagos y ejecutá el <b style="color:var(--acc)">Cruce Automático</b>.
         </p>
       </div>`;
     return;
   }
 
-  cruzarGoCuotas();
+  // ── Filas GoC del resultado del cruce ─────────────────────────────
+  const gocRows = RESULTADO.filter(r => r.sky?.esGOCUOTAS);
 
-  const cobrados   = _GOC_RESULT.filter(r => r.estadoCobro === 'COBRADO');
-  const pendientes = _GOC_RESULT.filter(r => r.estadoCobro === 'PENDIENTE');
-  const sinSky     = _GOC_RESULT.filter(r => r.estadoCobro === 'EN GOC - SIN SKY');
-  const imeiIssues = _GOC_RESULT.filter(r => r.estadoImei && r.estadoImei !== 'IMEI OK');
-  const imeiOk     = _GOC_RESULT.filter(r => r.estadoImei === 'IMEI OK');
+  if (!gocRows.length) {
+    panel.innerHTML = `
+      <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+        height:100%;gap:14px;color:var(--m2);text-align:center;padding:40px">
+        <div style="font-size:36px;opacity:.2">💳</div>
+        <div style="font-size:12px;font-weight:600;color:var(--txt);opacity:.5">Sin operaciones Go Cuotas</div>
+        <p style="font-size:10px;max-width:420px;line-height:1.8">
+          No se encontraron filas con <b>Tarjeta = GO CUOTAS</b> en el Skylab.<br>
+          Verificá que el archivo Skylab contenga esas operaciones y<br>
+          que la procesadora <b style="color:var(--yel)">Go Cuotas</b> esté habilitada.
+        </p>
+      </div>`;
+    return;
+  }
 
-  const mCob = cobrados.reduce((s,r) => s+(r.sky?.importe||0), 0);
-  const mPen = pendientes.reduce((s,r) => s+(r.sky?.importe||0), 0);
-  const total = _GOC_SKY.length;
+  // ── Clasificar por estado del cruce ───────────────────────────────
+  const isOK  = r => r.estado?.startsWith('OK') || r.estado?.includes('GoC');
+  const cobrados   = gocRows.filter(isOK);
+  const pendientes = gocRows.filter(r => r.estado === 'SIN MATCH');
+  const otros      = gocRows.filter(r => !isOK(r) && r.estado !== 'SIN MATCH');
+
+  // ── Pagos en GoC sin match en Skylab ──────────────────────────────
+  const skyOrders = new Set(gocRows.map(r => norm(r.sky.cupon)));
+  const sinSky    = hasPag ? _GOC_PAGOS.filter(p => !skyOrders.has(p.orden)) : [];
+
+  // ── IMEI analysis (si Ventas está cargado) ────────────────────────
+  const ventaIdx  = window._GOC_VENTAS_IDX || {};
+  const imeiIssues = [];
+  const imeiOkArr  = [];
+  gocRows.forEach(r => {
+    const desc    = r.sky.plan || '';
+    const reqImei = _gRequiereImei(r.sky.plan, '');
+    if (!reqImei) return;
+    const cup   = norm(r.sky.cupon);
+    // Buscar en ventas por cupón/orden
+    const venta = ventaIdx[cup] || null;
+    const imei  = venta?.trazabilidad || '';
+    if (!venta)           imeiIssues.push({ r, venta, estadoImei:'SIN VENTAS' });
+    else if (!imei || imei==='0') imeiIssues.push({ r, venta, estadoImei:'IMEI FALTANTE' });
+    else if (!_gEsImei(imei))     imeiIssues.push({ r, venta, estadoImei:'IMEI INVÁLIDO' });
+    else                          imeiOkArr.push({ r, venta });
+  });
+
+  const mCob  = cobrados.reduce((s,r)  => s+Math.abs(r.sky.monto||0), 0);
+  const mPen  = pendientes.reduce((s,r) => s+Math.abs(r.sky.monto||0), 0);
+  const total = gocRows.length;
   const pctCob = total ? (cobrados.length/total*100).toFixed(1) : '0.0';
 
   panel.innerHTML = `
@@ -350,46 +387,47 @@ function renderModuloGoCuotas() {
     <!-- KPIs -->
     <div style="display:grid;grid-template-columns:repeat(6,1fr);gap:8px;
       padding:12px 18px;background:var(--s1);border-bottom:1px solid var(--b1);flex-shrink:0">
-      <div class="dif-kpi"><div class="dif-kpi-lbl">Total Skylab GC</div>
+      <div class="dif-kpi">
+        <div class="dif-kpi-lbl">Total Go Cuotas</div>
         <div class="dif-kpi-val cyn">${total.toLocaleString('es-AR')}</div>
-        <div style="font-size:8px;color:var(--m2)">${_gFmt(_GOC_SKY.reduce((s,r)=>s+r.importe,0))}</div>
+        <div style="font-size:8px;color:var(--m2)">${_gFmt(gocRows.reduce((s,r)=>s+Math.abs(r.sky.monto||0),0))}</div>
       </div>
       <div class="dif-kpi" style="border-color:rgba(52,211,153,.25)">
-        <div class="dif-kpi-lbl">✓ Cobrados GoC</div>
+        <div class="dif-kpi-lbl">✓ OK (GoC)</div>
         <div class="dif-kpi-val grn">${cobrados.length.toLocaleString('es-AR')}</div>
         <div style="font-size:8px;color:var(--grn)">${_gFmt(mCob)}</div>
       </div>
       <div class="dif-kpi" style="border-color:rgba(248,113,113,.25)">
-        <div class="dif-kpi-lbl">⏳ Pendientes</div>
+        <div class="dif-kpi-lbl">⏳ Sin match</div>
         <div class="dif-kpi-val red">${pendientes.length.toLocaleString('es-AR')}</div>
         <div style="font-size:8px;color:var(--red)">${_gFmt(mPen)}</div>
       </div>
       <div class="dif-kpi" style="border-color:rgba(251,191,36,.25)">
         <div class="dif-kpi-lbl">⚠ En GoC sin SKY</div>
         <div class="dif-kpi-val yel">${sinSky.length}</div>
-        <div style="font-size:8px;color:var(--yel)">cobrados no facturados</div>
+        <div style="font-size:8px;color:var(--yel)">${hasPag?'cobrados no facturados':'cargá CSV de pagos'}</div>
       </div>
       <div class="dif-kpi">
-        <div class="dif-kpi-lbl">% Cobrado</div>
+        <div class="dif-kpi-lbl">% Cruzado</div>
         <div class="dif-kpi-val ${parseFloat(pctCob)>=85?'grn':parseFloat(pctCob)>=60?'yel':'red'}">${pctCob}%</div>
       </div>
       <div class="dif-kpi" style="border-color:rgba(248,113,113,.25)">
         <div class="dif-kpi-lbl">📱 IMEI issues</div>
         <div class="dif-kpi-val ${imeiIssues.length>0?'red':'grn'}">${imeiIssues.length}</div>
-        <div style="font-size:8px;color:var(--m2)">${imeiOk.length} ok</div>
+        <div style="font-size:8px;color:var(--m2)">${imeiOkArr.length} ok</div>
       </div>
     </div>
 
     <!-- Tab strip -->
     <div class="tab-strip" id="tab-strip-goc">
       <button class="tb active" onclick="showTab('goc-todo','tab-strip-goc',this)">
-        📋 Todo <span class="cnt">${_GOC_RESULT.length}</span>
+        📋 Todo <span class="cnt">${total}</span>
       </button>
       <button class="tb" onclick="showTab('goc-cobrados','tab-strip-goc',this)">
-        ✓ Cobrados <span class="cnt" style="background:rgba(52,211,153,.15);color:var(--grn)">${cobrados.length}</span>
+        ✓ Cruzados <span class="cnt" style="background:rgba(52,211,153,.15);color:var(--grn)">${cobrados.length}</span>
       </button>
       <button class="tb" onclick="showTab('goc-pendientes','tab-strip-goc',this)">
-        ⏳ Pendientes <span class="cnt" style="background:rgba(248,113,113,.15);color:var(--red)">${pendientes.length}</span>
+        ⏳ Sin match <span class="cnt" style="background:rgba(248,113,113,.15);color:var(--red)">${pendientes.length}</span>
       </button>
       ${sinSky.length ? `<button class="tb" onclick="showTab('goc-sinsky','tab-strip-goc',this)" style="color:var(--yel)">
         ⚠ En GoC sin SKY <span class="cnt" style="background:rgba(251,191,36,.15);color:var(--yel)">${sinSky.length}</span>
@@ -398,6 +436,9 @@ function renderModuloGoCuotas() {
         📱 IMEI <span class="cnt" style="background:rgba(248,113,113,.15);color:var(--red)">${imeiIssues.length}</span>
       </button>` : ''}
     </div>
+
+    <!-- Guardamos para tablas -->
+    <script>window._gocView={gocRows,cobrados,pendientes,sinSky,imeiIssues};</script>
 
     <!-- Tab bodies -->
     <div class="tab-body active" id="goc-todo" style="flex-direction:column;flex:1;min-height:0">
@@ -433,12 +474,12 @@ function renderModuloGoCuotas() {
 
   </div>`;
 
-  // Renderizar tablas
-  _renderGocTabla('todo');
-  _renderGocTabla('cobrados');
-  _renderGocTabla('pendientes');
+  // Renderizar tablas usando los datos derivados de RESULTADO
+  _renderGocTablaRes('todo',       gocRows);
+  _renderGocTablaRes('cobrados',   cobrados);
+  _renderGocTablaRes('pendientes', pendientes);
   if (sinSky.length)     _renderGocSinSky(sinSky);
-  if (imeiIssues.length) _renderGocImei(imeiIssues);
+  if (imeiIssues.length) _renderGocImeiRes(imeiIssues);
 
   const badge = document.getElementById('mcnt-goc');
   if (badge) badge.textContent = _GOC_RESULT.length || '—';
@@ -554,10 +595,108 @@ function _renderGocImei(filas) {
   }).join('');
 }
 
+// ── Tablas de RESULTADO para el módulo ──────────────────────────────
+function _renderGocTablaRes(tipo, filas) {
+  const tbl = document.getElementById(`tbl-goc-${tipo}`); if (!tbl) return;
+  const fltSuc = document.getElementById(`goc-flt-${tipo}-suc`)?.value || '';
+  const fSearch= (document.getElementById(`goc-flt-${tipo}-search`)?.value||'').toLowerCase();
+
+  let rows = filas;
+  if (fltSuc)  rows = rows.filter(r => r.sky.suc === fltSuc);
+  if (fSearch) rows = rows.filter(r =>
+    [r.sky.asiento||'', r.sky.cupon, r.sky.plan||'', r.sky.vendedor||'',
+     r.sky.tarjeta, r.estado].join(' ').toLowerCase().includes(fSearch));
+
+  const isOK = r => r.estado?.includes('GoC') || r.estado?.startsWith('OK');
+  const HDR  = ['Estado cruce','Fecha venta','Suc.','Vendedor','Plan','Nro. Orden GoC',
+                'Importe SKY','Monto proc. GoC','Fecha pago GoC','Asiento'];
+  tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
+
+  if (!rows.length) {
+    tbl.querySelector('tbody').innerHTML =
+      `<tr><td colspan="${HDR.length}" style="padding:20px;text-align:center;color:var(--m2);font-size:10px">Sin registros.</td></tr>`;
+    return;
+  }
+
+  tbl.querySelector('tbody').innerHTML = rows.map(r => {
+    const s    = r.sky;
+    const proc = r.proc;
+    const ok   = isOK(r);
+    const stColor = ok ? 'var(--grn)' : r.estado==='SIN MATCH' ? 'var(--red)' : 'var(--yel)';
+    return `<tr class="${ok?'row-ok':'row-mal'}">
+      <td><span style="font-size:8px;padding:2px 7px;border-radius:3px;color:${stColor};
+        border:1px solid ${stColor}55;background:${stColor}18">${r.estado}</span></td>
+      <td>${s.fecha}</td>
+      <td>${s.suc}</td>
+      <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.vendedor||'—'}</td>
+      <td>${s.plan||'—'}</td>
+      <td class="num" style="font-family:var(--mono);color:var(--cyn)">${s.cupon}</td>
+      <td class="num" style="font-weight:600">${_gFmt(Math.abs(s.monto||0))}</td>
+      <td class="num" style="color:${ok?'var(--grn)':'var(--m2)'}">${proc?_gFmt(Math.abs(proc.monto||0)):'—'}</td>
+      <td style="font-size:9px">${proc?.fecha||'—'}</td>
+      <td style="font-size:9px;color:var(--m2)">${s.asiento||'—'}</td>
+    </tr>`;
+  }).join('');
+}
+
+function _renderGocImeiRes(filas) {
+  const tbl = document.getElementById('tbl-goc-imei'); if (!tbl) return;
+  const HDR = ['Estado IMEI','Fecha venta','Suc.','Vendedor','Plan','Nro. Orden GoC','Importe','IMEI / Trazabilidad'];
+  tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
+  tbl.querySelector('tbody').innerHTML = filas.map(({ r, venta, estadoImei }) => {
+    const s = r.sky;
+    const c = estadoImei==='IMEI FALTANTE'?'var(--red)':estadoImei==='IMEI INVÁLIDO'?'var(--yel)':'var(--org)';
+    return `<tr class="row-mal">
+      <td><span style="font-size:8px;padding:2px 7px;border-radius:3px;color:${c};
+        border:1px solid ${c}55;background:${c}18">${estadoImei}</span></td>
+      <td>${s.fecha}</td>
+      <td>${s.suc}</td>
+      <td style="max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s.vendedor||'—'}</td>
+      <td>${s.plan||'—'}</td>
+      <td class="num" style="font-family:var(--mono)">${s.cupon}</td>
+      <td class="num" style="font-weight:600">${_gFmt(Math.abs(s.monto||0))}</td>
+      <td style="font-family:var(--mono);font-size:9px;color:${venta?.trazabilidad?'var(--m1)':'var(--red)'}">
+        ${venta?.trazabilidad||'(vacío)'}</td>
+    </tr>`;
+  }).join('');
+}
+
 // ════════════════════════════════════════════════════════════════════
 // EXPORT
 // ════════════════════════════════════════════════════════════════════
 function exportarGoCuotas(tipo) {
+  // Obtener filas del RESULTADO (GoC rows)
+  const gocRows = (typeof RESULTADO !== 'undefined')
+    ? RESULTADO.filter(r => r.sky?.esGOCUOTAS) : [];
+  const isOK = r => r.estado?.includes('GoC') || r.estado?.startsWith('OK');
+  let filas = gocRows;
+  if (tipo === 'cobrados')   filas = gocRows.filter(isOK);
+  if (tipo === 'pendientes') filas = gocRows.filter(r => r.estado === 'SIN MATCH');
+  if (tipo === 'sinsky')     filas = (typeof _GOC_PAGOS !== 'undefined')
+    ? (() => { const set=new Set(gocRows.map(r=>norm(r.sky.cupon)));
+               return _GOC_PAGOS.filter(p=>!set.has(p.orden)).map(p=>({sky:null,pago:p})); })()
+    : [];
+  if (tipo === 'imei')       filas = [];  // handled separately
+
+  if (!filas.length && tipo !== 'sinsky') { alert('Sin datos para exportar.'); return; }
+
+  let HDR, data;
+  if (tipo === 'sinsky') {
+    HDR = ['Fecha origen','Fecha pago','Nro. Orden GoC','Nombre','Cuotas','Importe','Total a cobrar','Sucursal'];
+    data = filas.map(({pago}) => [pago.fechaOrigen, pago.fechaPago, pago.orden, pago.nombre,
+      pago.cuotas, pago.importe, pago.totalCobrar, pago.sucNombre]);
+  } else {
+    HDR = ['Estado cruce','Nro. Asiento SKY','Fecha venta','Sucursal','Vendedor',
+           'Plan','Nro. Orden GoC','Importe SKY','Monto proc. GoC','Fecha pago GoC'];
+    data = filas.map(r => [r.estado, r.sky?.asiento||'', r.sky?.fecha||'',
+      r.sky?.suc||'', r.sky?.vendedor||'', r.sky?.plan||'', r.sky?.cupon||'',
+      Math.abs(r.sky?.monto||0), r.proc?Math.abs(r.proc.monto||0):'', r.proc?.fecha||'']);
+  }
+  _exportXlsx([HDR, ...data], 'Go Cuotas', `GoCuotas_${tipo}_${hoy()}.xlsx`);
+}
+
+// ─── viejo exportarGoCuotas legacy ───────────────────────────────────
+function _exportGoCLegacy(tipo) {
   let filas = _GOC_RESULT;
   if (tipo === 'cobrados')   filas = filas.filter(r => r.estadoCobro === 'COBRADO');
   if (tipo === 'pendientes') filas = filas.filter(r => r.estadoCobro === 'PENDIENTE');
