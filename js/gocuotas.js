@@ -627,9 +627,12 @@ function _renderGocTablaRes(tipo, filasIn) {
   if (fltSuc)  rows = rows.filter(r => r.sky?.suc === fltSuc);
   if (fltPlan) rows = rows.filter(r => r.sky?.plan === fltPlan);
   if (fltImei) {
+    // El filtro IMEI solo aplica a filas con plan GO CELULAR
     rows = rows.filter(r => {
+      const esCel = /CELULAR|GOCELU/i.test(r.sky?.plan||'');
+      if (!esCel) return fltImei !== 'ok'; // no celular → no tiene IMEI → excluir si filtro=ok
       const vArr = ventaIdx[norm(r.sky?.cupon||'')] || ventaIdx[norm(r.sky?.asiento||'')] || [];
-      const hasImei = vArr.some(v => v.trazabilidad && v.trazabilidad !== '0');
+      const hasImei = vArr.some(v => v.trazabilidad && v.trazabilidad !== '0' && v.trazabilidad !== '-');
       return fltImei === 'ok' ? hasImei : !hasImei;
     });
   }
@@ -642,7 +645,7 @@ function _renderGocTablaRes(tipo, filasIn) {
     ? `Mostrando ${rows.length} de ${allRows.length}` : '';
 
   const isOK = r => r.estado?.includes('GoC') || r.estado?.startsWith('OK');
-  const HDR  = ['Estado','Método','Fecha','Suc.','Vendedor','Plan','Cupon/Orden','Importe','Proc. GoC','Fecha pago','Artículo(s) / IMEI'];
+  const HDR  = ['Estado','Método','Fecha','Suc.','Asiento','Vendedor','Plan','Cupon/Orden','Importe','Proc. GoC','Fecha pago','Artículo(s) / IMEI (solo Go Celular)'];
   tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
 
   if (!rows.length) {
@@ -657,20 +660,26 @@ function _renderGocTablaRes(tipo, filasIn) {
     const ok   = isOK(r);
     const stColor = ok ? 'var(--grn)' : r.estado==='SIN MATCH' ? 'var(--red)' : 'var(--yel)';
 
-    // Buscar artículos en Ventas (puede haber múltiples por comprobante)
-    const cup  = norm(s?.cupon||'');
-    const ast  = norm(s?.asiento||'');
-    const ventas = ventaIdx[cup] || ventaIdx[ast] || [];
-    let ventaCell = '—';
-    if (ventas.length > 0) {
-      ventaCell = ventas.map(v => {
-        const imeiColor = v.trazabilidad && v.trazabilidad !== '0' ? 'var(--grn)' : 'var(--red)';
-        return `<div style="font-size:8px;padding:2px 0;border-bottom:1px solid var(--b1)">
-          <span style="color:var(--txt)">${v.descripcion||'—'}</span>
-          <span style="color:${imeiColor};margin-left:6px">
-            ${v.trazabilidad && v.trazabilidad !== '0' ? '📱 '+v.trazabilidad : '⚠ Sin IMEI'}</span>
-        </div>`;
-      }).join('');
+    // Artículos/IMEI SOLO para plan GO CELULAR
+    const esCelular = /CELULAR|GOCELU/i.test(s?.plan||'');
+    let ventaCell = '';
+    if (esCelular) {
+      const cup    = norm(s?.cupon||'');
+      const ast    = norm(s?.asiento||'');
+      const ventas = ventaIdx[cup] || ventaIdx[ast] || [];
+      if (ventas.length > 0) {
+        ventaCell = ventas.map(v => {
+          const tieneImei = v.trazabilidad && v.trazabilidad !== '0' && v.trazabilidad !== '-';
+          const imeiColor = tieneImei ? 'var(--grn)' : 'var(--red)';
+          return `<div style="font-size:8px;padding:2px 0;border-bottom:1px solid var(--b1)">
+            <span style="color:var(--txt)">${v.descripcion||'—'}</span>
+            <span style="color:${imeiColor};margin-left:6px">
+              ${tieneImei ? '📱 '+v.trazabilidad : '⚠ Sin IMEI'}</span>
+          </div>`;
+        }).join('');
+      } else {
+        ventaCell = `<span style="font-size:8px;color:var(--m2)">Sin match en Ventas</span>`;
+      }
     }
 
     return `<tr class="${ok?'row-ok':'row-mal'}">
@@ -679,6 +688,7 @@ function _renderGocTablaRes(tipo, filasIn) {
       <td style="font-size:8px;color:var(--m2)">${r.metodo||'—'}</td>
       <td>${s?.fecha||'—'}</td>
       <td>${s?.suc||'—'}</td>
+      <td style="font-size:9px;color:var(--m2)">${s?.asiento||'—'}</td>
       <td style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${s?.vendedor||'—'}</td>
       <td>${s?.plan||'—'}</td>
       <td class="num" style="font-family:var(--mono);color:var(--cyn)">${s?.cupon||'—'}</td>
