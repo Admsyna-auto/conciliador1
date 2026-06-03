@@ -312,6 +312,9 @@ async function renderModuloHistorico() {
           </label>
           <button class="dl-btn" style="background:#14532d;color:#86efac"
             onclick="exportarHistoricoXlsx()">⬇ Excel</button>
+          <button class="dl-btn" style="background:#450a0a;color:#fca5a5;border:1px solid rgba(248,113,113,.3)"
+            onclick="borrarTodoElHistorial()"
+            title="Eliminar todos los períodos del historial">🗑 Vaciar historial</button>
         </div>
       </div>
       <div class="tbl-wrap">
@@ -504,6 +507,19 @@ async function descargarPeriodo(id) {
 async function borrarPeriodo(id) {
   if (!confirm('¿Eliminar este período del historial? El backup JSON no se borra.')) return;
   await eliminarPeriodo(id);
+  renderModuloHistorico();
+}
+
+async function borrarTodoElHistorial() {
+  const todos = await listarPeriodos();
+  if (!todos.length) { alert('El historial ya está vacío.'); return; }
+  if (!confirm(`¿Eliminar los ${todos.length} períodos del historial?\n\nEsta acción no se puede deshacer. Los backups .json descargados no se borran.`)) return;
+  for (const p of todos) await eliminarPeriodo(p.id);
+  const badge = document.getElementById('mcnt-hist');
+  if (badge) badge.textContent = '—';
+  typeof _showToast === 'function'
+    ? _showToast('🗑 Historial vaciado')
+    : alert('Historial vaciado.');
   renderModuloHistorico();
 }
 
