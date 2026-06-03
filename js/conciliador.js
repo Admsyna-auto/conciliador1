@@ -386,8 +386,13 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
   const gocEnabled = typeof PROCS_ENABLED !== 'undefined'
     ? (PROCS_ENABLED.GOCUOTAS !== false) : true;
 
-  if (gocEnabled && typeof _GOC_PAGOS !== 'undefined' && _GOC_PAGOS.length) {
-    _GOC_PAGOS.forEach(p => {
+  // Combinar pagos de GoC estándar + Go Celular en un solo índice
+  const _allGocPagos = [
+    ...(typeof _GOC_PAGOS   !== 'undefined' ? _GOC_PAGOS   : []),
+    ...(typeof _GOC_CELULAR !== 'undefined' ? _GOC_CELULAR : []),
+  ];
+  if (gocEnabled && _allGocPagos.length) {
+    _allGocPagos.forEach(p => {
       const mn  = normMonto(p.importe);
       const fd  = p.fechaOrigen;
       const ord = p.orden;
@@ -606,11 +611,12 @@ function armarFilaGoC(s, pago, procEsp, met) {
     arancel: 0, cfo: 0,
   };
   const difMonto = Math.abs(Math.abs(s.monto) - Math.abs(pago.importe));
+  const fuenteGoC = pago.fuente || 'GOCUOTAS';
   return {
     sky: s, proc: procObj,
     metodo:        met,
-    estado:        'OK (GoC)',
-    procEncontrada:'GOCUOTAS',
+    estado:        fuenteGoC === 'GOCELULAR' ? 'OK (GoCelular)' : 'OK (GoC)',
+    procEncontrada: fuenteGoC,
     procEsperada:  procEsp,
     comOK:         'OK',
     sucOK:         'OK',
@@ -1499,15 +1505,19 @@ function loadGocSkylab(input) {
   r.readAsArrayBuffer(file);
 }
 
-async function loadGocPagos(input) {
+async function loadGocPagos(input, fuente) {
+  fuente = fuente || 'GOCUOTAS';
   const file = input.files[0]; if (!file) return;
-  const st = document.getElementById('st-goc-pag');
+  const stId = fuente === 'GOCELULAR' ? 'st-goc-cel' : 'st-goc-pag';
+  const fcId = fuente === 'GOCELULAR' ? 'fc-goc-cel' : 'fc-goc-pag';
+  const st   = document.getElementById(stId);
   if (st) { st.textContent = '↻ Cargando...'; st.className = 'fc-st'; }
   try {
-    await parseGocPagos(file);
-    const n = _GOC_PAGOS.length;
-    document.getElementById('fc-goc-pag')?.classList.add('ok');
-    if (st) { st.textContent = `✓ ${file.name} (${n} pagos)`; st.className = 'fc-st ok'; }
+    await parseGocPagos(file, fuente);
+    const n = fuente === 'GOCELULAR' ? _GOC_CELULAR.length : _GOC_PAGOS.length;
+    document.getElementById(fcId)?.classList.add('ok');
+    const label = fuente === 'GOCELULAR' ? 'Go Celular' : 'Go Cuotas';
+    if (st) { st.textContent = `✓ ${file.name} (${n} ${label} pagos)`; st.className = 'fc-st ok'; }
     if (document.getElementById('mod-goc')?.closest('.mod-panel.active')) renderModuloGoCuotas();
   } catch(err) { if (st) { st.textContent = '✗ Error'; st.className = 'fc-st'; } console.error(err); }
 }

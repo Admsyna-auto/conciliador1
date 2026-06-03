@@ -8,7 +8,8 @@
 // ═══════════════════════════════════════════════════════════════════
 
 let _GOC_SKY     = [];   // Skylab Go Cuotas parseado
-let _GOC_PAGOS   = [];   // Go Cuotas CSV parseado
+let _GOC_PAGOS   = [];   // Go Cuotas CSV parseado (fuente: 'GOCUOTAS')
+let _GOC_CELULAR = [];   // Go Celular CSV parseado (fuente: 'GOCELULAR')
 let _GOC_VENTAS  = [];   // Ventas XLSX parseado
 let _GOC_RESULT  = [];   // resultado del cruce
 
@@ -117,7 +118,9 @@ function parseGocSkylab(wb) {
 }
 
 // ── Parser: Go Cuotas CSV (separado por ;) ───────────────────────────
-function parseGocPagos(file) {
+// fuente: 'GOCUOTAS' (estándar) | 'GOCELULAR' (Go Celular)
+function parseGocPagos(file, fuente) {
+  fuente = fuente || 'GOCUOTAS';
   return new Promise((res, rej) => {
     const reader = new FileReader();
     reader.onload = e => {
@@ -172,11 +175,19 @@ function parseGocPagos(file) {
             sucId:       g('sucId'),
             sucNombre:   g('sucNombre'),
             refExt:      g('refExt'),
+            fuente,      // 'GOCUOTAS' | 'GOCELULAR'
           };
         }).filter(Boolean).filter(r => r.importe > 0 || r.orden !== '0');
 
-        console.log('[GOC-PAGOS] Go Cuotas CSV parseados:', _GOC_PAGOS.length);
-        res(_GOC_PAGOS);
+        // Guardar en el array correcto según fuente
+        if (fuente === 'GOCELULAR') {
+          _GOC_CELULAR = rows;
+          console.log('[GOC-CELULAR] Parseados:', _GOC_CELULAR.length);
+        } else {
+          _GOC_PAGOS = rows;
+          console.log('[GOC-PAGOS] Parseados:', _GOC_PAGOS.length);
+        }
+        res(rows);
       } catch(err) { rej(err); }
     };
     reader.onerror = () => rej(new Error('Error leyendo CSV'));
@@ -350,7 +361,7 @@ function renderModuloGoCuotas() {
   }
 
   // ── Clasificar por estado del cruce ───────────────────────────────
-  const isOK  = r => r.estado?.startsWith('OK') || r.estado?.includes('GoC');
+  const isOK  = r => r.estado?.startsWith('OK') || r.estado?.includes('GoC') || r.estado?.includes('GoCelular');
   const cobrados   = gocRows.filter(isOK);
   const pendientes = gocRows.filter(r => r.estado === 'SIN MATCH');
   const otros      = gocRows.filter(r => !isOK(r) && r.estado !== 'SIN MATCH');

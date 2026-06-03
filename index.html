@@ -832,9 +832,15 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       <div class="proc-files">
         <div class="fc opt" id="fc-goc-pag"><label for="i-goc-pag">
           <div class="fc-top"><div class="fc-dot" style="background:#0f2d20;color:#34d399">GC</div>
-            <span class="fc-name">Go Cuotas CSV</span><span class="fc-req">REQ</span></div>
+            <span class="fc-name">Go Cuotas CSV</span><span class="fc-req opt">OPC</span></div>
           <div class="fc-st" id="st-goc-pag">Sin archivo</div>
-        </label><input type="file" id="i-goc-pag" accept=".csv,.txt" onchange="loadGocPagos(this)"></div>
+        </label><input type="file" id="i-goc-pag" accept=".csv,.txt" onchange="loadGocPagos(this,'GOCUOTAS')"></div>
+
+        <div class="fc opt" id="fc-goc-cel"><label for="i-goc-cel">
+          <div class="fc-top"><div class="fc-dot" style="background:#1a1040;color:#a78bfa">GK</div>
+            <span class="fc-name">Go Celular CSV</span><span class="fc-req opt">OPC</span></div>
+          <div class="fc-st" id="st-goc-cel">Sin archivo</div>
+        </label><input type="file" id="i-goc-cel" accept=".csv,.txt" onchange="loadGocPagos(this,'GOCELULAR')"></div>
 
         <div class="fc opt" id="fc-goc-ven"><label for="i-goc-ven">
           <div class="fc-top"><div class="fc-dot" style="background:#1a1f10;color:#fbbf24">GV</div>
