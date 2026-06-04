@@ -989,7 +989,7 @@ function renderTable(tblId, filas) {
 }
 
 // ── CORRECCIÓN MANUAL ────────────────────────────────────
-const FILTROS_FIX = { suc:'', tar:'', proc:'', fecha:'', vend:'', search:'' };
+const FILTROS_FIX = { suc:'', tar:'', proc:'', plan:'', fecha:'', vend:'', search:'' };
 
 function poblarFiltros() {
   const sinMatch=RESULTADO.filter(r=>r.estado==='SIN MATCH');
@@ -1008,6 +1008,12 @@ function poblarFiltros() {
     selTar.innerHTML='<option value="">Todas las tarjetas</option>'+
       tars.map(t=>`<option value="${t}" ${t===curTar?'selected':''}>${t}</option>`).join('');
   }
+  const selPlan=document.getElementById('flt-plan'), curPlan=selPlan?.value||'';
+  if (selPlan) {
+    const plans=[...new Set(sinMatch.map(r=>r.sky.plan||'').filter(Boolean))].sort();
+    selPlan.innerHTML='<option value="">Todos los planes</option>'+
+      plans.map(p=>`<option value="${p}" ${p===curPlan?'selected':''}>${p}</option>`).join('');
+  }
   if (selFec) {
     const fechas=[...new Set(sinMatch.map(r=>r.sky.fecha))].sort().reverse();
     selFec.innerHTML='<option value="">Todas las fechas</option>'+
@@ -1024,6 +1030,7 @@ function aplicarFiltros() {
   FILTROS_FIX.suc    = document.getElementById('flt-suc')?.value    || '';
   FILTROS_FIX.tar    = document.getElementById('flt-tar')?.value    || '';
   FILTROS_FIX.proc   = document.getElementById('flt-proc')?.value   || '';
+  FILTROS_FIX.plan   = document.getElementById('flt-plan')?.value   || '';
   FILTROS_FIX.fecha  = document.getElementById('flt-fecha')?.value  || '';
   FILTROS_FIX.vend   = document.getElementById('flt-vend')?.value   || '';
   FILTROS_FIX.search = (document.getElementById('flt-search')?.value||'').trim().toLowerCase();
@@ -1031,7 +1038,7 @@ function aplicarFiltros() {
 }
 
 function limpiarFiltros() {
-  ['flt-suc','flt-tar','flt-proc','flt-fecha','flt-vend','flt-search'].forEach(id=>{
+  ['flt-suc','flt-tar','flt-proc','flt-plan','flt-fecha','flt-vend','flt-search'].forEach(id=>{
     const el=document.getElementById(id); if(el) el.value='';
   });
   Object.keys(FILTROS_FIX).forEach(k=>FILTROS_FIX[k]='');
@@ -1090,6 +1097,7 @@ function filtrarSinMatch() {
       (p === 'FISERV'   && !r.sky.esGETPos && !r.sky.esGOCUOTAS)
     );
   }
+  if (FILTROS_FIX.plan)  rows=rows.filter(r=>r.sky.plan===FILTROS_FIX.plan);
   if (FILTROS_FIX.fecha) rows=rows.filter(r=>r.sky.fecha===FILTROS_FIX.fecha);
   if (FILTROS_FIX.vend)  rows=rows.filter(r=>r.sky.vendedor===FILTROS_FIX.vend);
   if (FILTROS_FIX.search) {
