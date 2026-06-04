@@ -1306,8 +1306,11 @@ function aplicarCorreccionGoC(idx) {
     return;
   }
 
-  // Intentar cruzar con el orden ingresado usando la cascada GoC
-  const gocPagos = typeof _GOC_PAGOS !== 'undefined' ? _GOC_PAGOS : [];
+  // Buscar en ambos archivos: Go Cuotas estándar + Go Celular
+  const gocPagos = [
+    ...(typeof _GOC_PAGOS   !== 'undefined' ? _GOC_PAGOS   : []),
+    ...(typeof _GOC_CELULAR !== 'undefined' ? _GOC_CELULAR : []),
+  ];
   const idxGoC    = {};
   const idxGoCRef = {};
   gocPagos.forEach(p => {
@@ -1336,9 +1339,10 @@ function aplicarCorreccionGoC(idx) {
       nombre:hit.nombre||'', marca:'GOCUOTAS', plan:'',
       equipo:'', pos:'', tipo:'Venta', arancel:0, cfo:0,
     };
+    const fuenteGoC    = hit.fuente || 'GOCUOTAS';
     fila.metodo        = 'GoC:Manual';
-    fila.estado        = 'OK (GoC)';
-    fila.procEncontrada= 'GOCUOTAS';
+    fila.estado        = fuenteGoC === 'GOCELULAR' ? 'OK (GoCelular)' : 'OK (GoC)';
+    fila.procEncontrada= fuenteGoC;
     fila.matchParcial  = `Manual GoC: ${ordenManual}`;
     fila.correccionManual = CORREGIDAS[key];
   } else {
