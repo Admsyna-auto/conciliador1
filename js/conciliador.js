@@ -138,6 +138,8 @@ function parseSkylab(wb) {
       fecPago:  normFecha(r['Fec. de Pago'] || r['Fec.de Pago'] || r['Fecha de Pago'] || r['Fec de Pago'] || ''),
       lote:     norm(r['Lote']),
       cupon:    norm(r['Cupon']),
+      opNum:    norm(r['Numero'] || ''),    // N° secuencial de factura → link con Ventas
+      opId:     norm(r['Id']     || ''),    // Punto de venta de la factura
       nroCom:   String(r['Nro.Comercio']??'').replace('.0','').trim().replace(/^0+/,'') || '0',
       monto:    (() => {
         const raw = String(r['Venta Bruta']??'').trim();

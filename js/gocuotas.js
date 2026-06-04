@@ -35,6 +35,49 @@ function _gRequiereImei(plan, articulo) {
   return false;
 }
 
+// ── Buscar artículos en Ventas con prioridad y validación de fecha ───
+// Prioridad:
+//  1. sky.opNum (número de factura real de Skylab) + fecha  ← más confiable
+//  2. sky.opNum sin fecha (fallback)
+//  3. sky.asiento + fecha
+//  (ya NO usamos sky.cupon porque es el Nro. Orden GoC, no el comprobante)
+function _buscarVentas(sky) {
+  const idx   = window._GOC_VENTAS_IDX || {};
+  const fecha = sky?.fecha || '';
+
+  // Normaliza fecha de Ventas para comparar con sky.fecha (ISO "2026-05-02")
+  const _fechaOk = (v) => {
+    if (!fecha || !v.fecha) return true; // sin fecha → no filtrar
+    const vf = String(v.fecha).trim();
+    // Puede ser serial Excel (46113) o string "02/05/2026" o ISO
+    // Convertir serial Excel si es número
+    if (/^\d{5}$/.test(vf)) {
+      const iso = new Date((parseInt(vf)-25569)*86400000).toISOString().slice(0,10);
+      return iso === fecha;
+    }
+    // String: normalizar con normFecha
+    return normFecha(vf) === fecha || vf.includes(fecha.split('-').reverse().join('/'));
+  };
+
+  // 1. Por número de factura (opNum) + fecha
+  const opNum = sky?.opNum || '';
+  if (opNum && opNum !== '0') {
+    const hits = (idx[opNum] || []).filter(_fechaOk);
+    if (hits.length) return hits;
+    // Sin validación de fecha (fallback)
+    if (idx[opNum]?.length) return idx[opNum];
+  }
+
+  // 2. Por asiento + fecha (segundo recurso)
+  const ast = norm(String(sky?.asiento||''));
+  if (ast && ast !== '0') {
+    const hits = (idx[ast] || []).filter(_fechaOk);
+    if (hits.length) return hits;
+  }
+
+  return [];
+}
+
 // ── Detectar si un string es un IMEI válido (15 dígitos) ────────────
 function _gEsImei(s) {
   return /^\d{15}$/.test(String(s||'').trim().replace(/[^0-9]/g,''));
@@ -386,8 +429,8 @@ function renderModuloGoCuotas() {
     const reqImei = _gRequiereImei(r.sky.plan, '');
     if (!reqImei) return;
     const cup   = norm(r.sky.cupon);
-    // Buscar en ventas por cupón/orden
-    const venta = ventaIdx[cup] || null;
+    const ventaArr = _buscarVentas(r.sky);
+    const venta = ventaArr[0] || null;
     const imei  = venta?.trazabilidad || '';
     if (!venta)           imeiIssues.push({ r, venta, estadoImei:'SIN VENTAS' });
     else if (!imei || imei==='0') imeiIssues.push({ r, venta, estadoImei:'IMEI FALTANTE' });
@@ -649,7 +692,7 @@ function _renderGocTablaRes(tipo, filasIn) {
     rows = rows.filter(r => {
       const esCel = r.procEncontrada === 'GOCELULAR' || /CELULAR|GOCELU/i.test(r.sky?.plan||'');
       if (!esCel) return fltImei !== 'ok'; // no celular → no tiene IMEI → excluir si filtro=ok
-      const vArr = ventaIdx[norm(r.sky?.cupon||'')] || ventaIdx[norm(r.sky?.asiento||'')] || [];
+      const vArr = _buscarVentas(r.sky);
       const hasImei = vArr.some(v => v.trazabilidad && v.trazabilidad !== '0' && v.trazabilidad !== '-');
       return fltImei === 'ok' ? hasImei : !hasImei;
     });
@@ -683,9 +726,7 @@ function _renderGocTablaRes(tipo, filasIn) {
     const esCelular = r.procEncontrada === 'GOCELULAR' || /CELULAR|GOCELU/i.test(s?.plan||'');
     let ventaCell = '';
     if (esCelular) {
-      const cup    = norm(s?.cupon||'');
-      const ast    = norm(s?.asiento||'');
-      const ventas = ventaIdx[cup] || ventaIdx[ast] || [];
+      const ventas = _buscarVentas(s);
       if (ventas.length > 0) {
         ventaCell = ventas.map(v => {
           const tieneImei = v.trazabilidad && v.trazabilidad !== '0' && v.trazabilidad !== '-';
@@ -810,9 +851,7 @@ function exportarGoCuotas(tipo) {
 
       const esCelular = r.procEncontrada === 'GOCELULAR' || /CELULAR|GOCELU/i.test(s?.plan||'');
       if (esCelular) {
-        const cup    = norm(s?.cupon||'');
-        const ast    = norm(s?.asiento||'');
-        const ventas = ventaIdx[cup] || ventaIdx[ast] || [];
+        const ventas = _buscarVentas(s);
         if (ventas.length > 0) {
           ventas.forEach(v => {
             rows.push([...base, v.comprobante||'', v.descripcion||'', v.trazabilidad||'']);
