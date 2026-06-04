@@ -35,44 +35,32 @@ function _gRequiereImei(plan, articulo) {
   return false;
 }
 
-// ── Buscar artículos en Ventas con prioridad y validación de fecha ───
-// Prioridad:
-//  1. sky.opNum (número de factura real de Skylab) + fecha  ← más confiable
-//  2. sky.opNum sin fecha (fallback)
-//  3. sky.asiento + fecha
-//  (ya NO usamos sky.cupon porque es el Nro. Orden GoC, no el comprobante)
+// ── Buscar artículos en Ventas por clave compuesta ID+NUMERO+FECHA ──
+// Clave = sky.opId + "_" + sky.opNum + "_" + sky.fecha
+// Ejemplos:
+//   sky.opId="266" sky.opNum="14015" sky.fecha="2026-05-02"
+//   → key = "266_14015_2026-05-02" → factura única
 function _buscarVentas(sky) {
   const idx   = window._GOC_VENTAS_IDX || {};
+  const opId  = sky?.opId  || '';
+  const opNum = sky?.opNum || '';
   const fecha = sky?.fecha || '';
 
-  // Normaliza fecha de Ventas para comparar con sky.fecha (ISO "2026-05-02")
-  const _fechaOk = (v) => {
-    if (!fecha || !v.fecha) return true; // sin fecha → no filtrar
-    const vf = String(v.fecha).trim();
-    // Puede ser serial Excel (46113) o string "02/05/2026" o ISO
-    // Convertir serial Excel si es número
-    if (/^\d{5}$/.test(vf)) {
-      const iso = new Date((parseInt(vf)-25569)*86400000).toISOString().slice(0,10);
-      return iso === fecha;
-    }
-    // String: normalizar con normFecha
-    return normFecha(vf) === fecha || vf.includes(fecha.split('-').reverse().join('/'));
-  };
-
-  // 1. Por número de factura (opNum) + fecha
-  const opNum = sky?.opNum || '';
-  if (opNum && opNum !== '0') {
-    const hits = (idx[opNum] || []).filter(_fechaOk);
-    if (hits.length) return hits;
-    // Sin validación de fecha (fallback)
-    if (idx[opNum]?.length) return idx[opNum];
+  // 1. Clave triple: ID + NUMERO + FECHA (más precisa, evita colisiones)
+  if (opId && opNum && fecha) {
+    const k = `${opId}_${opNum}_${fecha}`;
+    if (idx[k]?.length) return idx[k];
   }
 
-  // 2. Por asiento + fecha (segundo recurso)
-  const ast = norm(String(sky?.asiento||''));
-  if (ast && ast !== '0') {
-    const hits = (idx[ast] || []).filter(_fechaOk);
-    if (hits.length) return hits;
+  // 2. Clave doble: ID + NUMERO (sin fecha, fallback)
+  if (opId && opNum) {
+    const k = `${opId}_${opNum}`;
+    if (idx[k]?.length) return idx[k];
+  }
+
+  // 3. Solo NUMERO (último recurso)
+  if (opNum && opNum !== '0') {
+    if (idx[opNum]?.length) return idx[opNum];
   }
 
   return [];
@@ -275,13 +263,28 @@ function parseGocVentas(wb) {
   const g = (r,k) => (k && r[k] !== undefined) ? r[k] : null;
 
   _GOC_VENTAS = rows.map((r,i) => {
-    const compRaw = String(g(r, K.comprobante) || '').trim();
-    // Extraer n° final del comprobante: "FA A 0049 00059680" → "59680" (sin ceros líderes)
-    const compNum = _gNorm(compRaw.split(/\s+/).pop());
+    const compRaw   = String(g(r, K.comprobante) || '').trim();
+    // "FA B 0266 00014015" → parts = ["FA","B","0266","00014015"]
+    const parts     = compRaw.split(/\s+/);
+    const compNum   = _gNorm(parts[parts.length-1] || '');  // "14015"
+    const compId    = _gNorm(parts[parts.length-2] || '');  // "266"
+    // Normalizar fecha del Ventas (puede ser serial Excel o string)
+    const fechaRaw  = String(g(r, K.fecha) || '').trim();
+    let   compFecha = '';
+    if (fechaRaw) {
+      const n = parseFloat(fechaRaw);
+      if (!isNaN(n) && n > 40000) {
+        compFecha = new Date((n - 25569) * 86400000).toISOString().slice(0,10);
+      } else {
+        compFecha = normFecha(fechaRaw);
+      }
+    }
     return {
       idx:          i,
       comprobante:  compRaw,
-      compNum,                  // número limpio → comparar con SkyGC.Id
+      compNum,     // número limpio: "14015"
+      compId,      // punto de venta: "266"
+      compFecha,   // fecha ISO: "2026-05-02"
       descripcion:  String(g(r, K.descripcion)  || '').trim(),
       trazabilidad: String(g(r, K.trazabilidad) || '').trim(),
       sucId:        String(g(r, K.sucId)        || '').trim(),
@@ -293,12 +296,24 @@ function parseGocVentas(wb) {
     };
   }).filter(r => r.comprobante);
 
-  // Índice por compNum — soporta MÚLTIPLES productos por comprobante
+  // Índice triple: ID_NUMERO_FECHA (clave primaria única) + NUMERO solo (fallback)
   window._GOC_VENTAS_IDX = {};
+  const _addV = (key, v) => {
+    if (!key) return;
+    if (!window._GOC_VENTAS_IDX[key]) window._GOC_VENTAS_IDX[key] = [];
+    window._GOC_VENTAS_IDX[key].push(v);
+  };
   _GOC_VENTAS.forEach(v => {
-    if (!window._GOC_VENTAS_IDX[v.compNum]) window._GOC_VENTAS_IDX[v.compNum] = [];
-    window._GOC_VENTAS_IDX[v.compNum].push(v);
+    // Clave primaria: ID + NUMERO + FECHA (totalmente única)
+    if (v.compId && v.compNum && v.compFecha)
+      _addV(`${v.compId}_${v.compNum}_${v.compFecha}`, v);
+    // Fallback 1: ID + NUMERO (sin fecha)
+    if (v.compId && v.compNum)
+      _addV(`${v.compId}_${v.compNum}`, v);
+    // Fallback 2: NUMERO solo (por compatibilidad)
+    if (v.compNum) _addV(v.compNum, v);
   });
+  console.log('[GOC-VENTAS] Índice construido:', Object.keys(window._GOC_VENTAS_IDX).length, 'claves');
 
   console.log('[GOC-VENTAS] Ventas parseadas:', _GOC_VENTAS.length);
   return _GOC_VENTAS;
