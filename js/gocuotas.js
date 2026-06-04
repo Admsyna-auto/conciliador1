@@ -431,9 +431,31 @@ function renderModuloGoCuotas() {
   const pendientes = gocRows.filter(r => r.estado === 'SIN MATCH');
   const otros      = gocRows.filter(r => !isOK(r) && r.estado !== 'SIN MATCH');
 
-  // ── Pagos en GoC sin match en Skylab ──────────────────────────────
-  const skyOrders = new Set(gocRows.map(r => norm(r.sky.cupon)));
-  const sinSky    = hasPag ? _GOC_PAGOS.filter(p => !skyOrders.has(p.orden)) : [];
+  // ── Pagos en GoC sin match en Skylab (ambos archivos: GoC + GoCelular) ──
+  // Construir set de TODAS las claves que existen en Skylab (cupon, lote, lote+cupon, sin-W)
+  const skyKeys = new Set();
+  gocRows.forEach(r => {
+    const s  = r.sky;
+    const cn = norm(s.cupon||'');
+    const ln = norm(s.lote||'');
+    const lc = norm(String(s.lote||'')+String(s.cupon||''));
+    [cn, ln, lc].filter(k=>k&&k!=='0').forEach(k => {
+      skyKeys.add(k);
+      // también sin prefijo W
+      if (/^w/i.test(k)) skyKeys.add(k.slice(1));
+    });
+    // también por refExt: si sky.cupon empieza con W, el valor sin W podría ser refExt
+  });
+
+  const _allGoCPagos = [
+    ...(typeof _GOC_PAGOS   !== 'undefined' ? _GOC_PAGOS   : []),
+    ...(typeof _GOC_CELULAR !== 'undefined' ? _GOC_CELULAR : []),
+  ];
+  const sinSky = _allGoCPagos.filter(p => {
+    const ord = p.orden || '';
+    const ref = norm(p.refExt || '');
+    return !skyKeys.has(ord) && !(ref && skyKeys.has(ref));
+  });
 
   // ── IMEI analysis (si Ventas está cargado) ────────────────────────
   const ventaIdx  = window._GOC_VENTAS_IDX || {};
@@ -555,7 +577,7 @@ function renderModuloGoCuotas() {
   _renderGocTablaRes('todo',       gocRows);
   _renderGocTablaRes('cobrados',   cobrados);
   _renderGocTablaRes('pendientes', pendientes);
-  if (sinSky.length)     _renderGocSinSky(sinSky);
+  _renderGocSinSky(sinSky);   // siempre renderizar (muestra vacío o filas)
   if (imeiIssues.length) _renderGocImeiRes(imeiIssues);
 
   const badge = document.getElementById('mcnt-goc');
@@ -643,19 +665,35 @@ function _renderGocTabla(tipo) {
 
 function _renderGocSinSky(filas) {
   const tbl = document.getElementById('tbl-goc-sinsky'); if (!tbl) return;
-  const HDR = ['Fecha origen','Fecha pago','Nro. Orden GoC','Nombre','Cuotas','Importe','Total a cobrar','Sucursal','Ref. Externa'];
+  const HDR = ['Fuente','Fecha origen','Fecha pago','Nro. Orden GoC','Nombre',
+               'Cuotas','Importe','Total a cobrar','Sucursal','Ref. Externa'];
   tbl.querySelector('thead').innerHTML = `<tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr>`;
-  tbl.querySelector('tbody').innerHTML = filas.map(({ pago }) => `<tr class="row-com">
-    <td>${pago.fechaOrigen}</td>
-    <td>${pago.fechaPago}</td>
-    <td class="num" style="font-family:var(--mono);color:var(--yel)">${pago.orden}</td>
-    <td>${pago.nombre}</td>
-    <td class="num">${pago.cuotas}</td>
-    <td class="num" style="font-weight:600">${_gFmt(pago.importe)}</td>
-    <td class="num" style="color:var(--grn)">${_gFmt(pago.totalCobrar)}</td>
-    <td>${pago.sucNombre}</td>
-    <td style="font-size:9px;color:var(--m2)">${pago.refExt||'—'}</td>
-  </tr>`).join('');
+
+  if (!filas.length) {
+    tbl.querySelector('tbody').innerHTML =
+      `<tr><td colspan="${HDR.length}" style="padding:30px;text-align:center;color:var(--m2);font-size:10px">
+        ✓ Todos los pagos de GoC tienen registro en Skylab.</td></tr>`;
+    return;
+  }
+
+  // filas = array de payment objects directos (no { pago })
+  tbl.querySelector('tbody').innerHTML = filas.map(p => {
+    const fuenteColor = p.fuente === 'GOCELULAR' ? 'var(--vio)' : 'var(--yel)';
+    return `<tr class="row-com">
+      <td><span style="font-size:8px;padding:1px 6px;border-radius:3px;
+        color:${fuenteColor};border:1px solid ${fuenteColor}55;background:${fuenteColor}18">
+        ${p.fuente==='GOCELULAR'?'GoCelular':'GoC'}</span></td>
+      <td>${p.fechaOrigen||'—'}</td>
+      <td>${p.fechaPago||'—'}</td>
+      <td class="num" style="font-family:var(--mono);color:var(--yel)">${p.orden||'—'}</td>
+      <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nombre||'—'}</td>
+      <td class="num">${p.cuotas||'—'}</td>
+      <td class="num" style="font-weight:600">${_gFmt(p.importe||0)}</td>
+      <td class="num" style="color:var(--grn)">${_gFmt(p.totalCobrar||0)}</td>
+      <td style="font-size:9px">${p.sucNombre||'—'}</td>
+      <td style="font-size:9px;color:var(--m2)">${p.refExt||'—'}</td>
+    </tr>`;
+  }).join('');
 }
 
 function _renderGocImei(filas) {
