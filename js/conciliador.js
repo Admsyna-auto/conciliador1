@@ -1046,39 +1046,49 @@ function renderTable(tblId, filas) {
 // ── CORRECCIÓN MANUAL ────────────────────────────────────
 const FILTROS_FIX = { suc:'', tar:'', proc:'', plan:'', fecha:'', vend:'', search:'' };
 
+// ── Filtros encadenados: las opciones de cada dropdown se calculan
+// filtrando por TODOS los otros filtros activos ("cascading filters")
 function poblarFiltros() {
-  const sinMatch=RESULTADO.filter(r=>r.estado==='SIN MATCH');
-  const selSuc=document.getElementById('flt-suc'), curSuc=selSuc?.value||'';
-  const selTar=document.getElementById('flt-tar'), curTar=selTar?.value||'';
-  const selFec=document.getElementById('flt-fecha'), curFec=selFec?.value||'';
-  const selVend=document.getElementById('flt-vend'), curVend=selVend?.value||'';
+  const allRows = RESULTADO.filter(r =>
+    ['SIN MATCH','REVISION URGENTE','REFACTURADO'].includes(r.estado));
 
-  if (selSuc) {
-    const sucs=[...new Set(sinMatch.map(r=>r.sky.suc))].sort((a,b)=>+a-+b);
-    selSuc.innerHTML='<option value="">Todas las suc.</option>'+
-      sucs.map(s=>`<option value="${s}" ${s===curSuc?'selected':''}>${s}</option>`).join('');
-  }
-  if (selTar) {
-    const tars=[...new Set(sinMatch.map(r=>r.sky.tarjeta))].sort();
-    selTar.innerHTML='<option value="">Todas las tarjetas</option>'+
-      tars.map(t=>`<option value="${t}" ${t===curTar?'selected':''}>${t}</option>`).join('');
-  }
-  const selPlan=document.getElementById('flt-plan'), curPlan=selPlan?.value||'';
-  if (selPlan) {
-    const plans=[...new Set(sinMatch.map(r=>r.sky.plan||'').filter(Boolean))].sort();
-    selPlan.innerHTML='<option value="">Todos los planes</option>'+
-      plans.map(p=>`<option value="${p}" ${p===curPlan?'selected':''}>${p}</option>`).join('');
-  }
-  if (selFec) {
-    const fechas=[...new Set(sinMatch.map(r=>r.sky.fecha))].sort().reverse();
-    selFec.innerHTML='<option value="">Todas las fechas</option>'+
-      fechas.map(f=>`<option value="${f}" ${f===curFec?'selected':''}>${f}</option>`).join('');
-  }
-  if (selVend) {
-    const vends=[...new Set(sinMatch.map(r=>r.sky.vendedor||'').filter(Boolean))].sort();
-    selVend.innerHTML='<option value="">Todos los vendedores</option>'+
-      vends.map(v=>`<option value="${v}" ${v===curVend?'selected':''}>${v}</option>`).join('');
-  }
+  // Leer selecciones actuales
+  const curSuc   = document.getElementById('flt-suc')?.value   || '';
+  const curTar   = document.getElementById('flt-tar')?.value   || '';
+  const curProc  = document.getElementById('flt-proc')?.value  || '';
+  const curPlan  = document.getElementById('flt-plan')?.value  || '';
+  const curFecha = document.getElementById('flt-fecha')?.value || '';
+  const curVend  = document.getElementById('flt-vend')?.value  || '';
+
+  // Mapeo proc → función de filtro (igual que filtrarSinMatch)
+  const _matchProc = (r, p) => {
+    if (!p) return true;
+    if (p === 'GOCUOTAS') return !!r.sky.esGOCUOTAS;
+    if (p === 'GETPOS')   return !!r.sky.esGETPos && !r.sky.esGOCUOTAS;
+    if (p === 'FISERV')   return !r.sky.esGETPos  && !r.sky.esGOCUOTAS;
+    return true;
+  };
+
+  // Base para cada select = todos los rows filtrados por los DEMÁS filtros
+  const _base = (excl) => allRows
+    .filter(r => excl==='suc'   || !curSuc   || r.sky.suc===curSuc)
+    .filter(r => excl==='tar'   || !curTar   || r.sky.tarjeta===curTar)
+    .filter(r => excl==='proc'  || _matchProc(r, curProc))
+    .filter(r => excl==='plan'  || !curPlan  || r.sky.plan===curPlan)
+    .filter(r => excl==='fecha' || !curFecha || r.sky.fecha===curFecha)
+    .filter(r => excl==='vend'  || !curVend  || r.sky.vendedor===curVend);
+
+  const _set = (id, vals, cur, label) => {
+    const el = document.getElementById(id); if (!el) return;
+    el.innerHTML = `<option value="">${label}</option>` +
+      vals.map(v => `<option value="${v}" ${v===cur?'selected':''}>${v}</option>`).join('');
+  };
+
+  _set('flt-suc',   [...new Set(_base('suc')  .map(r=>r.sky.suc))].sort((a,b)=>+a-+b), curSuc,   'Todas las suc.');
+  _set('flt-tar',   [...new Set(_base('tar')  .map(r=>r.sky.tarjeta).filter(Boolean))].sort(), curTar,   'Todas las tarjetas');
+  _set('flt-plan',  [...new Set(_base('plan') .map(r=>r.sky.plan||'').filter(Boolean))].sort(), curPlan,  'Todos los planes');
+  _set('flt-fecha', [...new Set(_base('fecha').map(r=>r.sky.fecha))].sort().reverse(),           curFecha, 'Todas las fechas');
+  _set('flt-vend',  [...new Set(_base('vend') .map(r=>r.sky.vendedor||'').filter(Boolean))].sort(), curVend, 'Todos los vendedores');
 }
 
 function aplicarFiltros() {
@@ -1089,6 +1099,7 @@ function aplicarFiltros() {
   FILTROS_FIX.fecha  = document.getElementById('flt-fecha')?.value  || '';
   FILTROS_FIX.vend   = document.getElementById('flt-vend')?.value   || '';
   FILTROS_FIX.search = (document.getElementById('flt-search')?.value||'').trim().toLowerCase();
+  poblarFiltros();   // re-calcular opciones con los filtros actuales
   renderFilas();
 }
 
