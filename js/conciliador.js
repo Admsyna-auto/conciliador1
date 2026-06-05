@@ -502,7 +502,13 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
       const cn   = norm(s.cupon);
       const ln   = norm(s.lote);
       const ltcn = norm(String(s.lote||'') + String(s.cupon||''));
-      const mn   = s.montoN;
+      // Si el usuario corrigió el monto real en Revisión Manual, usar ese monto
+      // para los métodos de cruce que incluyen monto (Orden1, Orden2, O4, O5, R1, R2)
+      const corGoc = (typeof CORREGIDAS !== 'undefined') ? CORREGIDAS[_skyKey(s)] : null;
+      const mn = (corGoc?.montoReal &&
+                  (corGoc.proc === 'GOCUOTAS' || corGoc.proc === 'GOCELULAR'))
+        ? normMonto(corGoc.montoReal)
+        : s.montoN;
       const fn   = s.fecha;
       const sn   = norm(s.suc);   // sucursal SKY (para O4/O5)
 
