@@ -711,13 +711,62 @@ function _skyKey(sky) {
 
 // ── CORRECCIONES MANUALES ────────────────────────────────
 function aplicarCorreccionesManuales() {
+  // Construir índice GoC unificado para correcciones manuales GoC
+  const _gocAll = [
+    ...(typeof _GOC_PAGOS   !== 'undefined' ? _GOC_PAGOS   : []),
+    ...(typeof _GOC_CELULAR !== 'undefined' ? _GOC_CELULAR : []),
+  ];
+  const _gocManIdx = {}, _gocManRefIdx = {};
+  _gocAll.forEach(p => {
+    if (p.orden) _gocManIdx[p.orden] = p;
+    const ref = String(p.refExt||'').trim();
+    if (ref && ref !== '-' && ref !== '0') _gocManRefIdx[ref] = p;
+  });
+
   for (const [key, cor] of Object.entries(CORREGIDAS)) {
     const idx = RESULTADO.findIndex(r => _skyKey(r.sky) === key);
     const fila = idx >= 0 ? RESULTADO[idx] : null;
     if (!fila) continue;
-    fila.correccionManual=cor;
-    fila.estado=`CORREGIDO MANUAL (${cor.proc})`;
-    fila.procEncontrada=cor.proc; fila.metodo='MANUAL';
+    fila.correccionManual = cor;
+
+    // ── Correcciones de Go Cuotas (proc=GOCUOTAS o GOCELULAR) ──────
+    const isGoC = cor.proc === 'GOCUOTAS' || cor.proc === 'GOCELULAR';
+    if (isGoC) {
+      // Si la cascada automática YA encontró un match GoC → no pisar
+      if (fila.estado?.includes('GoC') || fila.estado?.includes('GoCelular')) {
+        continue;
+      }
+      // Si no encontró match, intentar con el cupón corregido manualmente
+      if (cor.cupon && _gocAll.length) {
+        const cup = norm(cor.cupon);
+        const hit = _gocManIdx[cup] || _gocManRefIdx[cup];
+        if (hit) {
+          fila.proc = {
+            ticket: hit.orden, aut: hit.orden, cupon: hit.orden,
+            monto: hit.importe, montoN: normMonto(hit.importe),
+            fecha: hit.fechaOrigen, suc: hit.sucNombre||'',
+            tarjeta:'Go Cuotas', cuotas: hit.cuotas||1, comFis:'',
+            nombre: hit.nombre||'', marca: hit.fuente||'GOCUOTAS',
+            plan:'', equipo:'', pos:'', tipo:'Venta', arancel:0, cfo:0,
+          };
+          const fuenteGoC = hit.fuente || 'GOCUOTAS';
+          fila.estado         = fuenteGoC === 'GOCELULAR' ? 'OK (GoCelular)' : 'OK (GoC)';
+          fila.procEncontrada = fuenteGoC;
+          fila.metodo         = 'GoC:Manual';
+          fila.matchParcial   = `Manual GoC: ${cor.cupon}`;
+        } else {
+          // Corrección no encontrada en GoC CSV → mantener estado previo
+          fila.estado         = cor.resultado || 'REVISION URGENTE';
+          fila.procEncontrada = cor.proc;
+          fila.metodo         = cor.metodo || 'GoC:Manual';
+        }
+      }
+      continue;  // no pasar por recruzarFila
+    }
+
+    // ── Correcciones FISERV / GETPOS (comportamiento original) ─────
+    fila.estado       = `CORREGIDO MANUAL (${cor.proc})`;
+    fila.procEncontrada = cor.proc; fila.metodo = 'MANUAL';
     if (!fila.proc && cor.cupon && cor.proc && (_FIS_NORM.length || _GP_NORM.length)) {
       const res = recruzarFila(idx, cor.cupon, cor.proc, cor.metodo || '', cor.montoReal ?? null);
       if (res?.ok) {
