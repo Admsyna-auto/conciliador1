@@ -732,8 +732,14 @@ function aplicarCorreccionesManuales() {
     // ── Correcciones de Go Cuotas (proc=GOCUOTAS o GOCELULAR) ──────
     const isGoC = cor.proc === 'GOCUOTAS' || cor.proc === 'GOCELULAR';
     if (isGoC) {
-      // Si la cascada automática YA encontró un match GoC → no pisar
+      // Si la cascada automática YA encontró un match GoC → marcar como CRUZADO y no pisar
       if (fila.estado?.includes('GoC') || fila.estado?.includes('GoCelular')) {
+        CORREGIDAS[key] = { ...cor,
+          resultado: 'CRUZADO',
+          metodo: fila.metodo || cor.metodo || 'GoC:Cascade',
+          motivo: '',
+        };
+        fila.correccionManual = CORREGIDAS[key];
         continue;
       }
       // Si no encontró match, intentar con el cupón corregido manualmente
@@ -1792,10 +1798,61 @@ function eliminarCorreccion(idx) {
 
 function reprocesarCorrecciones() {
   let ok=0, fail=0;
+
+  // Índice GoC para re-proceso
+  const _gocAll = [
+    ...(typeof _GOC_PAGOS   !== 'undefined' ? _GOC_PAGOS   : []),
+    ...(typeof _GOC_CELULAR !== 'undefined' ? _GOC_CELULAR : []),
+  ];
+  const _gocIdx = {}, _gocRefIdx = {};
+  _gocAll.forEach(p => {
+    if (p.orden) _gocIdx[p.orden] = p;
+    const ref = String(p.refExt||'').trim();
+    if (ref && ref !== '-' && ref !== '0') _gocRefIdx[ref] = p;
+  });
+
   for (const [key, cor] of Object.entries(CORREGIDAS)) {
     const idx = RESULTADO.findIndex(r => _skyKey(r.sky) === key);
     if (idx < 0) continue;
     const fila = RESULTADO[idx];
+
+    // ── Correcciones GoC — no usar recruzarFila ─────────────────
+    const isGoC = cor.proc === 'GOCUOTAS' || cor.proc === 'GOCELULAR';
+    if (isGoC) {
+      // Si la cascada principal ya cruzó → marcar CRUZADO y seguir
+      if (fila.estado?.includes('GoC') || fila.estado?.includes('GoCelular')) {
+        CORREGIDAS[key] = { ...cor, resultado:'CRUZADO', metodo: fila.metodo||cor.metodo, motivo:'' };
+        fila.correccionManual = CORREGIDAS[key];
+        ok++;
+        continue;
+      }
+      // Intentar con el cupón corregido manualmente
+      const cup = norm(cor.cupon||'');
+      const hit = _gocIdx[cup] || _gocRefIdx[cup];
+      if (hit) {
+        const fuenteGoC = hit.fuente || 'GOCUOTAS';
+        fila.proc = { ticket:hit.orden, aut:hit.orden, cupon:hit.orden,
+          monto:hit.importe, montoN:normMonto(hit.importe),
+          fecha:hit.fechaOrigen, suc:hit.sucNombre||'',
+          tarjeta:'Go Cuotas', cuotas:hit.cuotas||1, comFis:'',
+          nombre:hit.nombre||'', marca:fuenteGoC, plan:'',
+          equipo:'', pos:'', tipo:'Venta', arancel:0, cfo:0 };
+        fila.estado         = fuenteGoC === 'GOCELULAR' ? 'OK (GoCelular)' : 'OK (GoC)';
+        fila.procEncontrada = fuenteGoC;
+        fila.metodo         = 'GoC:Manual';
+        fila.matchParcial   = `Manual GoC: ${cor.cupon}`;
+        CORREGIDAS[key] = { ...cor, resultado:'CRUZADO', metodo:'GoC:Manual', motivo:'' };
+        fila.correccionManual = CORREGIDAS[key];
+        ok++;
+      } else {
+        CORREGIDAS[key] = { ...cor, resultado:'NO CRUZADO', motivo:`Orden ${cor.cupon} no encontrada` };
+        fila.correccionManual = CORREGIDAS[key];
+        fail++;
+      }
+      continue;
+    }
+
+    // ── FISERV / GETPOS — comportamiento original ───────────────
     const res=recruzarFila(idx, cor.cupon, cor.proc, cor.metodo||'', cor.montoReal ?? null);
     CORREGIDAS[key] = {...cor, difMonto: res.ok ? (res.difMonto ?? null) : null,
       resultado: res.ok ? 'CRUZADO' : 'NO CRUZADO',
