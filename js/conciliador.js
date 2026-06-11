@@ -9,6 +9,9 @@ const HDR_BASE = ['Estado','Método','Proc.Esp.','Proc.Real','Integrado',
   'Tarjeta Proc.','Cuotas Proc.','Com.FIS','Cód.Auth. Proc.','Lote Proc.','Ticket Proc.','Suc. Proc.',
   'Dif. Monto','Com.OK','Match Parcial'];
 
+// Vista compacta — columnas visibles en la tabla principal
+const HDR_COMPACT = ['','Estado','Fecha','Suc.','Vendedor','Monto','Diferencia'];
+
 // ── Normalización ────────────────────────────────────────
 function norm(v) { const s=String(v??'').trim().replace(/^0+/,''); return s||'0'; }
 
@@ -984,6 +987,13 @@ function updateCounts() {
   // Badge del módulo 3 muestra la suma de diferencias accionables
   const mcntDif = document.getElementById('mcnt-diferencias');
   if (mcntDif) mcntDif.textContent = (difCuotasCount + difProcCount).toLocaleString();
+
+  // Contadores mega-tabs
+  const cntMegaOps = document.getElementById('cnt-mega-ops');
+  const cntMegaDif = document.getElementById('cnt-mega-dif');
+  if (cntMegaOps) cntMegaOps.textContent = (st.sin + st.urg + st.ref) > 0
+    ? (st.sin + st.urg + st.ref).toLocaleString() : total.toLocaleString();
+  if (cntMegaDif) cntMegaDif.textContent = (difCuotasCount + difProcCount).toLocaleString();
 }
 
 // ── RENDER TABLA ─────────────────────────────────────────
@@ -1040,12 +1050,65 @@ function toRow(r) {
   ];
 }
 
+// ── Fila compacta (6 columnas visibles) ──────────────────────────────
+function toRowCompact(r) {
+  const s=r.sky, p=r.proc;
+  const monto = `<span class="num ${s.monto<0?'num-neg':''}">${fmtARS(s.monto)}</span>`;
+  const procMonto = r.procMontoNorm ?? p?.monto ?? null;
+  const difVal = (procMonto !== null && s.monto !== undefined) ? s.monto - procMonto : null;
+  const difCls = difVal === null ? '' : Math.abs(difVal) < 0.01 ? 'num-ok' : difVal < 0 ? 'num-neg' : '';
+  const dif = difVal !== null ? `<span class="num ${difCls}">${fmtARS(difVal)}</span>` : '—';
+  return [estadoBadge(r.estado), s.fecha??'—', s.suc??'—', s.vendedor??'—', monto, dif];
+}
+
+// ── Detalle expandido (grid de todos los campos) ──────────────────────
+function toRowDetail(r) {
+  const s=r.sky, p=r.proc;
+  const fields = [
+    ['Método',        r.metodo??'—'],
+    ['Proc. esperada',r.procEsperada??'—'],
+    ['Proc. real',    r.procEncontrada??'—'],
+    ['Integrado',     s.integrado?'<span style="color:var(--grn)">Sí</span>':'No'],
+    ['Tarjeta SKY',   s.tarjeta??'—'],
+    ['Plan',          s.plan??'—'],
+    ['Cupón SKY',     s.cupon??'—'],
+    ['Lote SKY',      s.lote??'—'],
+    ['Tarjeta Proc.', p?.tarjeta??'—'],
+    ['Cuotas',        p?.cuotas??'—'],
+    ['Cód. Auth.',    p?.aut??'—'],
+    ['Lote Proc.',    p?.lote??'—'],
+    ['Ticket',        p?.ticket??'—'],
+    ['Suc. Proc.',    p?.suc??'—'],
+    ['Com. FIS',      p?.comFis??'—'],
+    ['Match parcial', r.matchParcial??'—'],
+  ];
+  return `<div class="row-detail">${fields.map(([k,v])=>
+    `<div><span class="det-lbl">${k}</span><span class="det-val">${v}</span></div>`
+  ).join('')}</div>`;
+}
+
+// ── Toggle fila detalle ───────────────────────────────────────────────
+function _toggleDetalle(tr, key) {
+  const det = document.getElementById('det_'+key);
+  if (!det) return;
+  const open = det.style.display !== 'none';
+  det.style.display = open ? 'none' : 'table-row';
+  const exp = tr.querySelector('.td-expand');
+  if (exp) exp.textContent = open ? '▶' : '▼';
+}
+
 function renderTable(tblId, filas) {
   const t=document.getElementById(tblId); if (!t) return;
-  t.querySelector('thead').innerHTML=`<tr>${HDR_BASE.map(h=>`<th>${h}</th>`).join('')}</tr>`;
-  t.querySelector('tbody').innerHTML=filas.slice(0,3000).map(r=>{
-    const cells=toRow(r);
-    return `<tr class="${rowClass(r.estado)}">${cells.map(c=>`<td>${c}</td>`).join('')}</tr>`;
+  t.querySelector('thead').innerHTML=`<tr>${HDR_COMPACT.map(h=>`<th>${h}</th>`).join('')}</tr>`;
+  t.querySelector('tbody').innerHTML=filas.slice(0,3000).map((r, i)=>{
+    const cells = toRowCompact(r);
+    const key   = `${tblId}_${i}`;
+    return `<tr class="${rowClass(r.estado)}" style="cursor:pointer" onclick="_toggleDetalle(this,'${key}')">
+      <td class="td-expand">▶</td>${cells.map(c=>`<td>${c}</td>`).join('')}
+    </tr>
+    <tr class="tr-detail" id="det_${key}" style="display:none">
+      <td colspan="${HDR_COMPACT.length}">${toRowDetail(r)}</td>
+    </tr>`;
   }).join('');
 }
 

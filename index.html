@@ -11,8 +11,8 @@
    TOKENS
 ══════════════════════════════════════════════════════ */
 :root {
-  --bg:#4f5359;--s1:#1a1e28;--s2:#222836;--s3:#2a3347;--s4:#323d52;
-  --b1:#2e3b52;--b2:#3a4a64;--b3:#445578;
+  --bg:#0F1B2D;--s1:#091422;--s2:#0D1928;--s3:#152840;--s4:#1B3356;
+  --b1:#1F3E64;--b2:#264E7E;--b3:#305E9B;
   --acc:#4f8ef7;--cyn:#38bdf8;--grn:#34d399;
   --yel:#fbbf24;--red:#f87171;--org:#fb923c;--vio:#a78bfa;
   --txt:#e2e8f0;--m1:#8ba3c4;--m2:#6b7e96;
@@ -70,6 +70,52 @@ body{background:var(--bg);color:var(--txt);font-family:var(--mono);
   padding:1px 6px;border-radius:3px;font-size:8px;font-family:var(--mono);
 }
 .mod-btn.active .cnt{background:rgba(56,189,248,.15);color:var(--cyn)}
+
+/* ══ SUB-NAV (segundo nivel) ═════════════════════════ */
+.sub-modstrip{
+  background:var(--s2);border-bottom:1px solid var(--b1);
+  display:flex;padding:0 24px;gap:0;flex-shrink:0;
+}
+.sub-mod-btn{
+  padding:6px 16px;background:none;border:none;border-bottom:2px solid transparent;
+  color:var(--m2);font-family:var(--mono);font-size:10px;font-weight:500;
+  cursor:pointer;letter-spacing:.3px;transition:color .15s,border-color .15s;
+  margin-bottom:-1px;white-space:nowrap;
+}
+.sub-mod-btn.active{color:var(--acc);border-color:var(--acc)}
+.sub-mod-btn:hover{color:var(--txt)}
+
+/* ══ MÁS FILTROS ═════════════════════════════════════ */
+.btn-mas-filtros{
+  background:var(--s3);border:1px solid var(--b2);border-radius:var(--r4);
+  color:var(--m1);font-family:var(--mono);font-size:9px;padding:3px 10px;
+  cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0;
+}
+.btn-mas-filtros:hover,.btn-mas-filtros.open{border-color:var(--acc);color:var(--acc)}
+.mas-filtros-panel{
+  display:none;gap:6px;flex-wrap:wrap;padding-top:4px;
+  flex-basis:100%;order:99;
+}
+.mas-filtros-panel.open{display:flex}
+
+/* ══ FILA EXPANDIBLE ═════════════════════════════════ */
+.td-expand{
+  width:22px;text-align:center;cursor:pointer;color:var(--m2);
+  font-size:9px;user-select:none;padding:0 4px !important;
+}
+.tr-detail > td{
+  background:var(--s2);padding:12px 16px !important;border-top:none !important;
+}
+.row-detail{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:7px;
+}
+.row-detail > div{
+  background:var(--s3);border-radius:var(--r4);padding:6px 8px;
+}
+.det-lbl{display:block;font-size:7px;color:var(--m2);letter-spacing:.8px;
+  text-transform:uppercase;margin-bottom:2px}
+.det-val{font-size:10px;color:var(--txt);word-break:break-all}
+.num-ok{color:var(--grn)}
 
 /* ══ BODY (área de trabajo) ══════════════════════════ */
 .app-body{display:flex;flex:1;overflow:hidden;min-height:0}
@@ -241,15 +287,16 @@ input[type=file]{display:none}
 
 /* ══ TABLE ═══════════════════════════════════════════ */
 .tbl-wrap{flex:1;overflow:auto;min-height:0}
-table{width:max-content;min-width:100%;border-collapse:collapse;font-size:10px}
+table{width:100%;border-collapse:collapse;font-size:10px}
 thead{position:sticky;top:0;z-index:5}
 thead th{
-  background:#161b26;color:var(--m2);font-weight:500;
+  background:var(--s1);color:var(--m2);font-weight:500;
   font-size:8.5px;text-transform:uppercase;letter-spacing:.5px;
   padding:8px 11px;text-align:left;border-bottom:1px solid var(--b1);
   white-space:nowrap;
 }
-tbody td{padding:7px 11px;border-bottom:1px solid #0d1422;white-space:nowrap}
+thead th:first-child{width:24px;padding:8px 4px}
+tbody td{padding:7px 11px;border-bottom:1px solid var(--s4);white-space:nowrap}
 tbody tr:hover td{background:var(--s3)}
 
 /* STATUS */
@@ -890,34 +937,41 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 </div>
 
 <!-- ══ MÓDULOS PRINCIPALES ════════════════════════════ -->
-<div class="modstrip">
-  <button class="mod-btn active" id="mbtn-cruce"    onclick="showMod('cruce',this)">
-    1 · Cruce automático <span class="cnt" id="mcnt-cruce">—</span>
+<div class="modstrip" id="main-modstrip">
+  <button class="mod-btn active" id="mega-resumen" onclick="showMegaTab('resumen',this)">
+    Resumen
   </button>
-  <button class="mod-btn" id="mbtn-revision"  onclick="showMod('revision',this)">
-    2 · Revisión manual <span class="cnt" id="mcnt-revision">0</span>
+  <button class="mod-btn" id="mega-operaciones" onclick="showMegaTab('operaciones',this)">
+    Operaciones <span class="cnt" id="cnt-mega-ops">—</span>
   </button>
-  <button class="mod-btn" id="mbtn-diferencias" onclick="showMod('diferencias',this)">
-    3 · Diferencias <span class="cnt" id="mcnt-diferencias">0</span>
+  <button class="mod-btn" id="mega-diferencias" onclick="showMegaTab('diferencias',this)">
+    Diferencias <span class="cnt" id="cnt-mega-dif">0</span>
   </button>
-  <button class="mod-btn" id="mbtn-cobros"    onclick="showMod('cobros',this)">
-    4 · Cobros <span class="cnt" id="mcnt-cobros">—</span>
+  <button class="mod-btn" id="mega-configuracion" onclick="showMegaTab('configuracion',this)">
+    Configuración
   </button>
-  <button class="mod-btn" id="mbtn-ctr" onclick="showMod('ctr',this)">
-    5 · Contracargos <span class="cnt" id="mcnt-ctr">—</span>
-  </button>
-  <button class="mod-btn" id="mbtn-dashboard" onclick="showMod('dashboard',this)">
-    6 · Dashboard
-  </button>
-  <button class="mod-btn" id="mbtn-goc" onclick="showMod('goc',this)">
-    7 · Go Cuotas <span class="cnt" id="mcnt-goc">—</span>
-  </button>
-  <button class="mod-btn" id="mbtn-hist" onclick="showMod('hist',this)">
-    8 · Histórico <span class="cnt" id="mcnt-hist">—</span>
-  </button>
-  <button class="mod-btn" id="mbtn-tm"        onclick="showMod('tm',this)">
-    9 · Tablas maestras
-  </button>
+</div>
+<!-- Sub-navegación dinámica -->
+<div class="sub-modstrip" id="sub-modstrip" style="display:none"></div>
+
+<!-- IDs de compatibilidad para JS existente (mcnt-*, mbtn-*) -->
+<div style="display:none" aria-hidden="true">
+  <button id="mbtn-cruce"></button>
+  <button id="mbtn-revision"></button>
+  <button id="mbtn-diferencias"></button>
+  <button id="mbtn-cobros"></button>
+  <button id="mbtn-ctr"></button>
+  <button id="mbtn-dashboard"></button>
+  <button id="mbtn-goc"></button>
+  <button id="mbtn-hist"></button>
+  <button id="mbtn-tm"></button>
+  <span id="mcnt-cruce">—</span>
+  <span id="mcnt-revision">0</span>
+  <span id="mcnt-diferencias">0</span>
+  <span id="mcnt-cobros">—</span>
+  <span id="mcnt-ctr">—</span>
+  <span id="mcnt-goc">—</span>
+  <span id="mcnt-hist">—</span>
 </div>
 
 <div class="app-body">
@@ -1099,27 +1153,29 @@ tr.row-int td{background:rgba(52,211,153,.02)}
         </label>
       </div>
       <!-- Barra de filtros correcciones -->
-      <div class="filter-bar" style="flex-shrink:0">
-        <span class="filter-lbl">Filtrar</span>
-        <select class="filter-sel" id="cor-flt-suc"    onchange="renderTablaCorrecciones()"><option value="">Todas las suc.</option></select>
-        <select class="filter-sel" id="cor-flt-tar"    onchange="renderTablaCorrecciones()"><option value="">Todas las tarjetas</option></select>
-        <select class="filter-sel" id="cor-flt-proc"   onchange="renderTablaCorrecciones()">
-          <option value="">Ambas proc.</option>
-          <option value="FISERV">FISERV</option>
-          <option value="GETPOS">GETPOS</option>
-        </select>
-        <select class="filter-sel" id="cor-flt-estado" onchange="renderTablaCorrecciones()">
-          <option value="">Todos los estados</option>
-          <option value="CRUZADO">✓ Cruzado</option>
-          <option value="NO CRUZADO">✗ Sin match</option>
-          <option value="PENDIENTE">⟳ Pendiente</option>
-          <option value="REVISION URGENTE">⚠ Rev. Urgente</option>
-          <option value="ANULACION SIN COBRO">✗ Anu. S/Cobro</option>
-          <option value="REFACTURADO">↺ Refacturado</option>
-        </select>
-        <input class="filter-inp" id="cor-flt-search" placeholder="Vendedor, cupón, asiento..." oninput="renderTablaCorrecciones()">
-        <button class="btn-clear" onclick="limpiarFiltrosCor()">✕ Limpiar</button>
-        <span class="filter-stats" id="cor-filter-stats" style="margin-left:auto"></span>
+      <div class="filter-bar" style="flex-shrink:0;flex-wrap:wrap;align-items:center">
+        <input class="filter-inp" id="cor-flt-search" placeholder="🔍 Vendedor, cupón, asiento..." oninput="renderTablaCorrecciones()" style="flex:1;min-width:160px">
+        <select class="filter-sel" id="cor-flt-suc" onchange="renderTablaCorrecciones()"><option value="">Todas las suc.</option></select>
+        <button class="btn-mas-filtros" id="btn-mas-filtros-cor" onclick="_toggleMasFiltros('cor')">⚙ Más filtros</button>
+        <button class="btn-clear" onclick="limpiarFiltrosCor()">✕</button>
+        <span class="filter-stats" id="cor-filter-stats" style="margin-left:auto;font-size:9px"></span>
+        <div class="mas-filtros-panel" id="mas-filtros-panel-cor">
+          <select class="filter-sel" id="cor-flt-tar"  onchange="renderTablaCorrecciones()"><option value="">Tarjeta</option></select>
+          <select class="filter-sel" id="cor-flt-proc" onchange="renderTablaCorrecciones()">
+            <option value="">Procesadora</option>
+            <option value="FISERV">FISERV</option>
+            <option value="GETPOS">GETPOS</option>
+          </select>
+          <select class="filter-sel" id="cor-flt-estado" onchange="renderTablaCorrecciones()">
+            <option value="">Estado</option>
+            <option value="CRUZADO">✓ Cruzado</option>
+            <option value="NO CRUZADO">✗ Sin match</option>
+            <option value="PENDIENTE">⟳ Pendiente</option>
+            <option value="REVISION URGENTE">⚠ Rev. Urgente</option>
+            <option value="ANULACION SIN COBRO">✗ Anu. S/Cobro</option>
+            <option value="REFACTURADO">↺ Refacturado</option>
+          </select>
+        </div>
       </div>
       <div class="cor-table-wrap">
         <table id="tbl-cor"><thead></thead><tbody></tbody></table>
@@ -1167,22 +1223,25 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 
   <!-- ── MÓDULO 2: REVISIÓN MANUAL ──────────────────── -->
   <div class="mod-panel" id="mod-revision">
-    <div class="filter-bar">
-      <span class="filter-lbl">Filtrar</span>
-      <select class="filter-sel" id="flt-suc"    onchange="aplicarFiltros()"><option value="">Todas las suc.</option></select>
-      <select class="filter-sel" id="flt-tar"    onchange="aplicarFiltros()"><option value="">Todas las tarjetas</option></select>
-      <select class="filter-sel" id="flt-proc"   onchange="aplicarFiltros()">
-        <option value="">Todas las proc.</option>
-        <option value="FISERV">FISERV</option>
-        <option value="GETPOS">GETPOS</option>
-        <option value="GOCUOTAS">Go Cuotas</option>
-      </select>
-      <select class="filter-sel" id="flt-plan"   onchange="aplicarFiltros()"><option value="">Todos los planes</option></select>
-      <select class="filter-sel" id="flt-fecha"  onchange="aplicarFiltros()"><option value="">Todas las fechas</option></select>
-      <select class="filter-sel" id="flt-vend"   onchange="aplicarFiltros()"><option value="">Todos los vendedores</option></select>
-      <input  class="filter-inp" id="flt-search" placeholder="Cupón, monto, asiento..." oninput="aplicarFiltros()">
-      <button class="btn-clear"  onclick="limpiarFiltros()">✕ Limpiar</button>
-      <span class="filter-stats" id="fix-stats"></span>
+    <div class="filter-bar" style="flex-wrap:wrap;align-items:center">
+      <input  class="filter-inp" id="flt-search" placeholder="🔍 Cupón, monto, asiento..." oninput="aplicarFiltros()" style="flex:1;min-width:160px">
+      <select class="filter-sel" id="flt-suc"  onchange="aplicarFiltros()"><option value="">Todas las suc.</option></select>
+      <button class="btn-mas-filtros" id="btn-mas-filtros-rev" onclick="_toggleMasFiltros('rev')">⚙ Más filtros</button>
+      <button class="btn-clear" onclick="limpiarFiltros()">✕</button>
+      <span class="filter-stats" id="fix-stats" style="margin-left:auto;font-size:9px"></span>
+      <!-- Filtros extra colapsables -->
+      <div class="mas-filtros-panel" id="mas-filtros-panel-rev">
+        <select class="filter-sel" id="flt-tar"  onchange="aplicarFiltros()"><option value="">Tarjeta</option></select>
+        <select class="filter-sel" id="flt-proc" onchange="aplicarFiltros()">
+          <option value="">Procesadora</option>
+          <option value="FISERV">FISERV</option>
+          <option value="GETPOS">GETPOS</option>
+          <option value="GOCUOTAS">Go Cuotas</option>
+        </select>
+        <select class="filter-sel" id="flt-plan"  onchange="aplicarFiltros()"><option value="">Plan</option></select>
+        <select class="filter-sel" id="flt-fecha" onchange="aplicarFiltros()"><option value="">Fecha</option></select>
+        <select class="filter-sel" id="flt-vend"  onchange="aplicarFiltros()"><option value="">Vendedor</option></select>
+      </div>
     </div>
     <div class="fix-info" style="margin:10px 18px 0">
       <b>Corrección manual de operaciones Sin Match</b> — Completá el cupón o código de autorización de la procesadora.
@@ -1889,12 +1948,64 @@ function _initProcGroups() {
   });
 }
 
-// ══ MÓDULOS ════════════════════════════════════════════
-function showMod(mod, btn) {
-  document.querySelectorAll('.mod-panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.mod-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(`mod-${mod}`)?.classList.add('active');
+// ══ MEGA-TABS (4 tabs principales) ══════════════════════
+const MEGA_MAP = {
+  resumen:       [{ id:'dashboard', label:'Dashboard' },{ id:'hist', label:'Histórico' }],
+  operaciones:   [{ id:'cruce', label:'Cruce automático' },{ id:'revision', label:'Revisión manual' },{ id:'goc', label:'Go Cuotas' }],
+  diferencias:   [{ id:'diferencias', label:'Diferencias' },{ id:'cobros', label:'Cobros' },{ id:'ctr', label:'Contracargos' }],
+  configuracion: [{ id:'tm', label:'Tablas maestras' }],
+};
+const _megaActive   = { resumen:'dashboard', operaciones:'cruce', diferencias:'diferencias', configuracion:'tm' };
+let   _curMegaTab   = 'resumen';
+
+function showMegaTab(tabId, btn) {
+  _curMegaTab = tabId;
+  document.querySelectorAll('#main-modstrip .mod-btn').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
+  _renderSubNav(tabId);
+  showMod(_megaActive[tabId] || MEGA_MAP[tabId][0].id);
+}
+
+function showSubMod(megaId, modId, btn) {
+  _megaActive[megaId] = modId;
+  document.querySelectorAll('#sub-modstrip .sub-mod-btn').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  showMod(modId);
+}
+
+function _renderSubNav(tabId) {
+  const subs = MEGA_MAP[tabId] || [];
+  const strip = document.getElementById('sub-modstrip');
+  if (!strip) return;
+  if (subs.length <= 1) { strip.style.display = 'none'; return; }
+  const activeId = _megaActive[tabId] || subs[0].id;
+  strip.style.display = 'flex';
+  strip.innerHTML = subs.map(s =>
+    `<button class="sub-mod-btn${s.id===activeId?' active':''}"
+      onclick="showSubMod('${tabId}','${s.id}',this)">${s.label}</button>`
+  ).join('');
+}
+
+function _syncMegaNav(mod) {
+  for (const [tabId, subs] of Object.entries(MEGA_MAP)) {
+    if (subs.some(s => s.id === mod)) {
+      if (_curMegaTab !== tabId) {
+        _curMegaTab = tabId;
+        document.querySelectorAll('#main-modstrip .mod-btn').forEach(b => b.classList.remove('active'));
+        document.getElementById(`mega-${tabId}`)?.classList.add('active');
+      }
+      _megaActive[tabId] = mod;
+      _renderSubNav(tabId);
+      break;
+    }
+  }
+}
+
+// ══ MÓDULOS ════════════════════════════════════════════
+function showMod(mod, _btn) {   // _btn mantenido por compatibilidad (ignorado)
+  document.querySelectorAll('.mod-panel').forEach(p => p.classList.remove('active'));
+  document.getElementById(`mod-${mod}`)?.classList.add('active');
+  _syncMegaNav(mod);
 
   if (mod === 'tm')          { renderModuloTM(); }
   if (mod === 'diferencias') { if (RESULTADO.length) renderModuloDiferencias(); }
@@ -1905,6 +2016,16 @@ function showMod(mod, btn) {
   if (mod === 'ctr')         { renderModuloContracargos(); }
   if (mod === 'goc')         { renderModuloGoCuotas(); }
   if (mod === 'hist')        { renderModuloHistorico(); }
+}
+
+// ══ TOGGLE "MÁS FILTROS" ═══════════════════════════════
+function _toggleMasFiltros(key) {
+  const btn   = document.getElementById(`btn-mas-filtros-${key}`);
+  const panel = document.getElementById(`mas-filtros-panel-${key}`);
+  if (!btn || !panel) return;
+  const open = panel.classList.toggle('open');
+  btn.classList.toggle('open', open);
+  btn.textContent = open ? '▲ Menos filtros' : '⚙ Más filtros';
 }
 
 // ══ SIDEBAR EQUIV ══════════════════════════════════════
@@ -2057,7 +2178,7 @@ function nuevaSesion() {
 }
 
 // ══ CONFIG / THEME ═══════════════════════════════════
-const CFG_DEFAULTS = { bg:'#4f5359', acc:'#4f8ef7' };
+const CFG_DEFAULTS = { bg:'#0F1B2D', acc:'#4f8ef7' };
 
 function _hexToHsl(hex) {
   let r=parseInt(hex.slice(1,3),16)/255, g=parseInt(hex.slice(3,5),16)/255, b=parseInt(hex.slice(5,7),16)/255;
@@ -2081,14 +2202,26 @@ function applyBgColor(bg) {
   if (!bg || !bg.startsWith('#')) return;   // ignorar valores inválidos
   try {
     const r = document.documentElement;
+    const [,,l] = _hexToHsl(bg);
     r.style.setProperty('--bg', bg);
-    r.style.setProperty('--s1', _shiftL(bg, -22));
-    r.style.setProperty('--s2', _shiftL(bg, -18));
-    r.style.setProperty('--s3', _shiftL(bg, -13));
-    r.style.setProperty('--s4', _shiftL(bg, -8));
-    r.style.setProperty('--b1', _shiftL(bg, -12));
-    r.style.setProperty('--b2', _shiftL(bg, -6));
-    r.style.setProperty('--b3', _shiftL(bg, -1));
+    if (l < 20) {
+      // Tema muy oscuro (ej. #0F1B2D) → paneles más oscuros, bordes más claros
+      r.style.setProperty('--s1', _shiftL(bg, -3));
+      r.style.setProperty('--s2', _shiftL(bg, -2));
+      r.style.setProperty('--s3', _shiftL(bg, +4));
+      r.style.setProperty('--s4', _shiftL(bg, +9));
+      r.style.setProperty('--b1', _shiftL(bg, +12));
+      r.style.setProperty('--b2', _shiftL(bg, +18));
+      r.style.setProperty('--b3', _shiftL(bg, +25));
+    } else {
+      r.style.setProperty('--s1', _shiftL(bg, -22));
+      r.style.setProperty('--s2', _shiftL(bg, -18));
+      r.style.setProperty('--s3', _shiftL(bg, -13));
+      r.style.setProperty('--s4', _shiftL(bg, -8));
+      r.style.setProperty('--b1', _shiftL(bg, -12));
+      r.style.setProperty('--b2', _shiftL(bg, -6));
+      r.style.setProperty('--b3', _shiftL(bg, -1));
+    }
     document.querySelectorAll('#cfg-bg-swatches .cfg-swatch').forEach(s =>
       s.classList.toggle('active', s.dataset.bg === bg));
     const inp = document.getElementById('cfg-bg-custom');
@@ -2155,6 +2288,8 @@ function _loadTheme() {
 document.addEventListener('DOMContentLoaded', () => {
   _loadTheme();
   _initProcGroups();
+  // Inicializar sub-nav del tab activo (Resumen)
+  _renderSubNav('resumen');
   // Badge biblioteca + period switcher (en biblioteca.js)
   _actualizarBadgeBiblioteca();
   if (typeof _renderPeriodSwitcher === 'function') _renderPeriodSwitcher();
