@@ -2031,7 +2031,10 @@ function renderTablaCorrecciones() {
   if (cnt) cnt.textContent=allEntries.length.toLocaleString();
   if (fStats) fStats.textContent = filtered.length < allEntries.length
     ? `Mostrando ${filtered.length} de ${allEntries.length}` : '';
-  if (btnR) btnR.disabled=entries.length===0||(!_FIS_NORM.length&&!_GP_NORM.length);
+  const _hayProcData = _FIS_NORM.length || _GP_NORM.length
+    || (typeof _GOC_PAGOS   !== 'undefined' && _GOC_PAGOS.length)
+    || (typeof _GOC_CELULAR !== 'undefined' && _GOC_CELULAR.length);
+  if (btnR) btnR.disabled = entries.length === 0 || !_hayProcData;
   if (!tbl) return;
   const cruzados=entries.filter(([,c])=>c.resultado==='CRUZADO').length;
   const noCruz=entries.filter(([,c])=>c.resultado==='NO CRUZADO').length;
@@ -2620,15 +2623,19 @@ function importarCorrecciones(input) {
       });
 
       // Re-aplicar correcciones con los datos actuales
+      // Chequea CUALQUIER procesadora: FIS, GP o GoC
+      const _hayProc = _FIS_NORM.length || _GP_NORM.length
+        || (typeof _GOC_PAGOS   !== 'undefined' && _GOC_PAGOS.length)
+        || (typeof _GOC_CELULAR !== 'undefined' && _GOC_CELULAR.length);
+
       if (importadas > 0) {
-        if (_FIS_NORM.length || _GP_NORM.length) {
+        if (_hayProc) {
           // Hay datos de procesadora en memoria → re-cruce completo
           reprocesarCorrecciones();
           renderTodo();
           updateCounts();
         } else {
-          // Sin datos de procesadora (vista consolidada o lote sin archivos):
-          // Mostrar igual las correcciones como PENDIENTE
+          // Sin ningún dato de procesadora: mostrar como PENDIENTE
           renderTablaCorrecciones();
           updateCounts();
         }
@@ -2639,10 +2646,10 @@ function importarCorrecciones(input) {
         `✓ ${importadas} correcciones importadas`,
         noEncontradas ? `⚠ ${noEncontradas} sin fila en el RESULTADO actual (se guardan igual)` : '',
         sinAsiento    ? `ℹ ${sinAsiento} filas sin Nro.Asiento ignoradas` : '',
-        !_FIS_NORM.length && !_GP_NORM.length ? 'ℹ Para re-cruzar: cargá el lote con ▶ Cargar y ejecutá ↺ Reprocesar lote' : '',
+        !_hayProc ? 'ℹ Para re-cruzar: cargá el lote con ▶ Cargar y ejecutá ↺ Reprocesar lote' : '',
       ].filter(Boolean).join('\n');
       typeof _showToast === 'function'
-        ? _showToast(`✓ ${importadas} correcciones importadas${!_FIS_NORM.length && !_GP_NORM.length ? ' · pendientes de re-cruce' : ''}`)
+        ? _showToast(`✓ ${importadas} correcciones importadas${!_hayProc ? ' · pendientes de re-cruce' : ''}`)
         : alert(msg);
       if (noEncontradas || sinAsiento) console.warn('[IMPORT COR]', msg);
 
