@@ -5,16 +5,18 @@
 // ═══════════════════════════════════════════════════════════════════
 
 const _BIB_TIPOS = [
-  { id:'SKYLAB',      label:'Skylab (principal)',      accept:'.xlsx,.xls', badge:'SK',  bg:'#0f2544', color:'#38bdf8' },
-  { id:'TERMINALES',  label:'Terminales',              accept:'.xlsx,.xls', badge:'TER', bg:'#1a1f2e', color:'#8ba3c4' },
-  { id:'FISERV_LIQ',  label:'FISERV Liquidación',      accept:'.xlsx,.xls', badge:'FIS', bg:'#0f1e44', color:'#4f8ef7' },
-  { id:'FISERV_CTR',  label:'FISERV Contracargos',     accept:'.xlsx,.xls', badge:'FC',  bg:'#0f1e44', color:'#f87171' },
-  { id:'GETPOS',      label:'GETPOS',                  accept:'.xlsx,.xls', badge:'GP',  bg:'#0f2d20', color:'#34d399' },
-  { id:'GETPOS_CTR',  label:'GETPOS Contracargos',     accept:'.xlsx,.xls', badge:'GC',  bg:'#0f2d20', color:'#f87171' },
-  { id:'GOC_PAGOS',   label:'Go Cuotas CSV',           accept:'.csv,.txt',  badge:'GQ',  bg:'#0f2d20', color:'#4ade80' },
-  { id:'GOC_CELULAR', label:'Go Celular CSV',          accept:'.csv,.txt',  badge:'GK',  bg:'#1a1040', color:'#a78bfa' },
-  { id:'GOC_VENTAS',  label:'GoC Ventas (IMEI)',       accept:'.xlsx,.xls', badge:'GV',  bg:'#1a1f10', color:'#fbbf24' },
-  { id:'LIQUIDACION', label:'Liquidaciones (Cobros)',  accept:'.xlsx,.xls', badge:'LIQ', bg:'#291000', color:'#fb923c' },
+  // ── OPERACIONES: cruce diario cobrado vs facturado en Skylab ──────
+  { id:'SKYLAB',      label:'Skylab (principal)',               modulo:'OPERACIONES', accept:'.xlsx,.xls', badge:'SK',  bg:'#0f2544', color:'#38bdf8' },
+  { id:'TERMINALES',  label:'Terminales',                       modulo:'OPERACIONES', accept:'.xlsx,.xls', badge:'TER', bg:'#1a1f2e', color:'#8ba3c4' },
+  { id:'FISERV_LIQ',  label:'FISERV Operaciones',               modulo:'OPERACIONES', accept:'.xlsx,.xls', badge:'FIS', bg:'#0f1e44', color:'#4f8ef7' },
+  { id:'FISERV_CTR',  label:'FISERV Contracargos',              modulo:'OPERACIONES', accept:'.xlsx,.xls', badge:'FC',  bg:'#0f1e44', color:'#f87171' },
+  { id:'GETPOS',      label:'GETPOS Operaciones',               modulo:'OPERACIONES', accept:'.xlsx,.xls', badge:'GP',  bg:'#0f2d20', color:'#34d399' },
+  { id:'GETPOS_CTR',  label:'GETPOS Contracargos',              modulo:'OPERACIONES', accept:'.xlsx,.xls', badge:'GC',  bg:'#0f2d20', color:'#f87171' },
+  { id:'GOC_PAGOS',   label:'Go Cuotas CSV',                    modulo:'OPERACIONES', accept:'.csv,.txt',  badge:'GQ',  bg:'#0f2d20', color:'#4ade80' },
+  { id:'GOC_CELULAR', label:'Go Celular CSV',                   modulo:'OPERACIONES', accept:'.csv,.txt',  badge:'GK',  bg:'#1a1040', color:'#a78bfa' },
+  { id:'GOC_VENTAS',  label:'GoC Ventas (IMEI)',                modulo:'OPERACIONES', accept:'.xlsx,.xls', badge:'GV',  bg:'#1a1f10', color:'#fbbf24' },
+  // ── LIQUIDACIONES: cruce ops confirmadas vs pagos de procesadora ─
+  { id:'LIQUIDACION', label:'Cupones Liquidados (FISERV+GETPOS)',modulo:'LIQUIDACIONES', accept:'.xlsx,.xls', badge:'LIQ', bg:'#291000', color:'#fb923c' },
 ];
 
 // ── Loader: convierte un registro de la biblioteca en función de carga ─
@@ -333,7 +335,15 @@ function bibAbrirUploadLote(periodoId, loteId) {
           <span class="bib-field-lbl">Tipo de archivo</span>
           <select class="bib-sel" id="bib-tipo">
             <option value="">— seleccionar —</option>
-            ${_BIB_TIPOS.map(t => `<option value="${t.id}">${t.label}</option>`).join('')}
+            ${(() => {
+              const grupos = [...new Set(_BIB_TIPOS.map(t => t.modulo))];
+              return grupos.map(grp => {
+                const items = _BIB_TIPOS.filter(t => t.modulo === grp);
+                return `<optgroup label="── ${grp} ──">${
+                  items.map(t => `<option value="${t.id}">${t.label}</option>`).join('')
+                }</optgroup>`;
+              }).join('');
+            })()}
           </select>
         </div>
         <div class="bib-field" style="flex:2">
