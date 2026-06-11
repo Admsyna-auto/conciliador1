@@ -139,9 +139,6 @@ function renderModuloProc(procId) {
   // ── Sucursales para el filtro ─────────────────────────────────────
   const sucs = [...new Set(allRows.map(r => r.sky?.suc).filter(Boolean))].sort((a,b)=>+a-+b);
 
-  // Asegurar que el panel tenga el flex correcto (se perdió al no tenerlo inline)
-  panel.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden';
-
   panel.innerHTML = `
   <div style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
 
