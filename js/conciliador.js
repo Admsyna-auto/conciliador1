@@ -713,7 +713,8 @@ function detectarAnulaciones(resultado) {
 // ── CLAVE ESTABLE POR ASIENTO (sobrevive re-ejecuciones del cruce) ──
 // Usa Nro.Asiento si existe; si no, compone clave por fecha+cupon+monto.
 function _skyKey(sky) {
-  const a = String(sky?.asiento ?? '').trim();
+  // norm() quita ceros adelante: "007318746" → "7318746", igual que el import
+  const a = norm(String(sky?.asiento ?? '').trim());
   if (a && a !== 'null' && a !== '0' && a !== 'undefined') return `A:${a}`;
   return `K:${sky?.fecha}_${sky?.cupon}_${Math.abs(sky?.monto ?? 0).toFixed(2)}`;
 }
@@ -1935,6 +1936,7 @@ function reprocesarCorrecciones() {
       const cup = norm(cor.cupon||'');
       const hit = _gocIdx[cup] || _gocRefIdx[cup];
       if (hit) {
+        // Caso normal: dato GoC en memoria — cruzar con datos reales de la procesadora
         const fuenteGoC = hit.fuente || 'GOCUOTAS';
         fila.proc = { ticket:hit.orden, aut:hit.orden, cupon:hit.orden,
           monto:hit.importe, montoN:normMonto(hit.importe),
@@ -1949,8 +1951,28 @@ function reprocesarCorrecciones() {
         CORREGIDAS[key] = { ...cor, resultado:'CRUZADO', metodo:'GoC:Manual', motivo:'' };
         fila.correccionManual = CORREGIDAS[key];
         ok++;
+      } else if (cup && _gocAll.length === 0) {
+        // Fallback: no hay datos GoC en memoria (Vista consolidada / lote ya conciliado)
+        // Aplicar corrección manual de confianza usando monto de Skylab
+        const fuenteGoC = cor.proc === 'GOCELULAR' ? 'GOCELULAR' : 'GOCUOTAS';
+        fila.proc = { ticket:cup, aut:cup, cupon:cup,
+          monto:    fila.sky?.monto ?? 0,
+          montoN:   normMonto(fila.sky?.monto ?? 0),
+          fecha:    fila.sky?.fecha ?? '', suc: fila.sky?.suc || '',
+          tarjeta:'Go Cuotas', cuotas:1, comFis:'',
+          nombre:'', marca:fuenteGoC, plan:'',
+          equipo:'', pos:'', tipo:'Venta', arancel:0, cfo:0 };
+        fila.estado         = fuenteGoC === 'GOCELULAR' ? 'OK (GoCelular)' : 'OK (GoC)';
+        fila.procEncontrada = fuenteGoC;
+        fila.metodo         = 'GoC:Manual';
+        fila.matchParcial   = `Manual GoC: ${cor.cupon}`;
+        CORREGIDAS[key] = { ...cor, resultado:'CRUZADO', metodo:'GoC:Manual',
+          motivo:'Aplicado sin datos GoC en memoria (monto Skylab)' };
+        fila.correccionManual = CORREGIDAS[key];
+        ok++;
       } else {
-        CORREGIDAS[key] = { ...cor, resultado:'NO CRUZADO', motivo:`Orden ${cor.cupon} no encontrada` };
+        // GoC datos disponibles pero orden no encontrada
+        CORREGIDAS[key] = { ...cor, resultado:'NO CRUZADO', motivo:`Orden ${cor.cupon} no encontrada en GoC` };
         fila.correccionManual = CORREGIDAS[key];
         fail++;
       }
@@ -2602,23 +2624,45 @@ function importarCorrecciones(input) {
     try {
       const wb   = XLSX.read(e.target.result, { type:'array', cellDates:true });
       const ws   = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: false });
+      // raw:true → números llegan como JS number (no como string formateado)
+      const rows = XLSX.utils.sheet_to_json(ws, { defval: null, raw: true });
       if (!rows.length) { alert('El archivo no tiene datos.'); return; }
+
+      // Debug: mostrar las primeras claves de RESULTADO para diagnóstico
+      if (typeof RESULTADO !== 'undefined' && RESULTADO.length) {
+        const sampleKeys = RESULTADO.slice(0, 5).map(r => _skyKey(r.sky));
+        console.debug('[IMPORT COR] Primeras claves RESULTADO:', sampleKeys);
+      }
 
       let importadas = 0, noEncontradas = 0, sinAsiento = 0;
       rows.forEach(row => {
-        const asientoRaw = String(row['Nro.Asiento'] ?? row['Nro. Asiento'] ?? '').trim();
+        // Normalizar asiento: Excel puede guardarlo como número (7318746) o string ("7318746")
+        const asientoRaw = row['Nro.Asiento'] ?? row['Nro. Asiento'] ?? '';
+        let asientoStr;
+        if (typeof asientoRaw === 'number') {
+          // Celda numérica en Excel → convertir a entero sin decimales
+          asientoStr = String(Math.round(asientoRaw));
+        } else {
+          // Celda texto → limpiar espacios y posible ".0" de formato
+          asientoStr = String(asientoRaw).trim().replace(/\.0+$/, '');
+        }
+        // Aplicar misma normalización que _skyKey: strip leading zeros
+        const asientoKey = norm(asientoStr);
+
         const cupon      = String(row['Cupón ingresado'] ?? row['Cupon ingresado'] ?? '').trim();
         const proc       = String(row['Procesadora'] ?? '').trim();
         const metodo     = String(row['Método cruce'] ?? row['Metodo cruce'] ?? '').trim();
 
         if (!cupon || !proc) return;
-        if (!asientoRaw || asientoRaw === 'null') { sinAsiento++; return; }
+        if (!asientoKey || asientoKey === '0' || asientoKey === 'null') { sinAsiento++; return; }
 
-        const key = `A:${asientoRaw}`;
+        const key = `A:${asientoKey}`;
         // Verificar si existe en el RESULTADO actual
         const existe = RESULTADO.some(r => _skyKey(r.sky) === key);
-        if (!existe) { noEncontradas++; }
+        if (!existe) {
+          noEncontradas++;
+          if (noEncontradas <= 3) console.debug(`[IMPORT COR] Sin match: key="${key}" (asientoRaw="${asientoRaw}")`);
+        }
 
         // Guardar/sobreescribir la corrección (se aplicará al re-procesar)
         CORREGIDAS[key] = {
@@ -2636,13 +2680,15 @@ function importarCorrecciones(input) {
         || (typeof _GOC_CELULAR !== 'undefined' && _GOC_CELULAR.length);
 
       if (importadas > 0) {
-        if (_hayProc) {
-          // Hay datos de procesadora en memoria → re-cruce completo
+        // Aplicar correcciones si hay RESULTADO (aunque no haya procesadora en mem.)
+        // Nota: en Vista consolidada, _hayProc puede ser false pero RESULTADO tiene datos.
+        // reprocesarCorrecciones() tiene fallback para GoC sin _gocAll en memoria.
+        if (typeof RESULTADO !== 'undefined' && RESULTADO.length) {
           reprocesarCorrecciones();
           renderTodo();
           updateCounts();
         } else {
-          // Sin ningún dato de procesadora: mostrar como PENDIENTE
+          // Sin RESULTADO: mostrar como PENDIENTE hasta que se cargue un lote
           renderTablaCorrecciones();
           updateCounts();
         }
@@ -2655,9 +2701,16 @@ function importarCorrecciones(input) {
         sinAsiento    ? `ℹ ${sinAsiento} filas sin Nro.Asiento ignoradas` : '',
         !_hayProc ? 'ℹ Para re-cruzar: cargá el lote con ▶ Cargar y ejecutá ↺ Reprocesar lote' : '',
       ].filter(Boolean).join('\n');
-      typeof _showToast === 'function'
-        ? _showToast(`✓ ${importadas} correcciones importadas${!_hayProc ? ' · pendientes de re-cruce' : ''}`)
-        : alert(msg);
+      // Toast con info de match/sin-match visible para el usuario
+      let toastTxt = `✓ ${importadas} correcciones importadas`;
+      const _tieneResultado = typeof RESULTADO !== 'undefined' && RESULTADO.length > 0;
+      if (noEncontradas === importadas && importadas > 0) {
+        toastTxt += ` · ⚠ NINGUNA coincidió — revisá que el lote esté activo`;
+      } else if (noEncontradas > 0) {
+        toastTxt += ` · ⚠ ${noEncontradas} sin coincidencia en RESULTADO`;
+      }
+      if (!_tieneResultado) toastTxt += ' · cargá un lote para aplicarlas';
+      typeof _showToast === 'function' ? _showToast(toastTxt) : alert(msg);
       if (noEncontradas || sinAsiento) console.warn('[IMPORT COR]', msg);
 
     } catch(err) {
