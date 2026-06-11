@@ -130,6 +130,9 @@ async function dbDelete(store, key) {
 // ════════════════════════════════════════════════════════════════════
 let _autoSaveTimer = null;
 
+// Hook para que biblioteca.js pueda guardar también en el slot del período activo
+let _periodoActivoHook = null;
+
 function scheduleAutoSave() {
   clearTimeout(_autoSaveTimer);
   _autoSaveTimer = setTimeout(autoSave, 3000); // 3s de debounce
@@ -142,11 +145,53 @@ async function autoSave() {
   const snapshot = buildSnapshot();
   try {
     await dbPut('sesiones', { id: SESSION.id, ...snapshot });
+    // Guardar también en el slot del período activo (si hay uno abierto)
+    if (typeof _periodoActivoHook === 'function') {
+      await _periodoActivoHook(snapshot).catch(e => console.warn('periodoHook error:', e));
+    }
     updateSaveIndicator('saved');
   } catch(e) {
     console.warn('AutoSave error:', e);
     updateSaveIndicator('error');
   }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// CONCILIACIONES POR PERÍODO
+// Guarda resultados + correcciones en un slot fijo por mes (YYYY-MM)
+// Reutiliza el store 'sesiones' con id 'per_YYYY-MM'
+// ════════════════════════════════════════════════════════════════════
+
+async function guardarConciliacionPeriodo(mes) {
+  if (!mes) return;
+  const snap = buildSnapshot();
+  await dbPut('sesiones', {
+    id: `per_${mes}`,
+    ...snap,
+    tipo: 'periodo_conc',
+    periodoMes: mes,
+    ultimaMod: new Date().toISOString(),
+  });
+}
+
+async function cargarConciliacionPeriodo(mes) {
+  if (!mes) return false;
+  const snap = await dbGet('sesiones', `per_${mes}`);
+  if (!snap) return false;
+  return restaurarSnapshot(snap);
+}
+
+async function listarConciliacionesPeriodo() {
+  try {
+    const todas = await dbGetAll('sesiones');
+    return todas
+      .filter(s => s.tipo === 'periodo_conc')
+      .sort((a, b) => (b.periodoMes || '').localeCompare(a.periodoMes || ''));
+  } catch { return []; }
+}
+
+async function eliminarConciliacionPeriodo(mes) {
+  await dbDelete('sesiones', `per_${mes}`);
 }
 
 function updateSaveIndicator(state) {

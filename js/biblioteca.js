@@ -228,7 +228,12 @@ async function guardarEnBiblioteca() {
     // No resetear tipo/periodo para facilitar carga de varios archivos del mismo mes
     if (typeof _showToast === 'function')
       _showToast(`✓ "${file.name}" guardado · ${_bibFmtPeriodo(periodo)}`);
-    await _renderBiblioteca();
+    // Refrescar tabla del modal + switcher del sidebar + badge
+    await Promise.all([
+      _renderBiblioteca(),
+      _renderPeriodSwitcher(),
+      _actualizarBadgeBiblioteca(),
+    ]);
   } catch (e) {
     _bibAlert('Error al guardar: ' + e.message);
     console.error(e);
@@ -322,3 +327,200 @@ async function _actualizarBadgeBiblioteca() {
     if (el) el.textContent = todos.length || '';
   } catch { /* ignore */ }
 }
+
+// ════════════════════════════════════════════════════════════════════
+// SWITCHER DE PERÍODOS — el corazón del sistema multi-mes
+// ════════════════════════════════════════════════════════════════════
+
+let _BIB_PERIODO_ACTIVO = null; // YYYY-MM del período en pantalla
+
+// El hook se conecta en DOMContentLoaded (ver final del archivo)
+
+// ── Cambiar al período activo ─────────────────────────────────────────
+async function switchPeriodo(mes) {
+  if (!mes) return;
+
+  // 1. Guardar datos del período actual antes de salir
+  if (_BIB_PERIODO_ACTIVO && (typeof RESULTADO !== 'undefined') && RESULTADO.length) {
+    await guardarConciliacionPeriodo(_BIB_PERIODO_ACTIVO).catch(() => {});
+  }
+
+  _BIB_PERIODO_ACTIVO = mes;
+
+  // Registrar el hook por si acaso todavía no estaba seteado
+  if (typeof _periodoActivoHook !== 'undefined') {
+    _periodoActivoHook = async (snap) => {
+      await dbPut('sesiones', {
+        id:         `per_${_BIB_PERIODO_ACTIVO}`,
+        ...snap,
+        tipo:       'periodo_conc',
+        periodoMes: _BIB_PERIODO_ACTIVO,
+        ultimaMod:  new Date().toISOString(),
+      });
+    };
+  }
+
+  // 2. Limpiar estado actual
+  if (typeof RESULTADO    !== 'undefined') RESULTADO   = [];
+  if (typeof CORREGIDAS   !== 'undefined') CORREGIDAS  = {};
+  if (typeof LOG_AUDIT    !== 'undefined') LOG_AUDIT   = [];
+
+  // 3. Intentar restaurar la conciliación previa de este período
+  const restored = await cargarConciliacionPeriodo(mes).catch(() => false);
+  const tieneResultados = restored && (typeof RESULTADO !== 'undefined') && RESULTADO.length > 0;
+
+  if (tieneResultados) {
+    // Mostrar resultados ya guardados
+    _bibRestaurarUI();
+    _showToast(`📅 ${_bibFmtPeriodo(mes)} · ${RESULTADO.length.toLocaleString('es-AR')} ops restauradas`);
+  } else {
+    // Limpiar UI
+    _bibLimpiarUI();
+    _showToast(`📅 Período ${_bibFmtPeriodo(mes)} · sin cruce previo`);
+  }
+
+  // 4. Siempre cargar los archivos del período (para poder re-conciliar)
+  const archivos = await listarArchivosBiblioteca();
+  const delMes   = archivos.filter(a => a.periodo === mes);
+  let cargadosCount = 0;
+  for (const rec of delMes) {
+    try {
+      const loader = _bibMakeLoader(rec);
+      if (loader) { loader(); cargadosCount++; }
+    } catch (e) { console.warn('Error cargando', rec.nombre, e); }
+  }
+
+  // 5. Actualizar nombre de sesión y fechas
+  if (typeof SESSION !== 'undefined') {
+    SESSION.periodoMes = mes;
+    const [y, m] = mes.split('-');
+    const desde = `${y}-${m}-01`;
+    const hasta = new Date(parseInt(y), parseInt(m), 0);
+    const hastaStr = `${y}-${m}-${String(hasta.getDate()).padStart(2,'0')}`;
+    SESSION.periodoDesde = SESSION.periodoDesde || desde;
+    SESSION.periodoHasta = SESSION.periodoHasta || hastaStr;
+    const pDesde = document.getElementById('param-desde');
+    const pHasta = document.getElementById('param-hasta');
+    if (pDesde && !pDesde.value) pDesde.value = desde;
+    if (pHasta && !pHasta.value) pHasta.value = hastaStr;
+  }
+
+  // 6. Actualizar UI del switcher + pill
+  await _renderPeriodSwitcher();
+  cerrarBiblioteca();
+
+  if (cargadosCount > 0 && !tieneResultados) {
+    _showToast(`✓ ${cargadosCount} archivos de ${_bibFmtPeriodo(mes)} cargados · listo para conciliar`, 4000);
+  }
+}
+
+// ── UI helper: restaurar pantalla de resultados ──────────────────────
+function _bibRestaurarUI() {
+  try {
+    const strip = document.getElementById('tab-strip-cruce');
+    if (strip) strip.style.display = 'flex';
+    document.querySelectorAll('#mod-cruce .tab-body').forEach(t => t.classList.remove('active'));
+    document.getElementById('t-empty')?.classList.remove('active');
+    document.getElementById('t-all')?.classList.add('active');
+    document.getElementById('dl-bar')?.classList.add('show');
+    if (strip) {
+      strip.querySelectorAll('.tb').forEach(b => b.classList.remove('active'));
+      strip.querySelectorAll('.tb')[1]?.classList.add('active');
+    }
+    if (typeof renderTodo === 'function')      renderTodo();
+    if (typeof setupDownloads === 'function')  setupDownloads();
+  } catch (e) { console.warn('_bibRestaurarUI:', e); }
+}
+
+// ── UI helper: limpiar pantalla para nuevo período ───────────────────
+function _bibLimpiarUI() {
+  try {
+    document.getElementById('tab-strip-cruce').style.display = 'none';
+    document.querySelectorAll('.tab-body').forEach(t => t.classList.remove('active'));
+    document.getElementById('t-empty')?.classList.add('active');
+    const dash = document.getElementById('dashboard');
+    if (dash) dash.style.display = 'none';
+    document.getElementById('dl-bar')?.classList.remove('show');
+    // Resetear indicadores de archivo en sidebar
+    ['sky','fis','gp','ter','liq','goc-pag','goc-cel','goc-ven','ctr-fis','ctr-gp'].forEach(k => {
+      const el = document.getElementById(`st-${k}`);
+      if (el) { el.textContent = 'Sin archivo'; el.className = 'fc-st'; }
+      const fc = document.getElementById(`fc-${k}`);
+      if (fc) fc.className = fc.className.includes('opt') ? 'fc opt' : 'fc';
+    });
+    if (typeof clearLog === 'function') clearLog();
+  } catch (e) { console.warn('_bibLimpiarUI:', e); }
+}
+
+// ── Pill del período activo ──────────────────────────────────────────
+function _actualizarPillPeriodo() {
+  const pill = document.getElementById('sb-periodo-activo-pill');
+  if (!pill) return;
+  if (_BIB_PERIODO_ACTIVO) {
+    pill.textContent = `📅 ${_bibFmtPeriodo(_BIB_PERIODO_ACTIVO)}`;
+    pill.classList.add('visible');
+  } else {
+    pill.classList.remove('visible');
+  }
+}
+
+// ── Renderizar el switcher de períodos en el sidebar ─────────────────
+async function _renderPeriodSwitcher() {
+  const el = document.getElementById('sb-period-switcher');
+  _actualizarPillPeriodo();
+  if (!el) return;
+
+  const [archivos, conciliaciones] = await Promise.all([
+    listarArchivosBiblioteca(),
+    listarConciliacionesPeriodo().catch(() => []),
+  ]);
+
+  const concilMap = new Map(conciliaciones.map(c => [c.periodoMes, c]));
+  const periodos  = [...new Set(archivos.map(a => a.periodo))].sort().reverse();
+
+  if (!periodos.length) {
+    el.innerHTML = `<div class="sb-per-empty">
+      Sin períodos aún. Usá 📁 Biblioteca para agregar archivos.
+    </div>`;
+    return;
+  }
+
+  el.innerHTML = periodos.map(p => {
+    const isActive = p === _BIB_PERIODO_ACTIVO;
+    const conc     = concilMap.get(p);
+    const nArch    = archivos.filter(a => a.periodo === p).length;
+    const nOps     = conc?.resultado?.length ?? 0;
+    const dotCls   = isActive ? 'active-dot' : (conc ? 'concil' : '');
+    const tsDot    = isActive ? '●' : (conc ? '✓' : '○');
+    const metaTxt  = conc
+      ? `${nOps.toLocaleString('es-AR')} ops`
+      : `${nArch} arch.`;
+
+    return `<button class="sb-per-btn ${isActive ? 'active' : ''}"
+        onclick="switchPeriodo('${p}')"
+        title="${_bibFmtPeriodo(p)} · ${nArch} archivos${conc ? ` · ${nOps} ops conciliadas` : ' · sin conciliar'}">
+      <span class="sb-per-dot ${dotCls}">${tsDot}</span>
+      <span class="sb-per-lbl">${_bibFmtPeriodo(p)}</span>
+      <span class="sb-per-meta">${metaTxt}</span>
+    </button>`;
+  }).join('');
+}
+
+// ── Inicializar el switcher y el hook al cargar la página ────────────
+document.addEventListener('DOMContentLoaded', () => {
+  // Conectar hook de autoSave → guarda también en slot del período activo
+  if (typeof _periodoActivoHook !== 'undefined') {
+    _periodoActivoHook = async (snap) => {
+      if (!_BIB_PERIODO_ACTIVO) return;
+      await dbPut('sesiones', {
+        id:         `per_${_BIB_PERIODO_ACTIVO}`,
+        ...snap,
+        tipo:       'periodo_conc',
+        periodoMes: _BIB_PERIODO_ACTIVO,
+        ultimaMod:  new Date().toISOString(),
+      });
+    };
+  }
+  // Inicializar switcher
+  _renderPeriodSwitcher();
+});

@@ -785,6 +785,45 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 }
 .bib-btn-del:hover{border-color:var(--red);color:var(--red)}
 .bib-per-row td{background:var(--s2)}
+
+/* ══ PERIOD SWITCHER (sidebar) ═══════════════════════ */
+.sb-per-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 13px 6px;
+}
+.sb-per-label{font-size:8px;color:var(--m2);letter-spacing:1.5px;text-transform:uppercase}
+.sb-per-list{padding:0 6px 6px;max-height:200px;overflow-y:auto}
+.sb-per-btn{
+  display:flex;align-items:center;gap:8px;
+  width:100%;padding:7px 8px;background:none;border:none;
+  border-radius:var(--r4);cursor:pointer;text-align:left;
+  transition:background .12s;
+}
+.sb-per-btn:hover{background:var(--s3)}
+.sb-per-btn.active{background:rgba(79,142,247,.12);border:1px solid rgba(79,142,247,.2)}
+.sb-per-dot{
+  font-size:9px;width:16px;text-align:center;flex-shrink:0;
+  color:var(--b3);
+}
+.sb-per-dot.concil{color:var(--grn)}
+.sb-per-dot.active-dot{color:var(--acc)}
+.sb-per-lbl{
+  font-size:10px;font-weight:600;font-family:var(--mono);
+  color:var(--m1);flex:1;
+}
+.sb-per-btn.active .sb-per-lbl{color:var(--acc)}
+.sb-per-meta{font-size:8px;color:var(--m2);white-space:nowrap}
+.sb-per-empty{font-size:9px;color:var(--m2);padding:6px 8px;font-style:italic}
+
+/* Indicador del período activo en sidebar */
+.sb-periodo-activo-pill{
+  display:none;
+  margin:0 13px 4px;padding:5px 10px;
+  background:rgba(79,142,247,.1);border:1px solid rgba(79,142,247,.25);
+  border-radius:var(--r4);font-size:9px;font-family:var(--mono);
+  color:var(--acc);font-weight:600;text-align:center;
+}
+.sb-periodo-activo-pill.visible{display:block}
 </style>
 </head>
 <body>
@@ -900,6 +939,22 @@ tr.row-int td{background:rgba(52,211,153,.02)}
     <span class="bib-txt">Biblioteca de archivos</span>
     <span class="bib-badge-pill" id="bib-badge"></span>
   </button>
+
+  <!-- PERIOD SWITCHER -->
+  <div style="border-bottom:1px solid var(--b1);padding-bottom:6px">
+    <div class="sb-per-hdr">
+      <span class="sb-per-label">Períodos</span>
+      <button onclick="abrirBiblioteca()" title="Agregar archivos a un período"
+        style="background:none;border:none;color:var(--m2);font-size:12px;cursor:pointer;
+          padding:2px 4px;border-radius:3px;line-height:1"
+        onmouseover="this.style.color='var(--acc)'" onmouseout="this.style.color='var(--m2)'">+</button>
+    </div>
+    <div id="sb-period-switcher" class="sb-per-list">
+      <span class="sb-per-empty">Cargando períodos...</span>
+    </div>
+    <!-- Pill que muestra el período activo -->
+    <div class="sb-periodo-activo-pill" id="sb-periodo-activo-pill"></div>
+  </div>
 
   <!-- ARCHIVOS BASE -->
   <div class="sb-sec">
@@ -2245,8 +2300,9 @@ function _loadTheme() {
 document.addEventListener('DOMContentLoaded', () => {
   _loadTheme();
   _initProcGroups();
-  // Badge biblioteca
+  // Badge biblioteca + period switcher (en biblioteca.js)
   _actualizarBadgeBiblioteca();
+  if (typeof _renderPeriodSwitcher === 'function') _renderPeriodSwitcher();
   // Badge histórico
   listarPeriodos().then(ps => {
     const b = document.getElementById('mcnt-hist');
