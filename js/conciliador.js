@@ -948,6 +948,13 @@ function renderTodo() {
   renderTablaUrgente();
   renderTablaRefacturado();
   document.getElementById('dashboard').style.display='grid';
+  // Refrescar paneles de procesadora si están activos en pantalla
+  if (document.getElementById('mod-goc')?.classList.contains('active')
+    && typeof renderModuloGoCuotas === 'function')  renderModuloGoCuotas();
+  if (document.getElementById('mod-fiserv')?.classList.contains('active')
+    && typeof renderModuloFiserv  === 'function')   renderModuloFiserv();
+  if (document.getElementById('mod-getpos')?.classList.contains('active')
+    && typeof renderModuloGetpos  === 'function')   renderModuloGetpos();
 }
 
 function renderTablas() {
