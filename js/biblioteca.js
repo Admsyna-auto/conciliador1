@@ -422,6 +422,19 @@ async function bibCargarLote(periodoId, loteId) {
     } catch(e) { console.warn('Error cargando archivo del lote:', rec.nombre, e); }
   }
 
+  // Actualizar SESSION.periodoDesde/Hasta (necesario para cerrarPeriodo())
+  const _per  = await obtenerPeriodoConciliacion(periodoId);
+  const _lote = (_per?.lotes || []).find(l => l.id === loteId);
+  if (_lote && typeof SESSION !== 'undefined') {
+    SESSION.periodoDesde = _lote.fechaDesde;
+    SESSION.periodoHasta = _lote.fechaHasta;
+    SESSION.periodoMes   = _lote.fechaDesde?.slice(0, 7) || '';
+    const pDesde = document.getElementById('param-desde');
+    const pHasta = document.getElementById('param-hasta');
+    if (pDesde) pDesde.value = _lote.fechaDesde;
+    if (pHasta) pHasta.value = _lote.fechaHasta;
+  }
+
   // Actualizar UI
   await _renderPeriodSwitcher();
   await _renderBiblioteca();
@@ -430,8 +443,8 @@ async function bibCargarLote(periodoId, loteId) {
   cerrarBiblioteca();
 
   // Obtener fechas del lote para el toast
-  const per  = await obtenerPeriodoConciliacion(periodoId);
-  const lote = (per?.lotes || []).find(l => l.id === loteId);
+  const per  = _per;
+  const lote = _lote;
   const fechasStr = lote ? `${_bibFmtDate(lote.fechaDesde)} – ${_bibFmtDate(lote.fechaHasta)}` : '';
 
   if (typeof _showToast === 'function') {
@@ -465,6 +478,23 @@ async function bibVerPeriodo(periodoId) {
   _LOTE_ACTIVO_ID    = null;   // modo vista consolidada
 
   const ok = await cargarPeriodoCompleto(periodoId);
+
+  // Setear fechas de SESSION desde el rango del período completo (para cerrarPeriodo)
+  const _perFull = await obtenerPeriodoConciliacion(periodoId);
+  if (_perFull && typeof SESSION !== 'undefined') {
+    const _lotes = (_perFull.lotes || []).filter(l => l.estado === 'conciliado');
+    if (_lotes.length) {
+      const _desde = _lotes.map(l => l.fechaDesde).sort()[0];
+      const _hasta = _lotes.map(l => l.fechaHasta).sort().reverse()[0];
+      SESSION.periodoDesde = _desde;
+      SESSION.periodoHasta = _hasta;
+      SESSION.periodoMes   = _desde?.slice(0, 7) || '';
+      const pDesde = document.getElementById('param-desde');
+      const pHasta = document.getElementById('param-hasta');
+      if (pDesde) pDesde.value = _desde;
+      if (pHasta) pHasta.value = _hasta;
+    }
+  }
 
   await _renderPeriodSwitcher();
 

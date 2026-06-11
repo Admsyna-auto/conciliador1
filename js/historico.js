@@ -131,9 +131,28 @@ async function cerrarPeriodo() {
     alert('No hay datos para cerrar. Ejecutá el cruce primero.');
     return;
   }
+  // Si SESSION no tiene fechas, intentar inferirlas desde los lotes o desde RESULTADO
   if (!SESSION.periodoDesde || !SESSION.periodoHasta) {
-    alert('Completá las fechas de período (Desde / Hasta) en el panel izquierdo antes de cerrar.');
-    return;
+    // Intentar desde el período activo de la biblioteca
+    if (typeof _PERIODO_ACTIVO_ID !== 'undefined' && _PERIODO_ACTIVO_ID &&
+        typeof obtenerPeriodoConciliacion === 'function') {
+      const _perActivo = await obtenerPeriodoConciliacion(_PERIODO_ACTIVO_ID).catch(() => null);
+      const _lotesOk   = (_perActivo?.lotes || []).filter(l => l.estado === 'conciliado');
+      if (_lotesOk.length) {
+        SESSION.periodoDesde = _lotesOk.map(l => l.fechaDesde).sort()[0];
+        SESSION.periodoHasta = _lotesOk.map(l => l.fechaHasta).sort().reverse()[0];
+      }
+    }
+    // Fallback: inferir desde RESULTADO
+    if ((!SESSION.periodoDesde || !SESSION.periodoHasta) && RESULTADO.length) {
+      const fechas = RESULTADO.map(r => r.sky?.fecha).filter(Boolean).sort();
+      if (fechas.length) { SESSION.periodoDesde = fechas[0]; SESSION.periodoHasta = fechas[fechas.length-1]; }
+    }
+    // Si sigue sin fechas, error
+    if (!SESSION.periodoDesde || !SESSION.periodoHasta) {
+      alert('Completá las fechas de período (Desde / Hasta) antes de cerrar.');
+      return;
+    }
   }
 
   const p = buildPeriodoActual();
