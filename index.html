@@ -1340,12 +1340,6 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   <div class="mod-panel" id="mod-diferencias">
     <div class="tab-strip" id="tab-strip-dif">
       <button class="tb active" onclick="showTab('t-dif-main','tab-strip-dif',this)">Diferencias de tasa</button>
-      <button class="tb" onclick="showTab('t-dif-fis','tab-strip-dif',this)">
-        FISERV sin cruce <span class="cnt" id="cnt-dif-fis">0</span>
-      </button>
-      <button class="tb" onclick="showTab('t-dif-gp','tab-strip-dif',this)">
-        GETPOS sin cruce <span class="cnt" id="cnt-dif-gp">0</span>
-      </button>
       <button class="tb" onclick="showTab('t-dif-cuotas','tab-strip-dif',this)" style="border-color:rgba(251,191,36,.3)">
         ⚠ Dif. Cuotas <span class="cnt" id="cnt-dif-cuotas" style="background:rgba(251,191,36,.15);color:#fbbf24">0</span>
       </button>
@@ -1364,28 +1358,6 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       </div>
     </div>
     </div><!-- t-dif-main -->
-    <div class="tab-body" id="t-dif-fis" style="flex-direction:column;flex:1;min-height:0">
-      <div class="cor-hdr-bar" style="border-left:3px solid var(--acc)">
-        <span class="cor-hdr-title" style="color:var(--acc)">FISERV sin cruce con Skylab</span>
-        <span class="cor-stats" id="dif-fis-stats"></span>
-        <div style="margin-left:auto;display:flex;gap:6px">
-          <button class="dl-btn" style="background:#1e3a5f;color:#93c5fd;border:1px solid #2d5a8e" onclick="exportarNoCruzadasFis()" title="Sin match al momento del cruce automático">⬇ Cruce inicial</button>
-          <button class="dl-btn dl-fis" onclick="exportarNoCruzadasFisConciliado()" title="Sin match descontando correcciones manuales">⬇ Cruce conciliado</button>
-        </div>
-      </div>
-      <div class="tbl-wrap"><table id="tbl-dif-fis"><thead></thead><tbody></tbody></table></div>
-    </div>
-    <div class="tab-body" id="t-dif-gp" style="flex-direction:column;flex:1;min-height:0">
-      <div class="cor-hdr-bar" style="border-left:3px solid var(--grn)">
-        <span class="cor-hdr-title" style="color:var(--grn)">GETPOS sin cruce con Skylab</span>
-        <span class="cor-stats" id="dif-gp-stats"></span>
-        <div style="margin-left:auto;display:flex;gap:6px">
-          <button class="dl-btn" style="background:#14342b;color:#6ee7b7;border:1px solid #1e5c45" onclick="exportarNoCruzadasGp()" title="Sin match al momento del cruce automático">⬇ Cruce inicial</button>
-          <button class="dl-btn dl-gp" onclick="exportarNoCruzadasGpConciliado()" title="Sin match descontando correcciones manuales">⬇ Cruce conciliado</button>
-        </div>
-      </div>
-      <div class="tbl-wrap"><table id="tbl-dif-gp"><thead></thead><tbody></tbody></table></div>
-    </div>
 
     <!-- Tab: Diferencias de cuotas -->
     <div class="tab-body" id="t-dif-cuotas" style="flex-direction:column;flex:1;min-height:0">
@@ -2193,8 +2165,6 @@ function showTab(id, stripId, btn) {
   document.getElementById(id)?.classList.add('active');
   // Render bajo demanda
   if (id==='t-urg' && RESULTADO.length)  renderTablaUrgente();
-  if (id==='t-dif-fis')                   renderNoCruzadasFis();
-  if (id==='t-dif-gp')                    renderNoCruzadasGp();
   if (id==='t-dif-cuotas')               renderDifCuotas();
   if (id==='t-dif-proc')                 renderDifProcesadora();
   if (id==='t-dif-monto')               renderDifMontoReal();
