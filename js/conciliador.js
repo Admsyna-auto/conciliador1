@@ -892,6 +892,24 @@ async function conciliar() {
 
     SESSION.id=SESSION.id||('ses_'+Date.now());
     scheduleAutoSave();
+
+    // ── Guardar en lote activo (sistema multi-lote) ───────────────────
+    if (typeof _LOTE_ACTIVO_ID !== 'undefined' && _LOTE_ACTIVO_ID &&
+        typeof _PERIODO_ACTIVO_ID !== 'undefined' && _PERIODO_ACTIVO_ID) {
+      try {
+        await guardarResultadoLote(_PERIODO_ACTIVO_ID, _LOTE_ACTIVO_ID, RESULTADO);
+        log(`Resultado guardado en lote · ${RESULTADO.length.toLocaleString('es-AR')} ops`, 'ok');
+        // Actualizar render de la biblioteca (badge de lote)
+        if (typeof _renderBiblioteca === 'function') _renderBiblioteca().catch(()=>{});
+        if (typeof _renderPeriodSwitcher === 'function') _renderPeriodSwitcher().catch(()=>{});
+        // Actualizar botón: pasar a modo "Reprocesar lote"
+        document.getElementById('run-lbl').textContent = 'Reprocesar lote';
+        document.getElementById('run-icon').textContent = '↺';
+      } catch(e) {
+        log('Advertencia: no se pudo guardar el resultado del lote: ' + e.message, 'warn');
+      }
+    }
+
     document.getElementById('dl-bar').classList.add('show');
     document.getElementById('dl-resumen').innerHTML =
       `<b>${RESULTADO.length.toLocaleString()} ops conciliadas</b> · ${st.sin} sin match · ${integrados} integradas`;

@@ -921,6 +921,78 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   color:var(--acc);font-weight:600;text-align:center;
 }
 .sb-periodo-activo-pill.visible{display:block}
+
+/* ══ BIBLIOTECA v2: PERÍODOS + LOTES ═══════════════════════════════ */
+.bib-per-card{
+  border:1px solid var(--b2);border-radius:8px;
+  background:var(--s2);margin-bottom:10px;overflow:hidden;
+  transition:border-color .15s;
+}
+.bib-per-card.active{border-color:rgba(79,142,247,.5);background:rgba(79,142,247,.04)}
+.bib-per-card-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;cursor:pointer;
+  border-bottom:1px solid var(--b1);
+  transition:background .12s;
+}
+.bib-per-card-hdr:hover{background:var(--s3)}
+.bib-per-nombre{font-size:11px;font-weight:700;color:var(--txt);font-family:var(--sans)}
+.bib-per-meta{font-size:8.5px;color:var(--m2);margin-top:2px}
+.bib-per-card-acts{display:flex;align-items:center;gap:6px;flex-shrink:0}
+
+.bib-act-btn{
+  padding:4px 10px;font-size:8px;font-family:var(--mono);font-weight:600;
+  border-radius:4px;cursor:pointer;white-space:nowrap;transition:opacity .12s;
+  background:var(--s3);border:1px solid var(--b2);color:var(--m1);
+}
+.bib-act-btn:hover{opacity:.8;border-color:var(--acc);color:var(--acc)}
+.bib-act-btn.bib-act-load{background:rgba(79,142,247,.1);border-color:rgba(79,142,247,.3);color:var(--acc)}
+.bib-act-btn.bib-act-view{background:rgba(52,211,153,.08);border-color:rgba(52,211,153,.3);color:var(--grn)}
+.bib-act-btn.bib-act-del{background:none;border-color:var(--b2);color:var(--m2)}
+.bib-act-btn.bib-act-del:hover{border-color:var(--red);color:var(--red)}
+
+.bib-lotes-list{padding:0}
+.bib-lote-row{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:10px 16px;border-bottom:1px solid var(--b1);
+  transition:background .12s;gap:10px;
+}
+.bib-lote-row:last-child{border-bottom:none}
+.bib-lote-row:hover{background:rgba(255,255,255,.02)}
+.bib-lote-row.active{background:rgba(79,142,247,.07);border-left:3px solid var(--acc)}
+.bib-lote-left{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
+.bib-lote-fechas{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;font-weight:600;color:var(--txt)}
+.bib-lote-acts{display:flex;align-items:center;gap:5px;flex-shrink:0}
+
+.bib-lote-badge{font-size:8px;font-weight:700;border-radius:3px;padding:2px 7px}
+.bib-lote-badge.ok{background:rgba(52,211,153,.12);color:var(--grn);border:1px solid rgba(52,211,153,.3)}
+.bib-lote-badge.pend{background:rgba(251,191,36,.1);color:#fbbf24;border:1px solid rgba(251,191,36,.2)}
+
+.bib-add-lote-btn{
+  padding:6px 14px;font-size:8.5px;font-family:var(--mono);font-weight:700;
+  border-radius:4px;cursor:pointer;border:1px dashed var(--b2);
+  background:none;color:var(--m2);transition:all .12s;
+}
+.bib-add-lote-btn:hover{border-color:var(--acc);color:var(--acc);background:rgba(79,142,247,.06)}
+
+/* Formulario inline (crear período/lote/subir archivo) */
+.bib-form-box{max-width:680px}
+.bib-form-title{font-size:10px;font-weight:700;color:var(--txt);margin-bottom:12px;letter-spacing:.3px}
+.bib-form-row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:10px}
+.bib-inp{
+  background:var(--s3);border:1px solid var(--b2);border-radius:var(--r4);
+  color:var(--txt);font-family:var(--mono);font-size:9px;padding:6px 10px;
+  min-width:200px;flex:1;outline:none;
+}
+.bib-inp:focus{border-color:var(--acc)}
+.bib-inp-date{min-width:140px;flex:none;font-family:var(--mono)}
+.bib-form-acts{display:flex;gap:8px;align-items:center;margin-top:4px}
+.bib-cancel-btn{
+  padding:6px 14px;background:none;border:1px solid var(--b2);
+  border-radius:var(--r4);color:var(--m2);font-family:var(--mono);
+  font-size:9px;cursor:pointer;
+}
+.bib-cancel-btn:hover{border-color:var(--m1);color:var(--txt)}
 </style>
 </head>
 <body>
@@ -1861,104 +1933,20 @@ tr.row-int td{background:rgba(52,211,153,.02)}
     <!-- Header -->
     <div class="bib-hdr">
       <div>
-        <div class="bib-hdr-title">📁 Biblioteca de Archivos</div>
-        <div class="bib-hdr-sub">Guardá archivos clasificados por mes · cargalos en cualquier sesión con un clic</div>
+        <div class="bib-hdr-title">📅 Períodos y Lotes</div>
+        <div class="bib-hdr-sub">Conciliación incremental · cada período tiene múltiples lotes con su rango de fechas</div>
       </div>
-      <button class="bib-close" onclick="cerrarBiblioteca()">✕</button>
-    </div>
-
-    <!-- Zona de carga -->
-    <div class="bib-upload">
-      <div class="bib-upload-title">Agregar archivo a la biblioteca</div>
-      <div class="bib-upload-row">
-
-        <div class="bib-field">
-          <span class="bib-field-lbl">Tipo de archivo</span>
-          <select class="bib-sel" id="bib-tipo">
-            <option value="">— seleccionar —</option>
-            <option value="SKYLAB">Skylab (principal)</option>
-            <option value="TERMINALES">Terminales</option>
-            <option value="FISERV_LIQ">FISERV Liquidación</option>
-            <option value="FISERV_CTR">FISERV Contracargos</option>
-            <option value="GETPOS">GETPOS</option>
-            <option value="GETPOS_CTR">GETPOS Contracargos</option>
-            <option value="GOC_PAGOS">Go Cuotas CSV</option>
-            <option value="GOC_CELULAR">Go Celular CSV</option>
-            <option value="GOC_VENTAS">GoC Ventas (IMEI)</option>
-            <option value="LIQUIDACION">Liquidaciones (Cobros)</option>
-          </select>
-        </div>
-
-        <div class="bib-field">
-          <span class="bib-field-lbl">Período (mes/año)</span>
-          <input type="month" class="bib-inp-month" id="bib-periodo">
-        </div>
-
-        <div class="bib-field" style="flex:2">
-          <span class="bib-field-lbl">Archivo</span>
-          <label class="bib-file-label">
-            <span class="bib-file-icon">📎</span>
-            <span id="bib-file-name">Sin archivo elegido</span>
-            <input type="file" id="bib-file" style="display:none"
-              accept=".xlsx,.xls,.csv,.txt"
-              onchange="_bibFileChange(this)">
-          </label>
-        </div>
-
-        <button class="bib-save-btn" id="bib-save-btn" onclick="guardarEnBiblioteca()">
-          💾 Guardar
-        </button>
-
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="bib-save-btn" onclick="bibAbrirNuevoPeriodo()" style="align-self:auto">＋ Nuevo período</button>
+        <button class="bib-close" onclick="cerrarBiblioteca()">✕</button>
       </div>
-      <div id="bib-alert"></div>
     </div>
 
-    <!-- Filtros -->
-    <div class="bib-filter-bar">
-      <span style="font-size:8px;color:var(--m2);text-transform:uppercase;letter-spacing:1px">Filtrar</span>
-      <select class="bib-sel" id="bib-flt-tipo" onchange="_renderBiblioteca()" style="min-width:130px">
-        <option value="">Todos los tipos</option>
-        <option value="SKYLAB">Skylab</option>
-        <option value="TERMINALES">Terminales</option>
-        <option value="FISERV_LIQ">FISERV Liq.</option>
-        <option value="FISERV_CTR">FISERV CTR</option>
-        <option value="GETPOS">GETPOS</option>
-        <option value="GETPOS_CTR">GETPOS CTR</option>
-        <option value="GOC_PAGOS">Go Cuotas</option>
-        <option value="GOC_CELULAR">Go Celular</option>
-        <option value="GOC_VENTAS">GoC Ventas</option>
-        <option value="LIQUIDACION">Liquidaciones</option>
-      </select>
-      <select class="bib-sel" id="bib-flt-per" onchange="_renderBiblioteca()" style="min-width:140px">
-        <option value="">Todos los períodos</option>
-      </select>
-      <button class="btn-clear" onclick="document.getElementById('bib-flt-tipo').value='';document.getElementById('bib-flt-per').value='';_renderBiblioteca()">
-        ✕ Limpiar
-      </button>
-      <span class="bib-count" id="bib-count">0 archivos</span>
-    </div>
+    <!-- Panel de formularios (nuevo período / lote / upload) -->
+    <div id="bib-form-panel" style="display:none;padding:16px 22px;background:var(--s1);border-bottom:1px solid var(--b2);flex-shrink:0"></div>
 
-    <!-- Tabla -->
-    <div class="bib-table-wrap">
-      <table class="bib-table">
-        <thead>
-          <tr>
-            <th>Tipo</th>
-            <th>Período</th>
-            <th>Nombre del archivo</th>
-            <th style="text-align:right">Tamaño</th>
-            <th>Guardado</th>
-            <th></th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="bib-tbody">
-          <tr><td colspan="7" style="text-align:center;color:var(--m2);padding:40px 0">
-            Abriendo biblioteca...
-          </td></tr>
-        </tbody>
-      </table>
-    </div>
+    <!-- Contenido: árbol de períodos / lotes -->
+    <div id="bib-content" style="flex:1;overflow-y:auto;padding:12px 16px 20px"></div>
 
   </div>
 </div>

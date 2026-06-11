@@ -45,6 +45,10 @@ let RESULTADO   = [];   // filas conciliadas
 let CORREGIDAS  = {};   // { idx: { cupon, proc, motivo, obs, usuario, ts } }
 let LOG_AUDIT   = [];   // log de todas las correcciones
 
+// ── Período / Lote activos (sistema multi-lote) ─────────────────────
+let _PERIODO_ACTIVO_ID = null;   // 'per_...' — período de conciliación activo
+let _LOTE_ACTIVO_ID    = null;   // 'lot_...' — lote activo (para guardar al conciliar)
+
 // ── Tablas maestras
 let TM = {
   sucursales:  [],  // { id, nombre, estado }
@@ -244,6 +248,7 @@ function buildSnapshot() {
 
 function serializarFila(r) {
   // El objeto proc puede ser grande — guardamos solo los campos necesarios
+  // _loteId y _loteFechas se preservan si existen (modo multi-lote)
   const p = r.proc ? {
     lote:    r.proc.lote,    ticket:  r.proc.ticket,  aut:    r.proc.aut,
     cupon:   r.proc.cupon,                             // GETPOS: cupón para cruce COBROS
@@ -267,6 +272,9 @@ function serializarFila(r) {
     difTasa: r.difTasa, difMonto: r.difMonto,
     tasaCobrada: r.tasaCobrada, tasaAcordada: r.tasaAcordada,
     accionSugerida: r.accionSugerida,
+    // multi-lote: preservar tag si viene de cargarPeriodoCompleto
+    _loteId:     r._loteId     || undefined,
+    _loteFechas: r._loteFechas || undefined,
   };
 }
 
@@ -428,6 +436,149 @@ function importarPeriodoJSON(file) {
     reader.onerror = () => rej(new Error('Error leyendo archivo'));
     reader.readAsText(file);
   });
+}
+
+// ════════════════════════════════════════════════════════════════════
+// PERÍODOS DE CONCILIACIÓN CON LOTES (sistema multi-lote)
+// Los períodos históricos (cerrarPeriodo) siguen usando listarPeriodos()
+// Estos períodos tienen tipo:'conciliacion' en el store 'periodos'
+// ════════════════════════════════════════════════════════════════════
+
+// Crea un nuevo período de conciliación
+async function crearPeriodoConciliacion(nombre) {
+  const id  = 'per_' + Date.now();
+  const per = {
+    id,
+    tipo:      'conciliacion',
+    nombre,
+    lotes:     [],
+    creadoEn:  new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+  await dbPut('periodos', per);
+  return per;
+}
+
+// Lista todos los períodos de conciliación, más recientes primero
+async function listarPeriodosConciliacion() {
+  try {
+    const todos = await dbGetAll('periodos');
+    return todos
+      .filter(p => p.tipo === 'conciliacion')
+      .sort((a, b) => (b.creadoEn || '').localeCompare(a.creadoEn || ''));
+  } catch { return []; }
+}
+
+// Obtiene un período de conciliación por ID
+async function obtenerPeriodoConciliacion(id) {
+  return dbGet('periodos', id);
+}
+
+// Agrega un lote a un período
+async function agregarLotePeriodo(periodoId, { fechaDesde, fechaHasta }) {
+  const per = await obtenerPeriodoConciliacion(periodoId);
+  if (!per) throw new Error('Período no encontrado: ' + periodoId);
+  const loteId = 'lot_' + Date.now();
+  const lote = {
+    id:           loteId,
+    fechaDesde,
+    fechaHasta,
+    estado:       'pendiente',
+    nOps:         0,
+    creadoEn:     new Date().toISOString(),
+    conciliadoEn: null,
+  };
+  per.lotes = per.lotes || [];
+  per.lotes.push(lote);
+  per.updatedAt = new Date().toISOString();
+  await dbPut('periodos', per);
+  return lote;
+}
+
+// Actualiza campos de un lote
+async function actualizarLotePeriodo(periodoId, loteId, cambios) {
+  const per = await obtenerPeriodoConciliacion(periodoId);
+  if (!per) return;
+  const idx = (per.lotes || []).findIndex(l => l.id === loteId);
+  if (idx < 0) return;
+  per.lotes[idx] = { ...per.lotes[idx], ...cambios };
+  per.updatedAt  = new Date().toISOString();
+  await dbPut('periodos', per);
+}
+
+// Elimina un lote y sus archivos + resultado
+async function eliminarLotePeriodo(periodoId, loteId) {
+  const per = await obtenerPeriodoConciliacion(periodoId);
+  if (per) {
+    per.lotes     = (per.lotes || []).filter(l => l.id !== loteId);
+    per.updatedAt = new Date().toISOString();
+    await dbPut('periodos', per);
+  }
+  try {
+    const archivos = await dbGetAll('archivos');
+    for (const a of archivos.filter(a => a.loteId === loteId)) {
+      await dbDelete('archivos', a.id);
+    }
+  } catch(e) { console.warn('Error borrando archivos del lote:', e); }
+  await dbDelete('sesiones', 'res_' + loteId).catch(() => {});
+}
+
+// Elimina un período con todos sus lotes, archivos y resultados
+async function eliminarPeriodoConciliacion(periodoId) {
+  const per = await obtenerPeriodoConciliacion(periodoId);
+  if (per) {
+    for (const lote of (per.lotes || [])) {
+      await eliminarLotePeriodo(periodoId, lote.id);
+    }
+  }
+  await dbDelete('periodos', periodoId);
+}
+
+// ── Resultado por lote ───────────────────────────────────────────────
+
+// Guarda el RESULTADO actual en el slot del lote activo
+async function guardarResultadoLote(periodoId, loteId, resultado) {
+  const serialized = resultado.map(r => serializarFila({ ...r, _loteId: loteId }));
+  await dbPut('sesiones', {
+    id:           'res_' + loteId,
+    tipo:         'lote_resultado',
+    loteId,
+    periodoId,
+    resultado:    serialized,
+    conciliadoEn: new Date().toISOString(),
+  });
+  await actualizarLotePeriodo(periodoId, loteId, {
+    estado:       'conciliado',
+    nOps:         resultado.length,
+    conciliadoEn: new Date().toISOString(),
+  });
+}
+
+// Carga el resultado de un lote
+async function cargarResultadoLote(loteId) {
+  return dbGet('sesiones', 'res_' + loteId);
+}
+
+// Merge de todos los lotes conciliados de un período → asigna RESULTADO global
+async function cargarPeriodoCompleto(periodoId) {
+  const per = await obtenerPeriodoConciliacion(periodoId);
+  if (!per) return false;
+  const lotes = (per.lotes || []).filter(l => l.estado === 'conciliado');
+  if (!lotes.length) return false;
+  let merged = [];
+  for (const lote of lotes) {
+    const res = await cargarResultadoLote(lote.id);
+    if (res?.resultado?.length) {
+      const tagged = res.resultado.map(r => ({
+        ...r,
+        _loteId:     lote.id,
+        _loteFechas: `${lote.fechaDesde} – ${lote.fechaHasta}`,
+      }));
+      merged = merged.concat(tagged);
+    }
+  }
+  RESULTADO = merged;
+  return merged.length > 0;
 }
 
 // Init: cargar TM al arrancar

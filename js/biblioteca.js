@@ -1,22 +1,23 @@
 // ═══════════════════════════════════════════════════════════════════
-// BIBLIOTECA.JS — Almacenamiento persistente de archivos por período
-// Permite subir, clasificar y recargar archivos de cualquier mes
+// BIBLIOTECA.JS — Gestión de archivos por período y lote
+// Sistema multi-lote: cada período tiene N lotes con su propio rango
+// de fechas, archivos y resultado de conciliación independiente.
 // ═══════════════════════════════════════════════════════════════════
 
 const _BIB_TIPOS = [
-  { id:'SKYLAB',      label:'Skylab (principal)',      accept:'.xlsx,.xls', badge:'SK', bg:'#0f2544', color:'#38bdf8' },
-  { id:'TERMINALES',  label:'Terminales',              accept:'.xlsx,.xls', badge:'TER',bg:'#1a1f2e', color:'#8ba3c4' },
-  { id:'FISERV_LIQ',  label:'FISERV Liquidación',      accept:'.xlsx,.xls', badge:'FIS',bg:'#0f1e44', color:'#4f8ef7' },
-  { id:'FISERV_CTR',  label:'FISERV Contracargos',     accept:'.xlsx,.xls', badge:'FC', bg:'#0f1e44', color:'#f87171' },
-  { id:'GETPOS',      label:'GETPOS',                  accept:'.xlsx,.xls', badge:'GP', bg:'#0f2d20', color:'#34d399' },
-  { id:'GETPOS_CTR',  label:'GETPOS Contracargos',     accept:'.xlsx,.xls', badge:'GC', bg:'#0f2d20', color:'#f87171' },
-  { id:'GOC_PAGOS',   label:'Go Cuotas CSV',           accept:'.csv,.txt',  badge:'GQ', bg:'#0f2d20', color:'#4ade80' },
-  { id:'GOC_CELULAR', label:'Go Celular CSV',          accept:'.csv,.txt',  badge:'GK', bg:'#1a1040', color:'#a78bfa' },
-  { id:'GOC_VENTAS',  label:'GoC Ventas (IMEI)',       accept:'.xlsx,.xls', badge:'GV', bg:'#1a1f10', color:'#fbbf24' },
-  { id:'LIQUIDACION', label:'Liquidaciones (Cobros)',  accept:'.xlsx,.xls', badge:'LIQ',bg:'#291000', color:'#fb923c' },
+  { id:'SKYLAB',      label:'Skylab (principal)',      accept:'.xlsx,.xls', badge:'SK',  bg:'#0f2544', color:'#38bdf8' },
+  { id:'TERMINALES',  label:'Terminales',              accept:'.xlsx,.xls', badge:'TER', bg:'#1a1f2e', color:'#8ba3c4' },
+  { id:'FISERV_LIQ',  label:'FISERV Liquidación',      accept:'.xlsx,.xls', badge:'FIS', bg:'#0f1e44', color:'#4f8ef7' },
+  { id:'FISERV_CTR',  label:'FISERV Contracargos',     accept:'.xlsx,.xls', badge:'FC',  bg:'#0f1e44', color:'#f87171' },
+  { id:'GETPOS',      label:'GETPOS',                  accept:'.xlsx,.xls', badge:'GP',  bg:'#0f2d20', color:'#34d399' },
+  { id:'GETPOS_CTR',  label:'GETPOS Contracargos',     accept:'.xlsx,.xls', badge:'GC',  bg:'#0f2d20', color:'#f87171' },
+  { id:'GOC_PAGOS',   label:'Go Cuotas CSV',           accept:'.csv,.txt',  badge:'GQ',  bg:'#0f2d20', color:'#4ade80' },
+  { id:'GOC_CELULAR', label:'Go Celular CSV',          accept:'.csv,.txt',  badge:'GK',  bg:'#1a1040', color:'#a78bfa' },
+  { id:'GOC_VENTAS',  label:'GoC Ventas (IMEI)',       accept:'.xlsx,.xls', badge:'GV',  bg:'#1a1f10', color:'#fbbf24' },
+  { id:'LIQUIDACION', label:'Liquidaciones (Cobros)',  accept:'.xlsx,.xls', badge:'LIQ', bg:'#291000', color:'#fb923c' },
 ];
 
-// ── Mapeo de tipo → función de carga en sesión ───────────────────────
+// ── Loader: convierte un registro de la biblioteca en función de carga ─
 function _bibMakeLoader(rec) {
   const blob = new Blob([rec.bytes]);
   const file = new File([blob], rec.nombre, { type: 'application/octet-stream' });
@@ -36,39 +37,38 @@ function _bibMakeLoader(rec) {
   }
 }
 
-// ══ CRUD IndexedDB (usa helpers de state.js) ══════════════════════════
+// ══ CRUD archivos ════════════════════════════════════════════════════
 
-async function guardarArchivoBiblioteca({ tipo, periodo, nombre, bytes }) {
+async function guardarArchivoBiblioteca({ tipo, periodoId, loteId, nombre, bytes }) {
   const id = `bib_${tipo}_${Date.now()}`;
   const kb = Math.round(bytes.byteLength / 1024);
-  await dbPut('archivos', { id, tipo, periodo, nombre, bytes, kb, fechaCarga: new Date().toISOString() });
+  await dbPut('archivos', {
+    id, tipo,
+    periodoId: periodoId || null,
+    loteId:    loteId    || null,
+    nombre, bytes, kb,
+    fechaCarga: new Date().toISOString(),
+  });
   return id;
 }
 
 async function listarArchivosBiblioteca() {
   try {
     return (await dbGetAll('archivos'))
-      .sort((a, b) => b.periodo.localeCompare(a.periodo) || b.fechaCarga.localeCompare(a.fechaCarga));
+      .sort((a, b) => (b.fechaCarga || '').localeCompare(a.fechaCarga || ''));
   } catch { return []; }
 }
 
-async function obtenerArchivoBiblioteca(id) {
-  return dbGet('archivos', id);
+async function listarArchivosDeLote(loteId) {
+  const todos = await listarArchivosBiblioteca();
+  return todos.filter(a => a.loteId === loteId);
 }
 
 async function eliminarArchivoBiblioteca(id) {
   await dbDelete('archivos', id);
 }
 
-// ══ HELPERS UI ════════════════════════════════════════════════════════
-
-function _bibFmtPeriodo(p) {
-  if (!p) return '—';
-  const [y, m] = p.split('-');
-  if (!y || !m) return p;
-  const M = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
-  return `${M[parseInt(m, 10) - 1] || m} ${y}`;
-}
+// ══ HELPERS UI ═══════════════════════════════════════════════════════
 
 function _bibTipoInfo(id) {
   return _BIB_TIPOS.find(t => t.id === id) || { badge:'?', bg:'#333', color:'#999', label: id };
@@ -84,6 +84,13 @@ function _bibAlert(msg) {
   }
 }
 
+// DD/MM/YYYY desde YYYY-MM-DD
+function _bibFmtDate(d) {
+  if (!d) return '—';
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y}`;
+}
+
 // ══ ABRIR / CERRAR ════════════════════════════════════════════════════
 
 function abrirBiblioteca() {
@@ -97,122 +104,270 @@ function cerrarBiblioteca() {
   document.getElementById('modal-biblioteca')?.classList.remove('open');
 }
 
-// ══ RENDER TABLA ══════════════════════════════════════════════════════
+// ══ RENDER PRINCIPAL ═════════════════════════════════════════════════
 
 async function _renderBiblioteca() {
-  const tbody   = document.getElementById('bib-tbody');
-  const cntEl   = document.getElementById('bib-count');
-  const selPer  = document.getElementById('bib-flt-per');
-  if (!tbody) return;
+  const contenedor = document.getElementById('bib-content');
+  if (!contenedor) return;
 
-  tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--m2);padding:28px 0">
-    Cargando...</td></tr>`;
+  const periodos      = await listarPeriodosConciliacion();
+  const todosArchivos = await listarArchivosBiblioteca();
 
-  const todos    = await listarArchivosBiblioteca();
-  const filtTipo = document.getElementById('bib-flt-tipo')?.value || '';
-  const filtPer  = selPer?.value || '';
+  await _actualizarBadgeBiblioteca(todosArchivos);
 
-  // Poblar selector de períodos (dinámico según lo que hay guardado)
-  if (selPer) {
-    const periodos = [...new Set(todos.map(a => a.periodo))].sort().reverse();
-    const cur = selPer.value;
-    selPer.innerHTML = '<option value="">Todos los períodos</option>' +
-      periodos.map(p =>
-        `<option value="${p}" ${p === cur ? 'selected' : ''}>${_bibFmtPeriodo(p)}</option>`
-      ).join('');
-  }
-
-  const filtrados = todos.filter(a =>
-    (!filtTipo || a.tipo === filtTipo) &&
-    (!filtPer  || a.periodo === filtPer)
-  );
-
-  if (cntEl) cntEl.textContent = `${filtrados.length} de ${todos.length} archivos`;
-
-  if (!filtrados.length) {
-    const msg = todos.length
-      ? 'Sin resultados para los filtros aplicados'
-      : '¡Todavía no hay archivos guardados! Usá el formulario de arriba para agregar el primero.';
-    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;color:var(--m2);padding:48px 0;font-size:10px">
-      📭 ${msg}</td></tr>`;
+  if (!periodos.length) {
+    contenedor.innerHTML = `
+      <div style="text-align:center;padding:60px 20px;color:var(--m2)">
+        <div style="font-size:36px;opacity:.15">📅</div>
+        <div style="font-size:11px;margin-top:14px;font-weight:700;color:var(--txt);opacity:.4">Sin períodos creados</div>
+        <div style="font-size:9px;margin-top:6px;line-height:1.8">
+          Hacé clic en <b>＋ Nuevo período</b> para crear tu primer período de conciliación.<br>
+          Dentro de cada período podés agregar múltiples lotes con sus rangos de fechas.
+        </div>
+      </div>`;
     return;
   }
 
-  // Agrupar por período para mostrar filas de grupo
-  const byPer = {};
-  filtrados.forEach(a => {
-    if (!byPer[a.periodo]) byPer[a.periodo] = [];
-    byPer[a.periodo].push(a);
-  });
-
   let html = '';
-  for (const [per, arcs] of Object.entries(byPer)) {
-    // Fila de cabecera del período
-    html += `<tr class="bib-per-row">
-      <td colspan="5" style="
-        padding:8px 14px;background:var(--s3);
-        color:var(--cyn);font-family:var(--head);font-size:11px;font-weight:700;
-        border-top:1px solid var(--b2);">
-        📅 ${_bibFmtPeriodo(per)}
-        <span style="font-size:8px;font-weight:400;color:var(--m2);margin-left:8px">${arcs.length} archivos</span>
-      </td>
-      <td colspan="2" style="background:var(--s3);border-top:1px solid var(--b2);padding:8px 14px;text-align:right">
-        <button class="bib-btn-load-all" onclick="bibCargarPeriodo('${per}')"
-          title="Cargar todos los archivos de este período en la sesión">
-          ▶▶ Cargar período completo
-        </button>
-      </td>
-    </tr>`;
+  for (const per of periodos) {
+    const lotes     = per.lotes || [];
+    const totalOps  = lotes.reduce((s, l) => s + (l.nOps || 0), 0);
+    const lotesOk   = lotes.filter(l => l.estado === 'conciliado').length;
+    const isActive  = per.id === _PERIODO_ACTIVO_ID;
+    const dotCls    = isActive ? 'active-dot' : (lotesOk > 0 ? 'concil' : '');
+    const dot       = isActive ? '●' : (lotesOk > 0 ? '✓' : '○');
+    const estadoLbl = isActive ? `<span style="color:var(--grn);font-size:8px;font-weight:700">● ACTIVO</span>` : '';
 
-    // Filas de archivos del período
-    for (const a of arcs) {
-      const ti  = _bibTipoInfo(a.tipo);
-      const fec = a.fechaCarga ? a.fechaCarga.slice(0, 16).replace('T', ' ') : '—';
-      html += `<tr class="bib-file-row">
-        <td>
-          <div style="display:flex;align-items:center;gap:8px">
-            <div style="
-              width:28px;height:28px;border-radius:5px;
-              background:${ti.bg};color:${ti.color};
-              font-size:7.5px;font-weight:700;
-              display:flex;align-items:center;justify-content:center;flex-shrink:0;
-              border:1px solid ${ti.color}33">
-              ${ti.badge}
-            </div>
-            <div>
-              <div style="font-size:10px;font-weight:600;color:var(--txt)">${ti.label}</div>
+    html += `
+    <div class="bib-per-card${isActive ? ' active' : ''}" id="bibcard-${per.id}">
+      <div class="bib-per-card-hdr" onclick="_bibTogglePer('${per.id}')">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="sb-per-dot ${dotCls}" style="font-size:12px">${dot}</span>
+          <div>
+            <div class="bib-per-nombre">${per.nombre} ${estadoLbl}</div>
+            <div class="bib-per-meta">
+              ${lotes.length} lote${lotes.length !== 1 ? 's' : ''}
+              ${lotesOk > 0 ? ` · <span style="color:var(--grn)">${totalOps.toLocaleString('es-AR')} ops</span>` : ' · sin conciliar'}
             </div>
           </div>
-        </td>
-        <td style="font-weight:600;color:var(--cyn);font-size:10px">${_bibFmtPeriodo(a.periodo)}</td>
-        <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
-          color:var(--m1);font-size:9px" title="${a.nombre}">${a.nombre}</td>
-        <td style="color:var(--m2);font-size:9px;text-align:right">${a.kb ?? '?'} KB</td>
-        <td style="color:var(--m2);font-size:9px">${fec}</td>
-        <td>
-          <button class="bib-btn-load" onclick="bibCargarEnSesion('${a.id}')">
-            ▶ Cargar en sesión
-          </button>
-        </td>
-        <td>
-          <button class="bib-btn-del" onclick="bibEliminar('${a.id}',this)" title="Eliminar de biblioteca">✕</button>
-        </td>
-      </tr>`;
-    }
+        </div>
+        <div class="bib-per-card-acts" onclick="event.stopPropagation()">
+          ${lotesOk > 0 ? `<button class="bib-act-btn bib-act-view" onclick="bibVerPeriodo('${per.id}')" title="Ver todas las ops consolidadas">📊 Ver todo</button>` : ''}
+          ${lotesOk > 1 ? `<button class="bib-act-btn" onclick="bibReprocesarTodo('${per.id}')" title="Re-conciliar todos los lotes">⟳ Reprocesar</button>` : ''}
+          <button class="bib-act-btn bib-act-del" onclick="bibEliminarPeriodo('${per.id}')" title="Eliminar período">✕</button>
+        </div>
+      </div>
+
+      <!-- Lista de lotes (expandible) -->
+      <div class="bib-lotes-list" id="bib-lotes-${per.id}">
+        ${lotes.length === 0
+          ? `<div style="padding:12px 18px;font-size:9px;color:var(--m2);font-style:italic">Sin lotes. Agregá el primero.</div>`
+          : lotes.map(lote => _renderLoteRow(per.id, lote, todosArchivos)).join('')
+        }
+        <div style="padding:8px 18px 12px">
+          <button class="bib-add-lote-btn" onclick="bibAbrirFormLote('${per.id}')">＋ Agregar lote</button>
+        </div>
+      </div>
+    </div>`;
   }
-  tbody.innerHTML = html;
+
+  contenedor.innerHTML = html;
 }
 
-// ══ ACCIONES ══════════════════════════════════════════════════════════
+function _bibTogglePer(periodoId) {
+  const el = document.getElementById('bib-lotes-' + periodoId);
+  if (!el) return;
+  el.style.display = el.style.display === 'none' ? '' : 'none';
+}
 
+function _renderLoteRow(periodoId, lote, todosArchivos) {
+  const archivosLote  = todosArchivos.filter(a => a.loteId === lote.id);
+  const tiposPres     = [...new Set(archivosLote.map(a => a.tipo))];
+  const isActiveLote  = lote.id === _LOTE_ACTIVO_ID;
+
+  const estadoBadge = lote.estado === 'conciliado'
+    ? `<span class="bib-lote-badge ok">✅ ${(lote.nOps||0).toLocaleString('es-AR')} ops</span>`
+    : `<span class="bib-lote-badge pend">🟡 Pendiente</span>`;
+
+  const archBadges = tiposPres.map(t => {
+    const ti = _bibTipoInfo(t);
+    return `<span style="display:inline-flex;align-items:center;font-size:7px;font-weight:700;
+      color:${ti.color};background:${ti.bg};border:1px solid ${ti.color}33;
+      border-radius:3px;padding:1px 5px;margin-right:3px">${ti.badge}</span>`;
+  }).join('');
+
+  return `
+  <div class="bib-lote-row${isActiveLote ? ' active' : ''}" id="bibrow-${lote.id}">
+    <div class="bib-lote-left">
+      <div class="bib-lote-fechas">
+        <span style="font-size:9px;color:var(--m2)">📅</span>
+        <b>${_bibFmtDate(lote.fechaDesde)}</b>
+        <span style="color:var(--m2)">→</span>
+        <b>${_bibFmtDate(lote.fechaHasta)}</b>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px">
+        ${estadoBadge}
+        ${archBadges || `<span style="font-size:8px;color:var(--m2)">sin archivos</span>`}
+      </div>
+    </div>
+    <div class="bib-lote-acts">
+      <button class="bib-act-btn bib-act-load" onclick="bibCargarLote('${periodoId}','${lote.id}')"
+        title="Cargar archivos de este lote y conciliar">▶ Cargar</button>
+      <button class="bib-act-btn" onclick="bibAbrirUploadLote('${periodoId}','${lote.id}')"
+        title="Agregar archivos a este lote">＋ Arch.</button>
+      <button class="bib-act-btn bib-act-del" onclick="bibEliminarLote('${periodoId}','${lote.id}')"
+        title="Eliminar lote">✕</button>
+    </div>
+  </div>`;
+}
+
+// ══ FORMULARIOS ══════════════════════════════════════════════════════
+
+function _bibShowForm(html) {
+  const panel = document.getElementById('bib-form-panel');
+  if (!panel) return;
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+}
+
+function bibCerrarForm() {
+  const panel = document.getElementById('bib-form-panel');
+  if (panel) { panel.innerHTML = ''; panel.style.display = 'none'; }
+}
+
+// ── Nuevo período ────────────────────────────────────────────────────
+function bibAbrirNuevoPeriodo() {
+  _bibShowForm(`
+    <div class="bib-form-box">
+      <div class="bib-form-title">➕ Nuevo período</div>
+      <div class="bib-form-row">
+        <div class="bib-field" style="flex:1">
+          <span class="bib-field-lbl">Nombre del período</span>
+          <input class="bib-inp" id="bib-new-nombre" placeholder="Ej: Junio 2026 · 1ª quincena" maxlength="80"
+            onkeydown="if(event.key==='Enter')bibCrearPeriodo()">
+        </div>
+      </div>
+      <div id="bib-alert" style="display:none;color:var(--yel);font-size:9px;padding:4px 0"></div>
+      <div class="bib-form-acts">
+        <button class="bib-save-btn" onclick="bibCrearPeriodo()">✓ Crear período</button>
+        <button class="bib-cancel-btn" onclick="bibCerrarForm()">Cancelar</button>
+      </div>
+    </div>`);
+  setTimeout(() => document.getElementById('bib-new-nombre')?.focus(), 60);
+}
+
+async function bibCrearPeriodo() {
+  const nombre = document.getElementById('bib-new-nombre')?.value?.trim();
+  if (!nombre) { _bibAlert('Ingresá un nombre para el período.'); return; }
+  try {
+    await crearPeriodoConciliacion(nombre);
+    bibCerrarForm();
+    await _renderBiblioteca();
+    await _renderPeriodSwitcher();
+    if (typeof _showToast === 'function') _showToast(`✓ Período "${nombre}" creado`);
+  } catch(e) {
+    _bibAlert('Error: ' + e.message);
+  }
+}
+
+// ── Agregar lote ─────────────────────────────────────────────────────
+function bibAbrirFormLote(periodoId) {
+  const hoy    = new Date();
+  const desde  = hoy.toISOString().slice(0,10);
+  const hastaD = new Date(hoy.getTime() + 6 * 86400000);
+  const hasta  = hastaD.toISOString().slice(0,10);
+
+  _bibShowForm(`
+    <div class="bib-form-box">
+      <div class="bib-form-title">➕ Nuevo lote</div>
+      <input type="hidden" id="bib-lote-periodo" value="${periodoId}">
+      <div class="bib-form-row">
+        <div class="bib-field">
+          <span class="bib-field-lbl">Fecha desde</span>
+          <input type="date" class="bib-inp bib-inp-date" id="bib-lote-desde" value="${desde}">
+        </div>
+        <div class="bib-field">
+          <span class="bib-field-lbl">Fecha hasta</span>
+          <input type="date" class="bib-inp bib-inp-date" id="bib-lote-hasta" value="${hasta}">
+        </div>
+      </div>
+      <div id="bib-alert" style="display:none;color:var(--yel);font-size:9px;padding:4px 0"></div>
+      <div class="bib-form-acts">
+        <button class="bib-save-btn" onclick="bibCrearLote()">✓ Crear lote</button>
+        <button class="bib-cancel-btn" onclick="bibCerrarForm()">Cancelar</button>
+      </div>
+    </div>`);
+}
+
+async function bibCrearLote() {
+  const periodoId = document.getElementById('bib-lote-periodo')?.value;
+  const desde     = document.getElementById('bib-lote-desde')?.value;
+  const hasta     = document.getElementById('bib-lote-hasta')?.value;
+  if (!desde || !hasta) { _bibAlert('Ingresá las fechas del lote.'); return; }
+  if (desde > hasta)    { _bibAlert('La fecha de inicio debe ser anterior al fin.'); return; }
+  try {
+    const lote = await agregarLotePeriodo(periodoId, { fechaDesde: desde, fechaHasta: hasta });
+    bibCerrarForm();
+    // Auto-abrir formulario de archivos para el lote nuevo
+    await _renderBiblioteca();
+    bibAbrirUploadLote(periodoId, lote.id);
+    if (typeof _showToast === 'function')
+      _showToast(`✓ Lote ${_bibFmtDate(desde)} – ${_bibFmtDate(hasta)} creado · subí los archivos`);
+  } catch(e) {
+    _bibAlert('Error: ' + e.message);
+  }
+}
+
+// ── Subir archivos a un lote ─────────────────────────────────────────
+function bibAbrirUploadLote(periodoId, loteId) {
+  _PERIODO_ACTIVO_ID = periodoId;
+  _LOTE_ACTIVO_ID    = loteId;
+
+  _bibShowForm(`
+    <div class="bib-form-box">
+      <div class="bib-form-title">📎 Subir archivos al lote</div>
+      <input type="hidden" id="bib-upload-periodo" value="${periodoId}">
+      <input type="hidden" id="bib-upload-lote"    value="${loteId}">
+      <div class="bib-form-row" style="flex-wrap:wrap">
+        <div class="bib-field">
+          <span class="bib-field-lbl">Tipo de archivo</span>
+          <select class="bib-sel" id="bib-tipo">
+            <option value="">— seleccionar —</option>
+            ${_BIB_TIPOS.map(t => `<option value="${t.id}">${t.label}</option>`).join('')}
+          </select>
+        </div>
+        <div class="bib-field" style="flex:2">
+          <span class="bib-field-lbl">Archivo</span>
+          <label class="bib-file-label">
+            <span class="bib-file-icon">📎</span>
+            <span id="bib-file-name">Sin archivo elegido</span>
+            <input type="file" id="bib-file" style="display:none"
+              accept=".xlsx,.xls,.csv,.txt"
+              onchange="_bibFileChange(this)">
+          </label>
+        </div>
+      </div>
+      <div id="bib-alert" style="display:none;color:var(--yel);font-size:9px;padding:4px 0"></div>
+      <div class="bib-form-acts">
+        <button class="bib-save-btn" id="bib-save-btn" onclick="guardarEnBiblioteca()">💾 Guardar archivo</button>
+        <button class="bib-cancel-btn" onclick="bibCerrarForm()">Cerrar</button>
+      </div>
+      <div style="font-size:8px;color:var(--m2);margin-top:6px">
+        Podés guardar varios archivos uno a uno para el mismo lote.
+      </div>
+    </div>`);
+}
+
+// ── Guardar archivo vinculado al lote activo ─────────────────────────
 async function guardarEnBiblioteca() {
-  const tipo    = document.getElementById('bib-tipo')?.value;
-  const periodo = document.getElementById('bib-periodo')?.value;
-  const fileInp = document.getElementById('bib-file');
-  const file    = fileInp?.files?.[0];
+  const tipo      = document.getElementById('bib-tipo')?.value;
+  const periodoId = document.getElementById('bib-upload-periodo')?.value || _PERIODO_ACTIVO_ID;
+  const loteId    = document.getElementById('bib-upload-lote')?.value    || _LOTE_ACTIVO_ID;
+  const fileInp   = document.getElementById('bib-file');
+  const file      = fileInp?.files?.[0];
 
   if (!tipo)    { _bibAlert('Seleccioná el tipo de archivo.'); return; }
-  if (!periodo) { _bibAlert('Seleccioná el período (mes/año).'); return; }
+  if (!loteId)  { _bibAlert('No hay lote activo. Creá o seleccioná un lote primero.'); return; }
   if (!file)    { _bibAlert('Elegí un archivo para guardar.'); return; }
 
   const btn = document.getElementById('bib-save-btn');
@@ -220,201 +375,313 @@ async function guardarEnBiblioteca() {
 
   try {
     const bytes = await file.arrayBuffer();
-    await guardarArchivoBiblioteca({ tipo, periodo, nombre: file.name, bytes });
-    // Reset form
+    await guardarArchivoBiblioteca({ tipo, periodoId, loteId, nombre: file.name, bytes });
     fileInp.value = '';
     const fnEl = document.getElementById('bib-file-name');
     if (fnEl) fnEl.textContent = 'Sin archivo elegido';
-    // No resetear tipo/periodo para facilitar carga de varios archivos del mismo mes
-    if (typeof _showToast === 'function')
-      _showToast(`✓ "${file.name}" guardado · ${_bibFmtPeriodo(periodo)}`);
-    // Refrescar tabla del modal + switcher del sidebar + badge
-    await Promise.all([
-      _renderBiblioteca(),
-      _renderPeriodSwitcher(),
-      _actualizarBadgeBiblioteca(),
-    ]);
-  } catch (e) {
+    if (typeof _showToast === 'function') _showToast(`✓ "${file.name}" guardado`);
+    await _renderBiblioteca();
+    await _actualizarBadgeBiblioteca();
+  } catch(e) {
     _bibAlert('Error al guardar: ' + e.message);
     console.error(e);
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = '💾 Guardar'; }
+    if (btn) { btn.disabled = false; btn.textContent = '💾 Guardar archivo'; }
   }
 }
 
-async function bibCargarEnSesion(id) {
-  const rec = await obtenerArchivoBiblioteca(id);
-  if (!rec) { _bibAlert('Archivo no encontrado en la biblioteca.'); return; }
+// ══ ACCIONES DE LOTE ═════════════════════════════════════════════════
 
-  const loader = _bibMakeLoader(rec);
-  if (!loader) { _bibAlert('No hay cargador disponible para: ' + rec.tipo); return; }
+// Cargar archivos de un lote en memoria + restaurar resultado previo
+async function bibCargarLote(periodoId, loteId) {
+  _PERIODO_ACTIVO_ID = periodoId;
+  _LOTE_ACTIVO_ID    = loteId;
 
-  try {
-    loader();
-    cerrarBiblioteca();
-    if (typeof _showToast === 'function')
-      _showToast(`✓ "${rec.nombre}" · ${_bibFmtPeriodo(rec.periodo)} → cargado en sesión`);
-  } catch (e) {
-    _bibAlert('Error al cargar: ' + e.message);
-    console.error(e);
+  // Limpiar estado
+  if (typeof RESULTADO   !== 'undefined') RESULTADO   = [];
+  if (typeof CORREGIDAS  !== 'undefined') CORREGIDAS  = {};
+
+  // Buscar resultado previo del lote
+  const resGuardado     = await cargarResultadoLote(loteId);
+  const tieneResultado  = resGuardado?.resultado?.length > 0;
+
+  if (tieneResultado) {
+    RESULTADO = resGuardado.resultado;
+    _bibRestaurarUI();
+  } else {
+    _bibLimpiarUI();
   }
-}
 
-async function bibCargarPeriodo(periodo) {
-  const todos = await listarArchivosBiblioteca();
-  const delPer = todos.filter(a => a.periodo === periodo);
-  if (!delPer.length) return;
-
+  // Cargar archivos del lote en FILES (para poder re-conciliar)
+  const archivos = await listarArchivosDeLote(loteId);
   let cargados = 0;
-  const errores = [];
-  for (const rec of delPer) {
+  for (const rec of archivos) {
     try {
       const loader = _bibMakeLoader(rec);
       if (loader) { loader(); cargados++; }
-    } catch (e) { errores.push(rec.nombre); }
+    } catch(e) { console.warn('Error cargando archivo del lote:', rec.nombre, e); }
   }
+
+  // Actualizar UI
+  await _renderPeriodSwitcher();
+  await _renderBiblioteca();
+  document.getElementById('run-btn')?.removeAttribute('disabled');
 
   cerrarBiblioteca();
+
+  // Obtener fechas del lote para el toast
+  const per  = await obtenerPeriodoConciliacion(periodoId);
+  const lote = (per?.lotes || []).find(l => l.id === loteId);
+  const fechasStr = lote ? `${_bibFmtDate(lote.fechaDesde)} – ${_bibFmtDate(lote.fechaHasta)}` : '';
+
   if (typeof _showToast === 'function') {
-    const msg = errores.length
-      ? `✓ ${cargados} archivos cargados (${errores.length} errores)`
-      : `✓ ${cargados} archivos cargados · ${_bibFmtPeriodo(periodo)}`;
-    _showToast(msg, errores.length ? 5000 : 3500);
+    if (tieneResultado) {
+      _showToast(`📅 Lote ${fechasStr} · ${RESULTADO.length.toLocaleString('es-AR')} ops restauradas${cargados ? ` · ${cargados} archivos` : ''}`, 4500);
+    } else {
+      _showToast(cargados
+        ? `✓ ${cargados} archivos cargados (${fechasStr}) · listo para conciliar`
+        : `📅 Lote ${fechasStr} activado · subí archivos para conciliar`, 4000);
+    }
+  }
+
+  // Cambiar label del botón Conciliar
+  const btn = document.getElementById('run-btn');
+  const lbl = document.getElementById('run-lbl');
+  const ico = document.getElementById('run-icon');
+  if (btn && lbl && ico) {
+    if (tieneResultado) {
+      lbl.textContent = 'Reprocesar lote';
+      ico.textContent = '↺';
+    } else {
+      lbl.textContent = 'Conciliar';
+      ico.textContent = '▶';
+    }
   }
 }
 
-async function bibEliminar(id, btnEl) {
-  if (!confirm('¿Eliminar este archivo de la biblioteca?\n(No afecta la sesión actual)')) return;
-  if (btnEl) btnEl.disabled = true;
-  await eliminarArchivoBiblioteca(id);
-  if (typeof _showToast === 'function') _showToast('Archivo eliminado de la biblioteca');
-  await _renderBiblioteca();
+// Ver todas las ops del período (merge de lotes conciliados)
+async function bibVerPeriodo(periodoId) {
+  _PERIODO_ACTIVO_ID = periodoId;
+  _LOTE_ACTIVO_ID    = null;   // modo vista consolidada
+
+  const ok = await cargarPeriodoCompleto(periodoId);
+
+  await _renderPeriodSwitcher();
+
+  if (!ok) {
+    if (typeof _showToast === 'function') _showToast('Sin lotes conciliados en este período todavía', 3000);
+    return;
+  }
+
+  _bibRestaurarUI();
+  cerrarBiblioteca();
+
+  const per  = await obtenerPeriodoConciliacion(periodoId);
+  const lotes = (per?.lotes || []).filter(l => l.estado === 'conciliado');
+
+  // Deshabilitar Conciliar en modo vista consolidada
+  const btn = document.getElementById('run-btn');
+  const lbl = document.getElementById('run-lbl');
+  const ico = document.getElementById('run-icon');
+  if (btn) {
+    btn.disabled = true;
+    if (lbl) lbl.textContent = 'Vista consolidada';
+    if (ico) ico.textContent = '📊';
+  }
+
+  if (typeof _showToast === 'function')
+    _showToast(`📊 ${per?.nombre || 'Período'} · ${RESULTADO.length.toLocaleString('es-AR')} ops · ${lotes.length} lotes`, 4500);
 }
 
-// ══ FILE INPUT HELPERS ════════════════════════════════════════════════
+// Reprocesar todos los lotes del período en secuencia
+async function bibReprocesarTodo(periodoId) {
+  const per = await obtenerPeriodoConciliacion(periodoId);
+  if (!per) return;
+  const lotes = per.lotes || [];
+  if (!lotes.length) { if (typeof _showToast === 'function') _showToast('Sin lotes para reprocesar'); return; }
+
+  const ok = confirm(
+    `¿Reprocesar los ${lotes.length} lote(s) del período "${per.nombre}"?\n` +
+    `Cada lote se conciliará con sus archivos guardados y se actualizarán los resultados.`
+  );
+  if (!ok) return;
+
+  for (let i = 0; i < lotes.length; i++) {
+    const lote = lotes[i];
+    if (typeof _showToast === 'function')
+      _showToast(`⟳ Procesando lote ${i + 1} de ${lotes.length}: ${_bibFmtDate(lote.fechaDesde)} – ${_bibFmtDate(lote.fechaHasta)}`, 60000);
+
+    // Activar lote
+    _PERIODO_ACTIVO_ID = periodoId;
+    _LOTE_ACTIVO_ID    = lote.id;
+
+    // Limpiar y cargar archivos del lote
+    if (typeof RESULTADO  !== 'undefined') RESULTADO  = [];
+    if (typeof CORREGIDAS !== 'undefined') CORREGIDAS = {};
+
+    const archivos = await listarArchivosDeLote(lote.id);
+    for (const rec of archivos) {
+      try {
+        const loader = _bibMakeLoader(rec);
+        if (loader) loader();
+      } catch(e) { console.warn('Error cargando', rec.nombre, e); }
+    }
+
+    // Pausa para que los archivos se carguen en FILES
+    await new Promise(r => setTimeout(r, 300));
+
+    // Conciliar
+    try {
+      await conciliar();
+      await new Promise(r => setTimeout(r, 200));
+    } catch(e) {
+      console.error(`Error conciliando lote ${lote.id}:`, e);
+    }
+  }
+
+  // Al terminar, cargar vista consolidada
+  await bibVerPeriodo(periodoId);
+  if (typeof _showToast === 'function')
+    _showToast(`✅ ${lotes.length} lotes reprocesados · ${RESULTADO.length.toLocaleString('es-AR')} ops totales`, 5000);
+}
+
+// ══ ELIMINAR ══════════════════════════════════════════════════════════
+
+async function bibEliminarPeriodo(periodoId) {
+  const per = await obtenerPeriodoConciliacion(periodoId);
+  if (!per) return;
+  const nl = (per.lotes || []).length;
+  const msg = nl
+    ? `¿Eliminar el período "${per.nombre}" con ${nl} lote(s)?\nSe borrarán todos sus archivos y resultados.`
+    : `¿Eliminar el período "${per.nombre}"?`;
+  if (!confirm(msg)) return;
+
+  await eliminarPeriodoConciliacion(periodoId);
+
+  if (_PERIODO_ACTIVO_ID === periodoId) {
+    _PERIODO_ACTIVO_ID = null;
+    _LOTE_ACTIVO_ID    = null;
+    _bibLimpiarUI();
+  }
+
+  await _renderBiblioteca();
+  await _renderPeriodSwitcher();
+  if (typeof _showToast === 'function') _showToast(`Período "${per.nombre}" eliminado`);
+}
+
+async function bibEliminarLote(periodoId, loteId) {
+  if (!confirm('¿Eliminar este lote y todos sus archivos y resultados?')) return;
+  await eliminarLotePeriodo(periodoId, loteId);
+  if (_LOTE_ACTIVO_ID === loteId) {
+    _LOTE_ACTIVO_ID = null;
+    _bibLimpiarUI();
+  }
+  await _renderBiblioteca();
+  await _renderPeriodSwitcher();
+  if (typeof _showToast === 'function') _showToast('Lote eliminado');
+}
+
+// ══ FILE INPUT HELPERS ═════════════════════════════════════════════════
 
 function _bibFileChange(inp) {
-  const fnEl = document.getElementById('bib-file-name');
+  const fnEl  = document.getElementById('bib-file-name');
   const nombre = inp.files[0]?.name || 'Sin archivo elegido';
   if (fnEl) fnEl.textContent = nombre;
   _bibAutoTipo(nombre);
 }
 
 function _bibAutoTipo(nombre) {
-  const n = nombre.toLowerCase();
+  const n   = nombre.toLowerCase();
   const sel = document.getElementById('bib-tipo');
-  if (!sel) return;
-  // Auto-detect solo si no hay nada seleccionado
-  if (sel.value) return;
-  if      (n.includes('skylab'))                           sel.value = 'SKYLAB';
-  else if (n.includes('terminal'))                         sel.value = 'TERMINALES';
-  else if (n.includes('fiserv') && n.includes('contra'))   sel.value = 'FISERV_CTR';
-  else if (n.includes('fiserv') || n.includes('liq'))      sel.value = 'FISERV_LIQ';
-  else if (n.includes('getpos') && n.includes('contra'))   sel.value = 'GETPOS_CTR';
-  else if (n.includes('getpos'))                           sel.value = 'GETPOS';
-  else if (n.includes('celular'))                          sel.value = 'GOC_CELULAR';
-  else if (n.includes('cuota') || n.includes('gocuota'))   sel.value = 'GOC_PAGOS';
-  else if (n.includes('venta'))                            sel.value = 'GOC_VENTAS';
-  else if (n.includes('liquid'))                           sel.value = 'LIQUIDACION';
+  if (!sel || sel.value) return;
+  if      (n.includes('skylab'))                            sel.value = 'SKYLAB';
+  else if (n.includes('terminal'))                          sel.value = 'TERMINALES';
+  else if (n.includes('fiserv') && n.includes('contra'))    sel.value = 'FISERV_CTR';
+  else if (n.includes('fiserv') || n.includes('liq'))       sel.value = 'FISERV_LIQ';
+  else if (n.includes('getpos') && n.includes('contra'))    sel.value = 'GETPOS_CTR';
+  else if (n.includes('getpos'))                            sel.value = 'GETPOS';
+  else if (n.includes('celular'))                           sel.value = 'GOC_CELULAR';
+  else if (n.includes('cuota') || n.includes('gocuota'))    sel.value = 'GOC_PAGOS';
+  else if (n.includes('venta'))                             sel.value = 'GOC_VENTAS';
+  else if (n.includes('liquid'))                            sel.value = 'LIQUIDACION';
 }
 
-// ══ BADGE EN SIDEBAR (cantidad de archivos guardados) ════════════════
+// ══ BADGE Y PILL ══════════════════════════════════════════════════════
 
-async function _actualizarBadgeBiblioteca() {
+async function _actualizarBadgeBiblioteca(archivos) {
   try {
-    const todos = await listarArchivosBiblioteca();
+    const todos = archivos || (await listarArchivosBiblioteca());
     const el = document.getElementById('bib-badge');
     if (el) el.textContent = todos.length || '';
-  } catch { /* ignore */ }
+  } catch {}
 }
 
-// ════════════════════════════════════════════════════════════════════
-// SWITCHER DE PERÍODOS — el corazón del sistema multi-mes
-// ════════════════════════════════════════════════════════════════════
+// ══ PILL DEL PERÍODO ACTIVO EN TOPBAR ════════════════════════════════
 
-let _BIB_PERIODO_ACTIVO = null; // YYYY-MM del período en pantalla
+function _actualizarPillPeriodo() {
+  const pill = document.getElementById('sb-periodo-activo-pill');
+  if (!pill) return;
 
-// El hook se conecta en DOMContentLoaded (ver final del archivo)
-
-// ── Cambiar al período activo ─────────────────────────────────────────
-async function switchPeriodo(mes) {
-  if (!mes) return;
-
-  // 1. Guardar datos del período actual antes de salir
-  if (_BIB_PERIODO_ACTIVO && (typeof RESULTADO !== 'undefined') && RESULTADO.length) {
-    await guardarConciliacionPeriodo(_BIB_PERIODO_ACTIVO).catch(() => {});
+  if (!_PERIODO_ACTIVO_ID) {
+    pill.textContent = 'Sin período';
+    pill.className   = 'tb-period-empty';
+    return;
   }
 
-  _BIB_PERIODO_ACTIVO = mes;
+  pill.textContent = '📅 Cargando...';
+  pill.className   = 'tb-period-label';
 
-  // Registrar el hook por si acaso todavía no estaba seteado
-  if (typeof _periodoActivoHook !== 'undefined') {
-    _periodoActivoHook = async (snap) => {
-      await dbPut('sesiones', {
-        id:         `per_${_BIB_PERIODO_ACTIVO}`,
-        ...snap,
-        tipo:       'periodo_conc',
-        periodoMes: _BIB_PERIODO_ACTIVO,
-        ultimaMod:  new Date().toISOString(),
-      });
-    };
-  }
-
-  // 2. Limpiar estado actual
-  if (typeof RESULTADO    !== 'undefined') RESULTADO   = [];
-  if (typeof CORREGIDAS   !== 'undefined') CORREGIDAS  = {};
-  if (typeof LOG_AUDIT    !== 'undefined') LOG_AUDIT   = [];
-
-  // 3. Intentar restaurar la conciliación previa de este período
-  const restored = await cargarConciliacionPeriodo(mes).catch(() => false);
-  const tieneResultados = restored && (typeof RESULTADO !== 'undefined') && RESULTADO.length > 0;
-
-  if (tieneResultados) {
-    // Mostrar resultados ya guardados
-    _bibRestaurarUI();
-    _showToast(`📅 ${_bibFmtPeriodo(mes)} · ${RESULTADO.length.toLocaleString('es-AR')} ops restauradas`);
-  } else {
-    // Limpiar UI
-    _bibLimpiarUI();
-    _showToast(`📅 Período ${_bibFmtPeriodo(mes)} · sin cruce previo`);
-  }
-
-  // 4. Siempre cargar los archivos del período (para poder re-conciliar)
-  const archivos = await listarArchivosBiblioteca();
-  const delMes   = archivos.filter(a => a.periodo === mes);
-  let cargadosCount = 0;
-  for (const rec of delMes) {
-    try {
-      const loader = _bibMakeLoader(rec);
-      if (loader) { loader(); cargadosCount++; }
-    } catch (e) { console.warn('Error cargando', rec.nombre, e); }
-  }
-
-  // 5. Actualizar nombre de sesión y fechas
-  if (typeof SESSION !== 'undefined') {
-    SESSION.periodoMes = mes;
-    const [y, m] = mes.split('-');
-    const desde = `${y}-${m}-01`;
-    const hasta = new Date(parseInt(y), parseInt(m), 0);
-    const hastaStr = `${y}-${m}-${String(hasta.getDate()).padStart(2,'0')}`;
-    SESSION.periodoDesde = SESSION.periodoDesde || desde;
-    SESSION.periodoHasta = SESSION.periodoHasta || hastaStr;
-    const pDesde = document.getElementById('param-desde');
-    const pHasta = document.getElementById('param-hasta');
-    if (pDesde && !pDesde.value) pDesde.value = desde;
-    if (pHasta && !pHasta.value) pHasta.value = hastaStr;
-  }
-
-  // 6. Actualizar UI del switcher + pill
-  await _renderPeriodSwitcher();
-  cerrarBiblioteca();
-
-  if (cargadosCount > 0 && !tieneResultados) {
-    _showToast(`✓ ${cargadosCount} archivos de ${_bibFmtPeriodo(mes)} cargados · listo para conciliar`, 4000);
-  }
+  obtenerPeriodoConciliacion(_PERIODO_ACTIVO_ID).then(per => {
+    if (!per) return;
+    let label = per.nombre;
+    if (_LOTE_ACTIVO_ID) {
+      const lote = (per.lotes || []).find(l => l.id === _LOTE_ACTIVO_ID);
+      if (lote) label += ` · ${_bibFmtDate(lote.fechaDesde)}–${_bibFmtDate(lote.fechaHasta)}`;
+    }
+    if (pill) {
+      pill.textContent = label;
+      pill.className   = 'tb-period-label';
+    }
+  }).catch(() => {});
 }
 
-// ── UI helper: restaurar pantalla de resultados ──────────────────────
+// ══ PERIOD SWITCHER (dropdown del topbar) ════════════════════════════
+
+async function _renderPeriodSwitcher() {
+  const el = document.getElementById('sb-period-switcher');
+  _actualizarPillPeriodo();
+  if (!el) return;
+
+  const periodos = await listarPeriodosConciliacion();
+
+  if (!periodos.length) {
+    el.innerHTML = `<div class="sb-per-empty">Sin períodos. Abrí 📁 Biblioteca para crear uno.</div>`;
+    return;
+  }
+
+  el.innerHTML = periodos.map(per => {
+    const lotes     = per.lotes || [];
+    const totalOps  = lotes.reduce((s, l) => s + (l.nOps || 0), 0);
+    const lotesOk   = lotes.filter(l => l.estado === 'conciliado').length;
+    const isActive  = per.id === _PERIODO_ACTIVO_ID;
+    const dotCls    = isActive ? 'active-dot' : (lotesOk > 0 ? 'concil' : '');
+    const dot       = isActive ? '●' : (lotesOk > 0 ? '✓' : '○');
+    const metaTxt   = lotesOk > 0
+      ? `${totalOps.toLocaleString('es-AR')} ops`
+      : `${lotes.length} lote${lotes.length !== 1 ? 's' : ''}`;
+
+    return `<button class="sb-per-btn ${isActive ? 'active' : ''}"
+        onclick="bibVerPeriodo('${per.id}');_closePeriodDrop()"
+        title="${per.nombre} · ${lotes.length} lotes${lotesOk > 0 ? ` · ${totalOps} ops` : ''}">
+      <span class="sb-per-dot ${dotCls}">${dot}</span>
+      <span class="sb-per-lbl">${per.nombre}</span>
+      <span class="sb-per-meta">${metaTxt}</span>
+    </button>`;
+  }).join('');
+}
+
+// ══ UI HELPERS ════════════════════════════════════════════════════════
+
 function _bibRestaurarUI() {
   try {
     const strip = document.getElementById('tab-strip-cruce');
@@ -429,92 +696,25 @@ function _bibRestaurarUI() {
     }
     if (typeof renderTodo === 'function')      renderTodo();
     if (typeof setupDownloads === 'function')  setupDownloads();
-  } catch (e) { console.warn('_bibRestaurarUI:', e); }
+  } catch(e) { console.warn('_bibRestaurarUI:', e); }
 }
 
-// ── UI helper: limpiar pantalla para nuevo período ───────────────────
 function _bibLimpiarUI() {
   try {
-    document.getElementById('tab-strip-cruce').style.display = 'none';
+    const strip = document.getElementById('tab-strip-cruce');
+    if (strip) strip.style.display = 'none';
     document.querySelectorAll('.tab-body').forEach(t => t.classList.remove('active'));
     document.getElementById('t-empty')?.classList.add('active');
     const dash = document.getElementById('dashboard');
     if (dash) dash.style.display = 'none';
     document.getElementById('dl-bar')?.classList.remove('show');
     if (typeof clearLog === 'function') clearLog();
-  } catch (e) { console.warn('_bibLimpiarUI:', e); }
+  } catch(e) { console.warn('_bibLimpiarUI:', e); }
 }
 
-// ── Pill del período activo ──────────────────────────────────────────
-function _actualizarPillPeriodo() {
-  const pill = document.getElementById('sb-periodo-activo-pill');
-  if (!pill) return;
-  if (_BIB_PERIODO_ACTIVO) {
-    pill.textContent = _bibFmtPeriodo(_BIB_PERIODO_ACTIVO);
-    pill.className = 'tb-period-label';
-  } else {
-    pill.textContent = 'Sin período';
-    pill.className = 'tb-period-empty';
-  }
-}
+// ══ INIT ══════════════════════════════════════════════════════════════
 
-// ── Renderizar el switcher de períodos en el sidebar ─────────────────
-async function _renderPeriodSwitcher() {
-  const el = document.getElementById('sb-period-switcher');
-  _actualizarPillPeriodo();
-  if (!el) return;
-
-  const [archivos, conciliaciones] = await Promise.all([
-    listarArchivosBiblioteca(),
-    listarConciliacionesPeriodo().catch(() => []),
-  ]);
-
-  const concilMap = new Map(conciliaciones.map(c => [c.periodoMes, c]));
-  const periodos  = [...new Set(archivos.map(a => a.periodo))].sort().reverse();
-
-  if (!periodos.length) {
-    el.innerHTML = `<div class="sb-per-empty">
-      Sin períodos aún. Usá 📁 Biblioteca para agregar archivos.
-    </div>`;
-    return;
-  }
-
-  el.innerHTML = periodos.map(p => {
-    const isActive = p === _BIB_PERIODO_ACTIVO;
-    const conc     = concilMap.get(p);
-    const nArch    = archivos.filter(a => a.periodo === p).length;
-    const nOps     = conc?.resultado?.length ?? 0;
-    const dotCls   = isActive ? 'active-dot' : (conc ? 'concil' : '');
-    const tsDot    = isActive ? '●' : (conc ? '✓' : '○');
-    const metaTxt  = conc
-      ? `${nOps.toLocaleString('es-AR')} ops`
-      : `${nArch} arch.`;
-
-    return `<button class="sb-per-btn ${isActive ? 'active' : ''}"
-        onclick="switchPeriodo('${p}')"
-        title="${_bibFmtPeriodo(p)} · ${nArch} archivos${conc ? ` · ${nOps} ops conciliadas` : ' · sin conciliar'}">
-      <span class="sb-per-dot ${dotCls}">${tsDot}</span>
-      <span class="sb-per-lbl">${_bibFmtPeriodo(p)}</span>
-      <span class="sb-per-meta">${metaTxt}</span>
-    </button>`;
-  }).join('');
-}
-
-// ── Inicializar el switcher y el hook al cargar la página ────────────
 document.addEventListener('DOMContentLoaded', () => {
-  // Conectar hook de autoSave → guarda también en slot del período activo
-  if (typeof _periodoActivoHook !== 'undefined') {
-    _periodoActivoHook = async (snap) => {
-      if (!_BIB_PERIODO_ACTIVO) return;
-      await dbPut('sesiones', {
-        id:         `per_${_BIB_PERIODO_ACTIVO}`,
-        ...snap,
-        tipo:       'periodo_conc',
-        periodoMes: _BIB_PERIODO_ACTIVO,
-        ultimaMod:  new Date().toISOString(),
-      });
-    };
-  }
-  // Inicializar switcher
   _renderPeriodSwitcher();
+  _actualizarBadgeBiblioteca();
 });
