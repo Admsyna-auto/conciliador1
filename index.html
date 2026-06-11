@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Conciliador · Tarjetas</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Syne:wght@400;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Syne:wght@400;600;700;800&display=swap');
 
 /* ══════════════════════════════════════════════════════
    TOKENS
@@ -16,41 +16,96 @@
   --acc:#4f8ef7;--cyn:#38bdf8;--grn:#34d399;
   --yel:#fbbf24;--red:#f87171;--org:#fb923c;--vio:#a78bfa;
   --txt:#e2e8f0;--m1:#8ba3c4;--m2:#6b7e96;
+  --sans:'Inter',sans-serif;
   --mono:'JetBrains Mono',monospace;
   --head:'Syne',sans-serif;
   --r4:4px;--r6:6px;--r8:8px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--txt);font-family:var(--mono);
+body{background:var(--bg);color:var(--txt);font-family:var(--sans);
   height:100vh;display:flex;flex-direction:column;overflow:hidden}
+/* Datos numéricos y códigos → monoespaciado */
+td,th,.num,.fix-cell-val,.fix-monto,.fix-inp,
+input[type=number],input[type=date],code,
+.cnt,.filter-stats,.save-indicator,#save-indicator,
+#session-name{font-family:var(--mono)}
 
 /* ══ TOPBAR ══════════════════════════════════════════ */
 .topbar{
-  height:46px;background:var(--s1);border-bottom:1px solid var(--b1);
-  display:flex;align-items:center;padding:0 20px;gap:14px;flex-shrink:0;
+  height:50px;background:var(--s1);border-bottom:1px solid var(--b1);
+  display:flex;align-items:center;padding:0 18px;gap:10px;flex-shrink:0;
 }
 .brand{font-family:var(--head);font-weight:800;font-size:14px;letter-spacing:-.5px;
   background:linear-gradient(135deg,var(--acc),var(--cyn));
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent}
-.topbar-sep{width:1px;height:18px;background:var(--b2)}
-.topbar-sub{font-size:9px;color:var(--m2);letter-spacing:1px;text-transform:uppercase}
-.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
-#save-indicator{font-size:9px;font-family:var(--mono);min-width:90px;text-align:right}
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;white-space:nowrap}
+.topbar-sep{width:1px;height:18px;background:var(--b2);flex-shrink:0}
+.topbar-sub{font-size:9px;color:var(--m2);letter-spacing:1px;text-transform:uppercase;
+  white-space:nowrap;font-family:var(--sans)}
+/* Period selector */
+.tb-period-wrap{position:relative;flex-shrink:0}
+.tb-period-btn{
+  display:flex;align-items:center;gap:6px;
+  background:var(--s3);border:1px solid var(--b2);border-radius:var(--r4);
+  color:var(--m1);font-family:var(--sans);font-size:10px;font-weight:500;
+  padding:5px 10px;cursor:pointer;transition:border-color .15s,color .15s;
+  white-space:nowrap;
+}
+.tb-period-btn:hover{border-color:var(--acc);color:var(--txt)}
+.tb-period-label{color:var(--cyn);font-weight:600;font-family:var(--mono);font-size:10px}
+.tb-period-empty{color:var(--m2);font-style:italic}
+.tb-period-caret{font-size:8px;color:var(--m2)}
+.tb-period-drop{
+  display:none;position:absolute;top:calc(100% + 6px);left:0;
+  background:var(--s1);border:1px solid var(--b2);border-radius:var(--r6);
+  z-index:300;min-width:240px;max-height:320px;overflow-y:auto;
+  box-shadow:0 8px 24px rgba(0,0,0,.5);
+}
+.tb-period-drop.open{display:block}
+.tb-period-add{
+  display:block;width:100%;padding:8px 14px;background:none;border:none;
+  border-top:1px solid var(--b1);color:var(--acc);font-family:var(--sans);
+  font-size:9px;cursor:pointer;text-align:left;transition:background .15s;
+}
+.tb-period-add:hover{background:var(--s3)}
+/* Conciliar button in topbar */
+.topbar-run-btn{
+  background:linear-gradient(135deg,var(--acc),var(--cyn));
+  color:#fff;border:none;border-radius:var(--r4);
+  font-family:var(--sans);font-weight:700;font-size:11px;
+  padding:7px 18px;cursor:pointer;letter-spacing:.2px;
+  transition:opacity .15s;white-space:nowrap;flex-shrink:0;
+}
+.topbar-run-btn:disabled{opacity:.3;cursor:not-allowed}
+.topbar-run-btn:not(:disabled):hover{opacity:.88}
+.topbar-run-btn.running{background:linear-gradient(135deg,#1f2937,#111827);
+  animation:none;color:var(--m1)}
+/* Progress bar (2px thin strip below topbar) */
+.topbar-prog{height:2px;background:transparent;flex-shrink:0;overflow:hidden}
+.topbar-prog .prog-bar{height:100%;background:linear-gradient(90deg,var(--acc),var(--cyn));width:0;transition:width .3s}
+/* Run procs label */
+.topbar-procs{font-size:8px;color:var(--m2);font-family:var(--sans);white-space:nowrap;
+  padding:1px 18px;min-height:12px;flex-shrink:0;display:none}
+.topbar-procs:not(:empty){display:block}
+/* Topbar general buttons */
 .topbar-btn{
   background:none;border:1px solid var(--b2);border-radius:var(--r4);
-  color:var(--m1);font-family:var(--mono);font-size:9px;padding:4px 10px;
-  cursor:pointer;transition:border-color .15s,color .15s;letter-spacing:.3px;
+  color:var(--m1);font-family:var(--sans);font-size:9px;padding:5px 11px;
+  cursor:pointer;transition:border-color .15s,color .15s;white-space:nowrap;
+  flex-shrink:0;
 }
 .topbar-btn:hover{border-color:var(--acc);color:var(--acc)}
 .topbar-btn.danger:hover{border-color:var(--red);color:var(--red)}
+#save-indicator{font-size:9px;font-family:var(--mono);color:var(--m2);white-space:nowrap}
 #session-name{
-  font-size:10px;color:var(--m1);background:none;border:none;
+  font-size:10px;color:var(--m2);background:none;border:none;
   border-bottom:1px solid transparent;padding:2px 4px;
-  font-family:var(--mono);cursor:pointer;max-width:200px;
+  font-family:var(--mono);cursor:pointer;max-width:160px;
 }
 #session-name:hover,#session-name:focus{
   border-color:var(--b3);outline:none;color:var(--txt);
 }
+/* Sidebar oculto — todos sus IDs siguen en el DOM pero fuera de vista */
+.sidebar{display:none!important}
 
 /* ══ MÓDULOS (tabs principales) ═════════════════════ */
 .modstrip{
@@ -58,9 +113,9 @@ body{background:var(--bg);color:var(--txt);font-family:var(--mono);
   display:flex;padding:0 20px;gap:0;flex-shrink:0;
 }
 .mod-btn{
-  padding:10px 18px;background:none;border:none;border-bottom:3px solid transparent;
-  color:var(--m2);font-family:var(--head);font-size:11px;font-weight:600;
-  cursor:pointer;letter-spacing:.3px;transition:color .15s,border-color .15s;
+  padding:10px 20px;background:none;border:none;border-bottom:3px solid transparent;
+  color:var(--m2);font-family:var(--sans);font-size:11px;font-weight:600;
+  cursor:pointer;letter-spacing:.2px;transition:color .15s,border-color .15s;
   margin-bottom:-1px;text-transform:uppercase;
 }
 .mod-btn.active{color:var(--cyn);border-color:var(--cyn)}
@@ -78,8 +133,8 @@ body{background:var(--bg);color:var(--txt);font-family:var(--mono);
 }
 .sub-mod-btn{
   padding:6px 16px;background:none;border:none;border-bottom:2px solid transparent;
-  color:var(--m2);font-family:var(--mono);font-size:10px;font-weight:500;
-  cursor:pointer;letter-spacing:.3px;transition:color .15s,border-color .15s;
+  color:var(--m2);font-family:var(--sans);font-size:10px;font-weight:500;
+  cursor:pointer;letter-spacing:.2px;transition:color .15s,border-color .15s;
   margin-bottom:-1px;white-space:nowrap;
 }
 .sub-mod-btn.active{color:var(--acc);border-color:var(--acc)}
@@ -557,19 +612,14 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 }
 .modal-close:hover{border-color:var(--acc);color:var(--acc)}
 
-/* ══ DOWNBAR ═════════════════════════════════════════ */
-.dl-bar{
-  background:var(--s1);border-top:1px solid var(--b1);
-  padding:8px 18px;display:none;align-items:center;gap:10px;flex-shrink:0;
-}
-.dl-bar.show{display:flex}
-.dl-info{font-size:9px;color:var(--m1);flex:1}
-.dl-info b{color:var(--txt)}
-.dl-btns{display:flex;gap:6px;flex-wrap:wrap}
+/* ══ DOWNBAR (inline dentro del tab-strip) ═══════════ */
+.dl-bar{display:flex;align-items:center;gap:5px}
+.dl-bar.show .dl-btn{display:inline-flex !important}
+.dl-info{font-size:8px;color:var(--m2);white-space:nowrap;font-family:var(--sans)}
 .dl-btn{
-  padding:6px 14px;border-radius:4px;border:none;
-  font-family:var(--mono);font-size:8px;font-weight:600;
-  cursor:pointer;transition:opacity .15s;letter-spacing:.3px;
+  padding:4px 10px;border-radius:var(--r4);border:none;
+  font-family:var(--sans);font-size:8px;font-weight:600;
+  cursor:pointer;transition:opacity .15s;letter-spacing:.2px;white-space:nowrap;
 }
 .dl-btn:hover{opacity:.85}
 .dl-fis{background:#1d4ed8;color:#fff}
@@ -880,13 +930,54 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   <span class="brand">CONCILIADOR</span>
   <div class="topbar-sep"></div>
   <span class="topbar-sub">Tarjetas · Offline</span>
+  <div class="topbar-sep"></div>
+
+  <!-- Selector de período -->
+  <div class="tb-period-wrap" id="topbar-period-wrap">
+    <button class="tb-period-btn" onclick="_togglePeriodDrop(this)" title="Cambiar período de trabajo">
+      📅
+      <span id="sb-periodo-activo-pill" class="tb-period-empty">Sin período</span>
+      <span class="tb-period-caret">▾</span>
+    </button>
+    <div class="tb-period-drop" id="tb-period-drop">
+      <div id="sb-period-switcher" class="sb-per-list" style="padding:6px 0"></div>
+      <button class="tb-period-add" onclick="abrirBiblioteca();_closePeriodDrop()">
+        + Agregar / gestionar archivos
+      </button>
+    </div>
+  </div>
+
+  <!-- Biblioteca -->
+  <button class="topbar-btn" onclick="abrirBiblioteca()" title="Biblioteca de archivos">
+    📁 Biblioteca <span id="bib-badge" class="cnt" style="background:rgba(79,142,247,.15);color:var(--acc)">0</span>
+  </button>
+
+  <!-- Spacer -->
+  <div style="flex:1;min-width:0"></div>
+
+  <!-- Nombre sesión + indicador guardado -->
   <input id="session-name" value="Nueva sesión" title="Clic para renombrar"
     onchange="SESSION.nombre=this.value;scheduleAutoSave()">
   <span id="save-indicator"></span>
-  <div class="topbar-right">
-    <button class="cfg-btn" id="cfg-btn" title="Configuración de apariencia" onclick="toggleCfgPanel()">⚙</button>
-  </div>
+
+  <div class="topbar-sep"></div>
+
+  <!-- Cerrar período -->
+  <button class="topbar-btn" onclick="cerrarPeriodo()" title="Consolidar el período y guardarlo en el historial">
+    📅 Cerrar período
+  </button>
+
+  <!-- CONCILIAR (primary CTA) -->
+  <button class="topbar-run-btn run-btn" id="run-btn" disabled onclick="conciliar()">
+    <span id="run-icon">▶</span> <span id="run-lbl">Conciliar</span>
+  </button>
+
+  <!-- Config -->
+  <button class="cfg-btn" id="cfg-btn" title="Configuración de apariencia" onclick="toggleCfgPanel()">⚙</button>
 </div>
+<!-- Barra de progreso ultra fina + procesadoras activas -->
+<div class="topbar-prog" id="prog"><div class="prog-bar" id="prog-bar"></div></div>
+<div class="topbar-procs" id="run-procs"></div>
 
 <!-- ══ CONFIG PANEL ═══════════════════════════════════ -->
 <div class="cfg-panel" id="cfg-panel">
@@ -1054,25 +1145,8 @@ tr.row-int td{background:rgba(52,211,153,.02)}
     </div>
   </div>
 
-  <button onclick="cerrarPeriodo()" style="
-    margin:6px 12px 0;padding:9px;
-    background:linear-gradient(135deg,#065f46,#047857);
-    color:#d1fae5;border:none;border-radius:var(--r6);
-    font-family:var(--head);font-size:10px;font-weight:700;cursor:pointer;
-    display:flex;align-items:center;justify-content:center;gap:6px;
-    transition:opacity .2s;letter-spacing:.3px;"
-    onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'"
-    title="Consolidar el período actual y guardarlo en el historial acumulativo">
-    📅 Cerrar período
-  </button>
-
-  <button class="run-btn" id="run-btn" disabled onclick="conciliar()">
-    <span id="run-icon">▶</span> <span id="run-lbl">Conciliar</span>
-  </button>
-  <div id="run-procs" style="padding:4px 12px 0;font-size:8px;color:var(--m2);
-    display:flex;gap:6px;flex-wrap:wrap;min-height:14px"></div>
-  <div class="prog" id="prog"><div class="prog-bar" id="prog-bar"></div></div>
-  <div style="height:14px"></div>
+  <!-- cerrarPeriodo, run-btn → movidos al topbar -->
+  <div style="height:8px"></div>
 </div>
 
 <!-- ══ MAIN CONTENT ═══════════════════════════════════ -->
@@ -1091,6 +1165,16 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       <button class="tb" onclick="showTab('t-cor','tab-strip-cruce',this)">Correcciones <span class="cnt" id="cnt-cor">0</span></button>
       <button class="tb" style="color:var(--org)" onclick="showTab('t-urg','tab-strip-cruce',this)">⚠ Rev. Urgente <span class="cnt" id="cnt-urg">0</span></button>
       <button class="tb" style="color:var(--vio)" onclick="showTab('t-ref','tab-strip-cruce',this)">↺ Refacturado <span class="cnt" id="cnt-ref">0</span></button>
+      <!-- Botones de descarga inline (derecha del tab-strip) -->
+      <div class="dl-bar" id="dl-bar" style="margin-left:auto;border:none;padding:0 4px;background:transparent;gap:5px">
+        <span class="dl-info" id="dl-resumen" style="font-size:8px;color:var(--m2);white-space:nowrap"></span>
+        <button class="dl-btn dl-fis"  id="dl-fis"  style="display:none">⬇ FISERV</button>
+        <button class="dl-btn dl-gp"   id="dl-gp"   style="display:none">⬇ GETPOS</button>
+        <button class="dl-btn dl-full" id="dl-full"  style="display:none">⬇ Completo</button>
+        <button class="dl-btn dl-log"  id="dl-log"   style="display:none">⬇ Log</button>
+        <button class="dl-btn dl-sin"  id="dl-sin-btn" style="display:none">⬇ Sin Match</button>
+        <button class="dl-btn dl-res"  id="dl-res"   style="display:none">⬇ Resúmenes</button>
+      </div>
     </div>
 
     <!-- EMPTY -->
@@ -1786,18 +1870,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
     </div>
   </div>
 
-  <!-- DOWNBAR -->
-  <div class="dl-bar" id="dl-bar">
-    <div class="dl-info"><b id="dl-resumen">—</b></div>
-    <div class="dl-btns">
-      <button class="dl-btn dl-fis"  id="dl-fis">⬇ FISERV</button>
-      <button class="dl-btn dl-gp"   id="dl-gp">⬇ GETPOS</button>
-      <button class="dl-btn dl-full" id="dl-full">⬇ Completo</button>
-      <button class="dl-btn dl-log"  id="dl-log">⬇ Log Aud.</button>
-      <button class="dl-btn dl-sin"  id="dl-sin-btn">⬇ Sin Match</button>
-      <button class="dl-btn dl-res"  id="dl-res">⬇ Resúmenes</button>
-    </div>
-  </div>
+  <!-- dl-bar movido dentro del tab-strip-cruce -->
 
 </div><!-- .main-content -->
 </div><!-- .app-body -->
@@ -2016,6 +2089,26 @@ function showMod(mod, _btn) {   // _btn mantenido por compatibilidad (ignorado)
   if (mod === 'ctr')         { renderModuloContracargos(); }
   if (mod === 'goc')         { renderModuloGoCuotas(); }
   if (mod === 'hist')        { renderModuloHistorico(); }
+}
+
+// ══ PERIOD DROPDOWN (topbar) ═══════════════════════════
+function _togglePeriodDrop(btn) {
+  const drop = document.getElementById('tb-period-drop');
+  if (!drop) return;
+  const open = drop.classList.toggle('open');
+  if (open) {
+    // Cierre al hacer clic fuera
+    setTimeout(() => {
+      document.addEventListener('click', _periodDropOutside, { once: true });
+    }, 0);
+  }
+}
+function _closePeriodDrop() {
+  document.getElementById('tb-period-drop')?.classList.remove('open');
+}
+function _periodDropOutside(e) {
+  const wrap = document.getElementById('topbar-period-wrap');
+  if (wrap && !wrap.contains(e.target)) _closePeriodDrop();
 }
 
 // ══ TOGGLE "MÁS FILTROS" ═══════════════════════════════

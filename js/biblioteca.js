@@ -450,10 +450,11 @@ function _actualizarPillPeriodo() {
   const pill = document.getElementById('sb-periodo-activo-pill');
   if (!pill) return;
   if (_BIB_PERIODO_ACTIVO) {
-    pill.textContent = `📅 ${_bibFmtPeriodo(_BIB_PERIODO_ACTIVO)}`;
-    pill.classList.add('visible');
+    pill.textContent = _bibFmtPeriodo(_BIB_PERIODO_ACTIVO);
+    pill.className = 'tb-period-label';
   } else {
-    pill.classList.remove('visible');
+    pill.textContent = 'Sin período';
+    pill.className = 'tb-period-empty';
   }
 }
 
