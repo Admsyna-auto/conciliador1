@@ -17,7 +17,23 @@ function toggleProc(id) {
   localStorage.setItem('procs_enabled', JSON.stringify(PROCS_ENABLED));
 }
 
-function isProcEnabled(id) { return PROCS_ENABLED[id] !== false; }
+// Auto-detección: habilitada si hay archivos cargados para esa procesadora.
+// FILES, _GOC_PAGOS y _GOC_CELULAR se definen en conciliador.js (carga después).
+function isProcEnabled(id) {
+  if (id === 'FISERV') {
+    return !!(typeof FILES !== 'undefined' && FILES.fis);
+  }
+  if (id === 'GETPOS') {
+    return !!(typeof FILES !== 'undefined' && FILES.gp);
+  }
+  if (id === 'GOCUOTAS') {
+    return !!(
+      (typeof _GOC_PAGOS   !== 'undefined' && _GOC_PAGOS.length   > 0) ||
+      (typeof _GOC_CELULAR !== 'undefined' && _GOC_CELULAR.length  > 0)
+    );
+  }
+  return PROCS_ENABLED[id] !== false;
+}
 const DB_NAME     = 'ConciliadorDB';
 const DB_VERSION  = 3;   // v3: added 'archivos' store (biblioteca de archivos)
 

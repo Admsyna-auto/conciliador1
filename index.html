@@ -837,14 +837,6 @@ tr.row-int td{background:rgba(52,211,153,.02)}
     onchange="SESSION.nombre=this.value;scheduleAutoSave()">
   <span id="save-indicator"></span>
   <div class="topbar-right">
-    <button class="topbar-btn" onclick="abrirModalSesiones()">📂 Sesiones</button>
-    <button class="topbar-btn" onclick="exportarSesion()">⬇ Exportar sesión</button>
-    <label class="topbar-btn" style="cursor:pointer">
-      ⬆ Importar sesión
-      <input type="file" accept=".json" style="display:none"
-        onchange="importarYRestaurar(this)">
-    </label>
-    <button class="topbar-btn danger" onclick="nuevaSesion()">+ Nueva</button>
     <button class="cfg-btn" id="cfg-btn" title="Configuración de apariencia" onclick="toggleCfgPanel()">⚙</button>
   </div>
 </div>
@@ -956,111 +948,33 @@ tr.row-int td{background:rgba(52,211,153,.02)}
     <div class="sb-periodo-activo-pill" id="sb-periodo-activo-pill"></div>
   </div>
 
-  <!-- ARCHIVOS BASE -->
-  <div class="sb-sec">
-    <div class="sb-lbl">Archivos base</div>
-    <div class="fc" id="fc-sky"><label for="i-sky">
-      <div class="fc-top"><div class="fc-dot d-sky">S</div>
-        <span class="fc-name">Skylab</span><span class="fc-req">REQ</span></div>
-      <div class="fc-st" id="st-sky">Sin archivo</div>
-    </label><input type="file" id="i-sky" accept=".xlsx,.xls" onchange="loadFile(this,'sky')"></div>
-
-    <div class="fc" id="fc-ter"><label for="i-ter">
-      <div class="fc-top"><div class="fc-dot d-ter">T</div>
-        <span class="fc-name">Terminales</span><span class="fc-req">REQ</span></div>
-      <div class="fc-st" id="st-ter">Sin archivo</div>
-    </label><input type="file" id="i-ter" accept=".xlsx,.xls" onchange="loadFile(this,'ter')"></div>
-
-  </div>
-
-  <!-- PROCESADORAS -->
-  <div class="sb-sec">
-    <div class="sb-lbl">Procesadoras</div>
-
-    <!-- FISERV -->
-    <div class="proc-group enabled" id="proc-grp-FISERV">
-      <div class="proc-toggle" onclick="toggleProcUI('FISERV')">
-        <div class="proc-dot"></div>
-        <span class="proc-toggle-label">FISERV</span>
-        <span class="proc-check" id="proc-chk-FISERV">✓</span>
-      </div>
-      <div class="proc-files">
-        <div class="fc" id="fc-fis"><label for="i-fis">
-          <div class="fc-top"><div class="fc-dot d-fis">F</div>
-            <span class="fc-name">FISERV</span><span class="fc-req">REQ</span></div>
-          <div class="fc-st" id="st-fis">Sin archivo</div>
-        </label><input type="file" id="i-fis" accept=".xlsx,.xls" onchange="loadFile(this,'fis')"></div>
-      </div>
-    </div>
-
-    <!-- GETPOS -->
-    <div class="proc-group enabled" id="proc-grp-GETPOS">
-      <div class="proc-toggle" onclick="toggleProcUI('GETPOS')">
-        <div class="proc-dot"></div>
-        <span class="proc-toggle-label">GETPOS</span>
-        <span class="proc-check" id="proc-chk-GETPOS">✓</span>
-      </div>
-      <div class="proc-files">
-        <div class="fc" id="fc-gp"><label for="i-gp">
-          <div class="fc-top"><div class="fc-dot d-gp">G</div>
-            <span class="fc-name">GETPOS</span><span class="fc-req">REQ</span></div>
-          <div class="fc-st" id="st-gp">Sin archivo</div>
-        </label><input type="file" id="i-gp" accept=".xlsx,.xls" onchange="loadFile(this,'gp')"></div>
-      </div>
-    </div>
-
-    <!-- GO CUOTAS -->
-    <div class="proc-group" id="proc-grp-GOCUOTAS">
-      <div class="proc-toggle" onclick="toggleProcUI('GOCUOTAS')">
-        <div class="proc-dot"></div>
-        <span class="proc-toggle-label">Go Cuotas</span>
-        <span class="proc-check" id="proc-chk-GOCUOTAS">○</span>
-      </div>
-      <div class="proc-files">
-        <div class="fc opt" id="fc-goc-pag"><label for="i-goc-pag">
-          <div class="fc-top"><div class="fc-dot" style="background:#0f2d20;color:#34d399">GC</div>
-            <span class="fc-name">Go Cuotas CSV</span><span class="fc-req opt">OPC</span></div>
-          <div class="fc-st" id="st-goc-pag">Sin archivo</div>
-        </label><input type="file" id="i-goc-pag" accept=".csv,.txt" onchange="loadGocPagos(this,'GOCUOTAS')"></div>
-
-        <div class="fc opt" id="fc-goc-cel"><label for="i-goc-cel">
-          <div class="fc-top"><div class="fc-dot" style="background:#1a1040;color:#a78bfa">GK</div>
-            <span class="fc-name">Go Celular CSV</span><span class="fc-req opt">OPC</span></div>
-          <div class="fc-st" id="st-goc-cel">Sin archivo</div>
-        </label><input type="file" id="i-goc-cel" accept=".csv,.txt" onchange="loadGocPagos(this,'GOCELULAR')"></div>
-
-        <div class="fc opt" id="fc-goc-ven"><label for="i-goc-ven">
-          <div class="fc-top"><div class="fc-dot" style="background:#1a1f10;color:#fbbf24">GV</div>
-            <span class="fc-name">Ventas (IMEI)</span><span class="fc-req opt">OPC</span></div>
-          <div class="fc-st" id="st-goc-ven">Opcional</div>
-        </label><input type="file" id="i-goc-ven" accept=".xlsx,.xls" onchange="loadGocVentas(this)"></div>
-      </div>
-    </div>
-
-  </div>
-
-  <div class="sb-sec">
-    <div class="sb-lbl">Contracargos</div>
-    <div class="fc opt" id="fc-ctr-fis"><label for="i-ctr-fis">
-      <div class="fc-top"><div class="fc-dot d-fis">C</div>
-        <span class="fc-name">CTR FISERV</span><span class="fc-req opt">OPC</span></div>
-      <div class="fc-st" id="st-ctr-fis">Opcional</div>
-    </label><input type="file" id="i-ctr-fis" accept=".xlsx,.xls" onchange="loadContracargos(this,'fis')"></div>
-
-    <div class="fc opt" id="fc-ctr-gp"><label for="i-ctr-gp">
-      <div class="fc-top"><div class="fc-dot d-gp">C</div>
-        <span class="fc-name">CTR GETPOS</span><span class="fc-req opt">OPC</span></div>
-      <div class="fc-st" id="st-ctr-gp">Opcional</div>
-    </label><input type="file" id="i-ctr-gp" accept=".xlsx,.xls" onchange="loadContracargos(this,'gp')"></div>
-  </div>
-
-  <div class="sb-sec">
-    <div class="sb-lbl">Cobros</div>
-    <div class="fc opt" id="fc-liq"><label for="i-liq">
-      <div class="fc-top"><div class="fc-dot d-liq">L</div>
-        <span class="fc-name">Liquidaciones</span><span class="fc-req opt">OPC</span></div>
-      <div class="fc-st" id="st-liq">Opcional</div>
-    </label><input type="file" id="i-liq" accept=".xlsx,.xls" onchange="loadLiquidaciones(this)"></div>
+  <!-- ELEMENTOS OCULTOS: IDs requeridos por el JS existente (loadFile, loadGocPagos, etc.) -->
+  <div style="display:none" aria-hidden="true">
+    <!-- File inputs -->
+    <input type="file" id="i-sky"     accept=".xlsx,.xls" onchange="loadFile(this,'sky')">
+    <input type="file" id="i-ter"     accept=".xlsx,.xls" onchange="loadFile(this,'ter')">
+    <input type="file" id="i-fis"     accept=".xlsx,.xls" onchange="loadFile(this,'fis')">
+    <input type="file" id="i-gp"      accept=".xlsx,.xls" onchange="loadFile(this,'gp')">
+    <input type="file" id="i-liq"     accept=".xlsx,.xls" onchange="loadLiquidaciones(this)">
+    <input type="file" id="i-goc-pag" accept=".csv,.txt"  onchange="loadGocPagos(this,'GOCUOTAS')">
+    <input type="file" id="i-goc-cel" accept=".csv,.txt"  onchange="loadGocPagos(this,'GOCELULAR')">
+    <input type="file" id="i-goc-ven" accept=".xlsx,.xls" onchange="loadGocVentas(this)">
+    <input type="file" id="i-ctr-fis" accept=".xlsx,.xls" onchange="loadContracargos(this,'fis')">
+    <input type="file" id="i-ctr-gp"  accept=".xlsx,.xls" onchange="loadContracargos(this,'gp')">
+    <!-- Status spans (actualizados por loadFile) -->
+    <span id="st-sky"></span><span id="st-ter"></span><span id="st-fis"></span>
+    <span id="st-gp"></span><span id="st-liq"></span><span id="st-goc-pag"></span>
+    <span id="st-goc-cel"></span><span id="st-goc-ven"></span>
+    <span id="st-ctr-fis"></span><span id="st-ctr-gp"></span>
+    <!-- fc divs (classList.add('ok') por loadFile) -->
+    <div id="fc-sky"></div><div id="fc-ter"></div><div id="fc-fis"></div>
+    <div id="fc-gp"></div><div id="fc-liq"></div><div id="fc-goc-pag"></div>
+    <div id="fc-goc-cel"></div><div id="fc-goc-ven"></div>
+    <div id="fc-ctr-fis"></div><div id="fc-ctr-gp"></div>
+    <!-- proc-group divs (usados por _initProcGroups / toggleProcUI) -->
+    <div id="proc-grp-FISERV"   class="proc-group enabled"><div class="proc-dot"></div><span id="proc-chk-FISERV"></span></div>
+    <div id="proc-grp-GETPOS"   class="proc-group enabled"><div class="proc-dot"></div><span id="proc-chk-GETPOS"></span></div>
+    <div id="proc-grp-GOCUOTAS" class="proc-group enabled"><div class="proc-dot"></div><span id="proc-chk-GOCUOTAS"></span></div>
   </div>
 
 
@@ -1830,14 +1744,6 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 </div><!-- .app-body -->
 
 <!-- ══ MODAL SESIONES ════════════════════════════════ -->
-<div class="modal-overlay" id="modal-sesiones">
-  <div class="modal">
-    <div class="modal-title">Sesiones guardadas</div>
-    <div id="modal-ses-list"><div style="color:var(--m2);font-size:10px">Cargando...</div></div>
-    <button class="modal-close" onclick="cerrarModal()">Cerrar</button>
-  </div>
-</div>
-
 <!-- ══ MODAL BIBLIOTECA ════════════════════════════════ -->
 <div class="modal-overlay" id="modal-biblioteca" onclick="if(event.target===this)cerrarBiblioteca()">
   <div class="bib-panel">
@@ -2074,63 +1980,12 @@ function showTab(id, stripId, btn) {
 }
 
 // ══ SESIONES ═════════════════════════════════════════
-async function abrirModalSesiones() {
-  document.getElementById('modal-sesiones').classList.add('open');
-  const list = document.getElementById('modal-ses-list');
-  list.innerHTML = '<div style="color:var(--m2);font-size:10px">Cargando...</div>';
-  const sesiones = await listarSesiones();
-  if (!sesiones.length) {
-    list.innerHTML = '<div style="color:var(--m2);font-size:10px;padding:10px 0">No hay sesiones guardadas.</div>';
-    return;
-  }
-  list.innerHTML = sesiones
-    .sort((a,b) => new Date(b.session?.modificada||0) - new Date(a.session?.modificada||0))
-    .map(s => `
-      <div class="ses-item">
-        <div class="ses-info">
-          <div class="ses-name">${s.session?.nombre || s.id}</div>
-          <div class="ses-meta">
-            ${s.session?.usuario||''} · ${s.session?.periodoDesde||'?'} – ${s.session?.periodoHasta||'?'}
-            · ${(s.resultado||[]).length} ops · guardado ${(s.session?.modificada||'').slice(0,16).replace('T',' ')}
-          </div>
-        </div>
-        <button class="ses-load" onclick="loadSesion('${s.id}')">Cargar</button>
-        <button class="ses-del"  onclick="deleteSesion('${s.id}',this.closest('.ses-item'))">×</button>
-      </div>`).join('');
-}
-
-async function loadSesion(id) {
-  const ok = await cargarSesion(id);
-  if (ok) {
-    cerrarModal();
-    // Restaurar UI
-    document.getElementById('session-name').value = SESSION.nombre || 'Sesión';
-    document.getElementById('param-usuario').value = SESSION.usuario || 'Usuario';
-    document.getElementById('param-desde').value   = SESSION.periodoDesde || '';
-    document.getElementById('param-hasta').value   = SESSION.periodoHasta || '';
-    renderSbEquiv();
-    if (RESULTADO.length) {
-      renderTodo();
-      document.getElementById('tab-strip-cruce').style.display='flex';
-      document.getElementById('t-empty').classList.remove('active');
-      document.getElementById('t-all').classList.add('active');
-      document.getElementById('dl-bar').classList.add('show');
-      setupDownloads();
-    }
-    _showToast(`✓ Sesión "${SESSION.nombre}" · ${RESULTADO.length.toLocaleString('es-AR')} operaciones`);
-    log(`Sesión "${SESSION.nombre}" restaurada · ${RESULTADO.length} operaciones`, 'ok');
-  } else {
-    alert('Error al cargar la sesión.');
-  }
-}
-
+// Funciones de sesiones legacy (modal eliminado, se mantienen para compatibilidad interna)
+function abrirModalSesiones() { /* modal eliminado — usar períodos en sidebar */ }
+function cerrarModal() { /* no-op */ }
 async function deleteSesion(id, el) {
   await eliminarSesion(id);
   el?.remove();
-}
-
-function cerrarModal() {
-  document.getElementById('modal-sesiones').classList.remove('open');
 }
 
 async function importarYRestaurar(input) {

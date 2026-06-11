@@ -441,13 +441,6 @@ function _bibLimpiarUI() {
     const dash = document.getElementById('dashboard');
     if (dash) dash.style.display = 'none';
     document.getElementById('dl-bar')?.classList.remove('show');
-    // Resetear indicadores de archivo en sidebar
-    ['sky','fis','gp','ter','liq','goc-pag','goc-cel','goc-ven','ctr-fis','ctr-gp'].forEach(k => {
-      const el = document.getElementById(`st-${k}`);
-      if (el) { el.textContent = 'Sin archivo'; el.className = 'fc-st'; }
-      const fc = document.getElementById(`fc-${k}`);
-      if (fc) fc.className = fc.className.includes('opt') ? 'fc opt' : 'fc';
-    });
     if (typeof clearLog === 'function') clearLog();
   } catch (e) { console.warn('_bibLimpiarUI:', e); }
 }
