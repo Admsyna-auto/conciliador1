@@ -580,6 +580,12 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 .badge-grn{background:rgba(52,211,153,.1);color:var(--grn);border:1px solid rgba(52,211,153,.2)}
 .badge-yel{background:rgba(251,191,36,.1);color:var(--yel);border:1px solid rgba(251,191,36,.2)}
 
+/* ══ LIQUIDACIONES ═══════════════════════════════════ */
+/* Los KPIs reusan .dif-kpi / .dif-kpi-lbl / .dif-kpi-val del módulo DIFERENCIAS */
+.dif-kpi-val.org{color:var(--org)}
+/* Mod-btn del mega-tab Liquidaciones con acento propio */
+#mega-liquidaciones.active{color:#38bdf8;border-color:#38bdf8}
+
 /* ══ SESIONES MODAL ══════════════════════════════════ */
 .modal-overlay{
   display:none;position:fixed;inset:0;background:rgba(5,8,16,.85);
@@ -1107,6 +1113,9 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   <button class="mod-btn" id="mega-operaciones" onclick="showMegaTab('operaciones',this)">
     Operaciones <span class="cnt" id="cnt-mega-ops">—</span>
   </button>
+  <button class="mod-btn" id="mega-liquidaciones" onclick="showMegaTab('liquidaciones',this)">
+    Liquidaciones <span class="cnt" id="cnt-mega-liq" style="background:rgba(56,189,248,.08)">—</span>
+  </button>
   <button class="mod-btn" id="mega-diferencias" onclick="showMegaTab('diferencias',this)">
     Diferencias <span class="cnt" id="cnt-mega-dif">0</span>
   </button>
@@ -1121,6 +1130,9 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 <div style="display:none" aria-hidden="true">
   <button id="mbtn-cruce"></button>
   <button id="mbtn-revision"></button>
+  <button id="mbtn-liq-fiserv"></button>
+  <button id="mbtn-liq-getpos"></button>
+  <button id="mbtn-liq-goc"></button>
   <button id="mbtn-diferencias"></button>
   <button id="mbtn-cobros"></button>
   <button id="mbtn-ctr"></button>
@@ -1900,6 +1912,16 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   <!-- ── MÓDULO: GETPOS ────────────────────────────────────── -->
   <div class="mod-panel" id="mod-getpos"></div>
 
+  <!-- ══ LIQUIDACIONES ══════════════════════════════════════ -->
+  <!-- ── MÓDULO: LIQ FISERV ───────────────────────────────── -->
+  <div class="mod-panel" id="mod-liq-fiserv"></div>
+
+  <!-- ── MÓDULO: LIQ GETPOS ───────────────────────────────── -->
+  <div class="mod-panel" id="mod-liq-getpos"></div>
+
+  <!-- ── MÓDULO: LIQ GO CUOTAS ────────────────────────────── -->
+  <div class="mod-panel" id="mod-liq-goc"></div>
+
   <!-- ── MÓDULO 8: HISTÓRICO ──────────────────────────────── -->
   <div class="mod-panel" id="mod-hist">
     <div id="mod-hist-inner" style="display:flex;flex:1;min-height:0;overflow:hidden;flex-direction:column"></div>
@@ -1963,6 +1985,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 <script src="js/contracargos.js"></script>
 <script src="js/gocuotas.js"></script>
 <script src="js/procesadoras.js"></script>
+<script src="js/liquidaciones.js"></script>
 <script src="js/historico.js"></script>
 <script src="js/dashboard.js"></script>
 <script>
@@ -1990,12 +2013,13 @@ function _initProcGroups() {
 
 // ══ MEGA-TABS (4 tabs principales) ══════════════════════
 const MEGA_MAP = {
-  resumen:       [{ id:'dashboard', label:'Dashboard' },{ id:'hist', label:'Histórico' }],
-  operaciones:   [{ id:'cruce', label:'Cruce automático' },{ id:'revision', label:'Revisión manual' },{ id:'fiserv', label:'FISERV' },{ id:'getpos', label:'GETPOS' },{ id:'goc', label:'Go Cuotas' }],
-  diferencias:   [{ id:'diferencias', label:'Diferencias' },{ id:'cobros', label:'Cobros' },{ id:'ctr', label:'Contracargos' }],
-  configuracion: [{ id:'tm', label:'Tablas maestras' }],
+  resumen:        [{ id:'dashboard', label:'Dashboard' },{ id:'hist', label:'Histórico' }],
+  operaciones:    [{ id:'cruce', label:'Cruce automático' },{ id:'revision', label:'Revisión manual' },{ id:'fiserv', label:'FISERV' },{ id:'getpos', label:'GETPOS' },{ id:'goc', label:'Go Cuotas' }],
+  liquidaciones:  [{ id:'liq-fiserv', label:'FISERV' },{ id:'liq-getpos', label:'GETPOS' },{ id:'liq-goc', label:'Go Cuotas' }],
+  diferencias:    [{ id:'diferencias', label:'Diferencias' },{ id:'cobros', label:'Cobros' },{ id:'ctr', label:'Contracargos' }],
+  configuracion:  [{ id:'tm', label:'Tablas maestras' }],
 };
-const _megaActive   = { resumen:'dashboard', operaciones:'cruce', diferencias:'diferencias', configuracion:'tm' };
+const _megaActive   = { resumen:'dashboard', operaciones:'cruce', liquidaciones:'liq-fiserv', diferencias:'diferencias', configuracion:'tm' };
 let   _curMegaTab   = 'resumen';
 
 function showMegaTab(tabId, btn) {
@@ -2058,6 +2082,9 @@ function showMod(mod, _btn) {   // _btn mantenido por compatibilidad (ignorado)
   if (mod === 'fiserv')      { renderModuloFiserv(); }
   if (mod === 'getpos')      { renderModuloGetpos(); }
   if (mod === 'hist')        { renderModuloHistorico(); }
+  if (mod === 'liq-fiserv')  { if (typeof renderModuloLiqFiserv  === 'function') renderModuloLiqFiserv(); }
+  if (mod === 'liq-getpos')  { if (typeof renderModuloLiqGetpos  === 'function') renderModuloLiqGetpos(); }
+  if (mod === 'liq-goc')     { if (typeof renderModuloLiqGoC     === 'function') renderModuloLiqGoC(); }
 }
 
 // ══ PERIOD DROPDOWN (topbar) ═══════════════════════════

@@ -956,6 +956,13 @@ function renderTodo() {
     && typeof renderModuloFiserv  === 'function')   renderModuloFiserv();
   if (document.getElementById('mod-getpos')?.classList.contains('active')
     && typeof renderModuloGetpos  === 'function')   renderModuloGetpos();
+  // Refrescar liquidaciones si están activas
+  if (document.getElementById('mod-liq-fiserv')?.classList.contains('active')
+    && typeof renderModuloLiqFiserv === 'function') renderModuloLiqFiserv();
+  if (document.getElementById('mod-liq-getpos')?.classList.contains('active')
+    && typeof renderModuloLiqGetpos === 'function') renderModuloLiqGetpos();
+  if (document.getElementById('mod-liq-goc')?.classList.contains('active')
+    && typeof renderModuloLiqGoC    === 'function') renderModuloLiqGoC();
 }
 
 function renderTablas() {
