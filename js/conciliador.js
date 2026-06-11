@@ -2619,11 +2619,19 @@ function importarCorrecciones(input) {
         importadas++;
       });
 
-      // Re-aplicar todas las correcciones con los datos actuales
-      if (importadas > 0 && (_FIS_NORM.length || _GP_NORM.length)) {
-        reprocesarCorrecciones();
-        renderTodo();
-        updateCounts();
+      // Re-aplicar correcciones con los datos actuales
+      if (importadas > 0) {
+        if (_FIS_NORM.length || _GP_NORM.length) {
+          // Hay datos de procesadora en memoria → re-cruce completo
+          reprocesarCorrecciones();
+          renderTodo();
+          updateCounts();
+        } else {
+          // Sin datos de procesadora (vista consolidada o lote sin archivos):
+          // Mostrar igual las correcciones como PENDIENTE
+          renderTablaCorrecciones();
+          updateCounts();
+        }
       }
       scheduleAutoSave();
 
@@ -2631,9 +2639,10 @@ function importarCorrecciones(input) {
         `✓ ${importadas} correcciones importadas`,
         noEncontradas ? `⚠ ${noEncontradas} sin fila en el RESULTADO actual (se guardan igual)` : '',
         sinAsiento    ? `ℹ ${sinAsiento} filas sin Nro.Asiento ignoradas` : '',
+        !_FIS_NORM.length && !_GP_NORM.length ? 'ℹ Para re-cruzar: cargá el lote con ▶ Cargar y ejecutá ↺ Reprocesar lote' : '',
       ].filter(Boolean).join('\n');
       typeof _showToast === 'function'
-        ? _showToast(`✓ ${importadas} correcciones importadas`)
+        ? _showToast(`✓ ${importadas} correcciones importadas${!_FIS_NORM.length && !_GP_NORM.length ? ' · pendientes de re-cruce' : ''}`)
         : alert(msg);
       if (noEncontradas || sinAsiento) console.warn('[IMPORT COR]', msg);
 
