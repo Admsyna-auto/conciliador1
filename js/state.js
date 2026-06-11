@@ -19,7 +19,7 @@ function toggleProc(id) {
 
 function isProcEnabled(id) { return PROCS_ENABLED[id] !== false; }
 const DB_NAME     = 'ConciliadorDB';
-const DB_VERSION  = 2;   // v2: added 'periodos' store
+const DB_VERSION  = 3;   // v3: added 'archivos' store (biblioteca de archivos)
 
 // ── Estado de archivos cargados
 const FILES = { sky: null, fis: null, gp: null, ter: null, enu: null, baj: null, liq: null };
@@ -77,6 +77,8 @@ async function dbOpen() {
         db.createObjectStore('tablasMaestras', { keyPath: 'clave' });
       if (!db.objectStoreNames.contains('periodos'))
         db.createObjectStore('periodos', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('archivos'))
+        db.createObjectStore('archivos', { keyPath: 'id' });
     };
     req.onsuccess  = e => { _db = e.target.result; res(_db); };
     req.onerror    = e => rej(e.target.error);
