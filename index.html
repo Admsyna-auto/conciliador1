@@ -1850,6 +1850,14 @@ tr.row-int td{background:rgba(52,211,153,.02)}
     <div id="mod-goc-inner" style="display:flex;flex:1;min-height:0;overflow:hidden;flex-direction:column"></div>
   </div>
 
+  <!-- ── MÓDULO: FISERV ────────────────────────────────────── -->
+  <div class="mod-panel" id="mod-fiserv"
+    style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden"></div>
+
+  <!-- ── MÓDULO: GETPOS ────────────────────────────────────── -->
+  <div class="mod-panel" id="mod-getpos"
+    style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden"></div>
+
   <!-- ── MÓDULO 8: HISTÓRICO ──────────────────────────────── -->
   <div class="mod-panel" id="mod-hist">
     <div id="mod-hist-inner" style="display:flex;flex:1;min-height:0;overflow:hidden;flex-direction:column"></div>
@@ -1996,6 +2004,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 <script src="js/conciliador.js"></script>
 <script src="js/contracargos.js"></script>
 <script src="js/gocuotas.js"></script>
+<script src="js/procesadoras.js"></script>
 <script src="js/historico.js"></script>
 <script src="js/dashboard.js"></script>
 <script>
@@ -2024,7 +2033,7 @@ function _initProcGroups() {
 // ══ MEGA-TABS (4 tabs principales) ══════════════════════
 const MEGA_MAP = {
   resumen:       [{ id:'dashboard', label:'Dashboard' },{ id:'hist', label:'Histórico' }],
-  operaciones:   [{ id:'cruce', label:'Cruce automático' },{ id:'revision', label:'Revisión manual' },{ id:'goc', label:'Go Cuotas' }],
+  operaciones:   [{ id:'cruce', label:'Cruce automático' },{ id:'revision', label:'Revisión manual' },{ id:'fiserv', label:'FISERV' },{ id:'getpos', label:'GETPOS' },{ id:'goc', label:'Go Cuotas' }],
   diferencias:   [{ id:'diferencias', label:'Diferencias' },{ id:'cobros', label:'Cobros' },{ id:'ctr', label:'Contracargos' }],
   configuracion: [{ id:'tm', label:'Tablas maestras' }],
 };
@@ -2088,6 +2097,8 @@ function showMod(mod, _btn) {   // _btn mantenido por compatibilidad (ignorado)
   if (mod === 'cobros')      { renderModuloCobros(); }
   if (mod === 'ctr')         { renderModuloContracargos(); }
   if (mod === 'goc')         { renderModuloGoCuotas(); }
+  if (mod === 'fiserv')      { renderModuloFiserv(); }
+  if (mod === 'getpos')      { renderModuloGetpos(); }
   if (mod === 'hist')        { renderModuloHistorico(); }
 }
 
