@@ -10,7 +10,7 @@ const _PROC_FILTROS = {
 
 // ── Filtro de filas por procesadora ──────────────────────────────────
 function _procRows(procId) {
-  if (!window.RESULTADO?.length) return [];
+  if (typeof RESULTADO === 'undefined' || !RESULTADO.length) return [];
   if (procId === 'FISERV') return RESULTADO.filter(r => !r.sky?.esGETPos && !r.sky?.esGOCUOTAS);
   if (procId === 'GETPOS') return RESULTADO.filter(r =>  r.sky?.esGETPos && !r.sky?.esGOCUOTAS);
   return [];
@@ -89,7 +89,7 @@ function renderModuloProc(procId) {
   const panel = document.getElementById(`mod-${p}`);
   if (!panel) return;
 
-  if (!window.RESULTADO?.length) {
+  if (typeof RESULTADO === 'undefined' || !RESULTADO.length) {
     panel.innerHTML = `
       <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
         height:100%;gap:14px;color:var(--m2);text-align:center;padding:40px">
@@ -138,6 +138,9 @@ function renderModuloProc(procId) {
 
   // ── Sucursales para el filtro ─────────────────────────────────────
   const sucs = [...new Set(allRows.map(r => r.sky?.suc).filter(Boolean))].sort((a,b)=>+a-+b);
+
+  // Asegurar que el panel tenga el flex correcto (se perdió al no tenerlo inline)
+  panel.style.cssText = 'display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden';
 
   panel.innerHTML = `
   <div style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden">
