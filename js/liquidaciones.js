@@ -159,6 +159,8 @@ function parseLiqCupones(wb) {
       fecha_venta:   _liqFecha(_liqGCol(r,'Fecha Venta','Fecha','fecha')),
       fecha_pago:    _liqFecha(_liqGCol(r,'Fecha Pago','FechaPago')),
       tarjeta:       String(_liqGCol(r,'Tarjeta','tarjeta') || '').trim(),
+      nro_tarjeta:   String(_liqGCol(r,'Nro Tarjeta','NroTarjeta','Nro. Tarjeta','Numero Tarjeta','NumeroTarjeta') || '').trim(),
+      banco_pagador: String(_liqGCol(r,'Banco Pagador','BancoPagador','Banco','banco_pagador') || '').trim(),
       tipo,
       cuotas:  typeof cuotasRaw === 'number' ? Math.round(cuotasRaw) : (parseInt(cuotasRaw) || 1),
       cfo:     typeof cfoRaw    === 'number' ? cfoRaw    : _liqMonto(cfoRaw),
@@ -478,57 +480,69 @@ function _liqExportarTodo(proc) {
 
   /* ── FISERV ── */
   if (proc === 'fiserv') {
-    const H = ['Estado','Fecha Skylab','Suc.','Lote','Cupón','Autorización',
-               'Monto Skylab','Monto Liq.','Fecha Pago','N° Liq.'];
+    const H = [
+      'Estado',
+      // SKY
+      'Fecha SKY','Suc.','Tarjeta SKY','Plan SKY','Cuotas SKY','Factura SKY','Monto SKY',
+      // LIQ
+      'Fecha Venta','Fecha Pago','Nro Equipo','Nombre Equipo',
+      'Nro Lote','Nro Cupón','Tarjeta Liq.','Nro Tarjeta','Cód. Autorización',
+      'Cuotas Liq.','Importe Venta','Nro Comercio','Banco Pagador','N° Liq.',
+    ];
+    const _rFis = (sky, r, lote, cupon, aut) => [
+      sky?.fecha||'', sky?.suc||'', sky?.tarjeta||'', sky?.plan||'',
+      sky?.cuotas||'', sky?.opNum||'', num(sky?.monto),
+      r?.fecha_venta||'', r?.fecha_pago||'', r?.equipo||'', r?.nombre_equipo||'',
+      lote||'', cupon||'', r?.tarjeta||'', r?.nro_tarjeta||'', aut||'',
+      r?.cuotas||'', num(r?.monto), r?.nro_comercio||'', r?.banco_pagador||'', r?.liq_id||'',
+    ];
     addSheet('Liquidadas', H, cruce.liquidadas.map(x => [
-      'Liquidada', x.fila.sky?.fecha||'', x.fila.sky?.suc||'',
-      x.lote, x.cupon, x.aut,
-      num(x.fila.sky?.monto), num(x.liqRow?.monto),
-      x.liqRow?.fecha_pago||'', x.liqRow?.liq_id||'']));
+      'Liquidada', ..._rFis(x.fila.sky, x.liqRow, x.lote, x.cupon, x.aut)]));
     addSheet('No liquidadas', H, cruce.noLiquidadas.map(x => [
       x.enLiq===null ? 'Sin archivo' : 'No liquidada',
-      x.fila.sky?.fecha||'', x.fila.sky?.suc||'',
-      x.lote, x.cupon, x.aut,
-      num(x.fila.sky?.monto), '', '', '']));
+      ..._rFis(x.fila.sky, null, x.lote, x.cupon, x.aut)]));
     addSheet('Sin confirmar', H, cruce.sinConfirmar.map(f => [
-      f.estado||'SIN MATCH', f.sky?.fecha||'', f.sky?.suc||'',
-      f.sky?.lote||'', f.sky?.cupon||'', '',
-      num(f.sky?.monto), '', '', '']));
+      f.estado||'SIN MATCH',
+      ..._rFis(f.sky, null, f.sky?.lote, f.sky?.cupon, '')]));
     addSheet('Extras en Liq.', H, cruce.extras.map(r => [
-      'Extra', r.fecha_venta||'', '',
-      r.lote, r.cupon, r.aut,
-      '', num(r.monto), r.fecha_pago||'', r.liq_id||'']));
+      'Extra en Liq.', ..._rFis(null, r, r.lote, r.cupon, r.aut)]));
     if (cruce.fueraPlazo?.length) {
       addSheet('Fuera de plazo',
-        ['Estado','Fecha Venta','Suc.','Lote','Cupón','Tarjeta','Comercio',
-         'Monto','Fecha Pago','Días Esperados','Días Reales','Días Extra'],
+        [...H, 'Días Esperados','Días Reales','Días Extra'],
         cruce.fueraPlazo.map(x => [
-          `+${x.diasExtra}d`, x.liqRow?.fecha_venta||'', x.fila.sky?.suc||'',
-          x.lote, x.cupon, x.liqRow?.tarjeta||'', x.liqRow?.nro_comercio||'',
-          num(x.liqRow?.monto), x.liqRow?.fecha_pago||'',
+          `+${x.diasExtra}d`,
+          ..._rFis(x.fila.sky, x.liqRow, x.lote, x.cupon, x.aut),
           x.diasEsperados, x.diasHabiles, x.diasExtra]));
     }
   }
 
   /* ── GETPOS ── */
   if (proc === 'getpos') {
-    const H = ['Estado','Fecha Skylab','Suc.','Autorización','Cupón',
-               'Monto Skylab','Monto Liq.','Fecha Pago'];
+    const H = [
+      'Estado',
+      // SKY
+      'Fecha SKY','Suc.','Tarjeta SKY','Plan SKY','Cuotas SKY','Factura SKY','Monto SKY',
+      // LIQ
+      'Fecha Venta','Fecha Pago','Nro Equipo','Nombre Equipo',
+      'Nro Cupón','Tarjeta Liq.','Nro Tarjeta','Cód. Autorización',
+      'Cuotas Liq.','Importe Venta','Nro Comercio','Banco Pagador',
+    ];
+    const _rGP = (sky, r, aut, cupon) => [
+      sky?.fecha||'', sky?.suc||'', sky?.tarjeta||'', sky?.plan||'',
+      sky?.cuotas||'', sky?.opNum||'', num(sky?.monto),
+      r?.fecha_venta||'', r?.fecha_pago||'', r?.equipo||'', r?.nombre_equipo||'',
+      cupon||r?.cupon||'', r?.tarjeta||'', r?.nro_tarjeta||'', aut||r?.aut||'',
+      r?.cuotas||'', num(r?.monto), r?.nro_comercio||'', r?.banco_pagador||'',
+    ];
     addSheet('Liquidadas', H, cruce.liquidadas.map(x => [
-      'Liquidada', x.fila.sky?.fecha||'', x.fila.sky?.suc||'',
-      x.aut, x.fila.proc?.cupon||x.fila.sky?.cupon||'',
-      num(x.fila.sky?.monto), num(x.liqRow?.monto), x.liqRow?.fecha_pago||'']));
+      'Liquidada', ..._rGP(x.fila.sky, x.liqRow, x.aut, x.fila.proc?.cupon||x.fila.sky?.cupon)]));
     addSheet('No liquidadas', H, cruce.noLiquidadas.map(x => [
       x.enLiq===null ? 'Sin archivo' : 'No liquidada',
-      x.fila.sky?.fecha||'', x.fila.sky?.suc||'',
-      x.aut, x.fila.proc?.cupon||x.fila.sky?.cupon||'',
-      num(x.fila.sky?.monto), '', '']));
+      ..._rGP(x.fila.sky, null, x.aut, x.fila.proc?.cupon||x.fila.sky?.cupon)]));
     addSheet('Sin confirmar', H, cruce.sinConfirmar.map(f => [
-      f.estado||'SIN MATCH', f.sky?.fecha||'', f.sky?.suc||'',
-      '', f.sky?.cupon||'', num(f.sky?.monto), '', '']));
+      f.estado||'SIN MATCH', ..._rGP(f.sky, null, '', f.sky?.cupon)]));
     addSheet('Extras en Liq.', H, cruce.extras.map(r => [
-      'Extra', r.fecha_venta||'', '',
-      r.aut, r.cupon, '', num(r.monto), r.fecha_pago||'']));
+      'Extra en Liq.', ..._rGP(null, r, r.aut, r.cupon)]));
   }
 
   /* ── GoC ── */
@@ -626,105 +640,143 @@ function _liqPopTab(proc, tab, cruce) {
 
   /* ── FISERV ──────────────────────────────────────────────────── */
   if (proc === 'fiserv') {
+    // Columnas SKY + todas las columnas del archivo de liquidaciones
     const colsFis = [
-      { key:'_estado',   label:'Estado' },
-      { key:'fecha',     label:'Fecha Skylab' },
-      { key:'suc',       label:'Suc.' },
-      { key:'lote',      label:'Lote' },
-      { key:'cupon',     label:'Cupón' },
-      { key:'aut',       label:'Autorización' },
-      { key:'monto_sky', label:'Monto Skylab',  cls:'num' },
-      { key:'monto_liq', label:'Monto Liq.',    cls:'num' },
-      { key:'fecha_pago',label:'Fecha Pago Liq.' },
-      { key:'liq_id',    label:'N° Liq.' },
+      { key:'_estado',       label:'Estado' },
+      // — Skylab —
+      { key:'fecha',         label:'Fecha SKY' },
+      { key:'suc',           label:'Suc.' },
+      { key:'tarjeta_sky',   label:'Tarjeta SKY' },
+      { key:'plan_sky',      label:'Plan SKY' },
+      { key:'cuotas_sky',    label:'Cuotas SKY', cls:'num' },
+      { key:'factura_sky',   label:'Factura SKY' },
+      { key:'monto_sky',     label:'Monto SKY', cls:'num' },
+      // — Liquidación —
+      { key:'fecha_venta',   label:'Fecha Venta' },
+      { key:'fecha_pago',    label:'Fecha Pago' },
+      { key:'nro_equipo',    label:'Nro Equipo' },
+      { key:'nombre_equipo', label:'Nombre Equipo' },
+      { key:'lote',          label:'Nro Lote' },
+      { key:'cupon',         label:'Nro Cupón' },
+      { key:'tarjeta_liq',   label:'Tarjeta Liq.' },
+      { key:'nro_tarjeta',   label:'Nro Tarjeta' },
+      { key:'aut',           label:'Cód. Autorización' },
+      { key:'cuotas_liq',    label:'Cuotas Liq.', cls:'num' },
+      { key:'monto_liq',     label:'Importe Venta', cls:'num' },
+      { key:'nro_comercio',  label:'Nro Comercio' },
+      { key:'banco_pagador', label:'Banco Pagador' },
+      { key:'liq_id',        label:'N° Liq.' },
     ];
+
+    const _skyFis = (sky) => ({
+      fecha:         sky?.fecha       || '',
+      suc:           sky?.suc         || '',
+      tarjeta_sky:   sky?.tarjeta     || '',
+      plan_sky:      sky?.plan        || '',
+      cuotas_sky:    sky?.cuotas      || '',
+      factura_sky:   sky?.opNum       || '',
+      monto_sky:     fmtM(sky?.monto),
+    });
+    const _liqFis = (r) => ({
+      fecha_venta:   r?.fecha_venta   || '—',
+      fecha_pago:    r?.fecha_pago    || '—',
+      nro_equipo:    r?.equipo        || '—',
+      nombre_equipo: r?.nombre_equipo || '—',
+      lote:          r?.lote          || '—',
+      cupon:         r?.cupon         || '—',
+      tarjeta_liq:   r?.tarjeta       || '—',
+      nro_tarjeta:   r?.nro_tarjeta   || '—',
+      aut:           r?.aut           || '—',
+      cuotas_liq:    r?.cuotas        || '—',
+      monto_liq:     r ? fmtM(r.monto) : '—',
+      nro_comercio:  r?.nro_comercio  || '—',
+      banco_pagador: r?.banco_pagador || '—',
+      liq_id:        r?.liq_id        || '—',
+    });
+    const _noLiq = () => ({
+      fecha_venta:'—', fecha_pago:'—', nro_equipo:'—', nombre_equipo:'—',
+      lote:'—', cupon:'—', tarjeta_liq:'—', nro_tarjeta:'—', aut:'—',
+      cuotas_liq:'—', monto_liq:'—', nro_comercio:'—', banco_pagador:'—', liq_id:'—',
+    });
 
     if (tab === 'liq') {
       _liqRenderTable(`tbl-liq-fiserv-liq`, colsFis,
         cruce.liquidadas.map(x => ({
-          _estado:   '✓ Liquidada',
-          fecha:     x.fila.sky?.fecha || '',
-          suc:       x.fila.sky?.suc  || '',
-          lote:      x.lote,
-          cupon:     x.cupon,
-          aut:       x.aut,
-          monto_sky: fmtM(x.fila.sky?.monto),
-          monto_liq: fmtM(x.liqRow?.monto),
-          fecha_pago:x.liqRow?.fecha_pago || '',
-          liq_id:    x.liqRow?.liq_id || '',
+          _estado: '✓ Liquidada',
+          ..._skyFis(x.fila.sky),
+          ..._liqFis(x.liqRow),
+          lote:  x.lote  || x.liqRow?.lote  || '—',
+          cupon: x.cupon || x.liqRow?.cupon || '—',
+          aut:   x.aut   || x.liqRow?.aut   || '—',
         })));
     }
     if (tab === 'noliq') {
       _liqRenderTable(`tbl-liq-fiserv-noliq`, colsFis,
         cruce.noLiquidadas.map(x => ({
-          _estado:   x.enLiq === null ? '⚠ Sin archivo' : '✗ No liquidada',
-          fecha:     x.fila.sky?.fecha || '',
-          suc:       x.fila.sky?.suc  || '',
-          lote:      x.lote,
-          cupon:     x.cupon,
-          aut:       x.aut,
-          monto_sky: fmtM(x.fila.sky?.monto),
-          monto_liq: '—',
-          fecha_pago:'—',
-          liq_id:    '—',
+          _estado: x.enLiq === null ? '⚠ Sin archivo' : '✗ No liquidada',
+          ..._skyFis(x.fila.sky),
+          ..._noLiq(),
+          lote:  x.lote  || '—',
+          cupon: x.cupon || '—',
+          aut:   x.aut   || '—',
         })));
     }
     if (tab === 'sinconf') {
       _liqRenderTable(`tbl-liq-fiserv-sinconf`, colsFis,
         cruce.sinConfirmar.map(f => ({
-          _estado:   f.estado || 'SIN MATCH',
-          fecha:     f.sky?.fecha || '',
-          suc:       f.sky?.suc  || '',
-          lote:      f.sky?.lote || '',
-          cupon:     f.sky?.cupon|| '',
-          aut:       '',
-          monto_sky: fmtM(f.sky?.monto),
-          monto_liq: '—',
-          fecha_pago:'—',
-          liq_id:    '—',
+          _estado: f.estado || 'SIN MATCH',
+          ..._skyFis(f.sky),
+          ..._noLiq(),
+          lote:  f.sky?.lote  || '—',
+          cupon: f.sky?.cupon || '—',
+          aut:   '—',
         })));
     }
     if (tab === 'extras') {
       _liqRenderTable(`tbl-liq-fiserv-extras`, colsFis,
         cruce.extras.map(r => ({
-          _estado:   '⚠ Extra',
-          fecha:     r.fecha_venta || '',
-          suc:       '',
-          lote:      r.lote,
-          cupon:     r.cupon,
-          aut:       r.aut,
-          monto_sky: '—',
-          monto_liq: fmtM(r.monto),
-          fecha_pago:r.fecha_pago || '—',
-          liq_id:    r.liq_id || '—',
+          _estado: '⚠ Extra en Liq.',
+          fecha: r.fecha_venta || '', suc: '', tarjeta_sky: '—', plan_sky: '—',
+          cuotas_sky: '—', factura_sky: '—', monto_sky: '—',
+          ..._liqFis(r),
         })));
     }
     if (tab === 'fueraplazo') {
       const colsFP = [
-        { key:'_estado',      label:'Estado' },
-        { key:'fecha_venta',  label:'Fecha Venta' },
-        { key:'suc',          label:'Suc.' },
-        { key:'lote',         label:'Lote' },
-        { key:'cupon',        label:'Cupón' },
-        { key:'tarjeta',      label:'Tarjeta' },
-        { key:'comercio',     label:'Comercio' },
-        { key:'monto_liq',    label:'Monto', cls:'num' },
-        { key:'fecha_pago',   label:'Fecha Pago' },
+        { key:'_estado',       label:'Estado' },
+        { key:'fecha',         label:'Fecha SKY' },
+        { key:'suc',           label:'Suc.' },
+        { key:'tarjeta_sky',   label:'Tarjeta SKY' },
+        { key:'plan_sky',      label:'Plan SKY' },
+        { key:'cuotas_sky',    label:'Cuotas SKY', cls:'num' },
+        { key:'factura_sky',   label:'Factura SKY' },
+        { key:'monto_sky',     label:'Monto SKY', cls:'num' },
+        { key:'fecha_venta',   label:'Fecha Venta' },
+        { key:'fecha_pago',    label:'Fecha Pago' },
+        { key:'nro_equipo',    label:'Nro Equipo' },
+        { key:'nombre_equipo', label:'Nombre Equipo' },
+        { key:'lote',          label:'Nro Lote' },
+        { key:'cupon',         label:'Nro Cupón' },
+        { key:'tarjeta_liq',   label:'Tarjeta Liq.' },
+        { key:'nro_tarjeta',   label:'Nro Tarjeta' },
+        { key:'aut',           label:'Cód. Autorización' },
+        { key:'cuotas_liq',    label:'Cuotas Liq.', cls:'num' },
+        { key:'monto_liq',     label:'Importe Venta', cls:'num' },
+        { key:'nro_comercio',  label:'Nro Comercio' },
+        { key:'banco_pagador', label:'Banco Pagador' },
+        { key:'liq_id',        label:'N° Liq.' },
         { key:'dias_esperados',label:'Días Esperados', cls:'num' },
-        { key:'dias_reales',  label:'Días Reales', cls:'num' },
-        { key:'dias_extra',   label:'Días Extra', cls:'num' },
+        { key:'dias_reales',   label:'Días Reales', cls:'num' },
+        { key:'dias_extra',    label:'Días Extra', cls:'num' },
       ];
       _liqRenderTable(`tbl-liq-fiserv-fueraplazo`, colsFP,
         cruce.fueraPlazo.map(x => ({
           _estado:       `⏱ +${x.diasExtra}d`,
-          fecha_venta:   x.liqRow?.fecha_venta || '',
-          suc:           x.fila.sky?.suc || '',
-          lote:          x.lote,
-          cupon:         x.cupon,
-          tarjeta:       x.liqRow?.tarjeta || '',
-          comercio:      x.liqRow?.nro_comercio || '',
-          monto_liq:     fmtM(x.liqRow?.monto),
-          fecha_pago:    x.liqRow?.fecha_pago || '',
+          ..._skyFis(x.fila.sky),
+          ..._liqFis(x.liqRow),
+          lote:          x.lote  || x.liqRow?.lote  || '—',
+          cupon:         x.cupon || x.liqRow?.cupon || '—',
+          aut:           x.aut   || x.liqRow?.aut   || '—',
           dias_esperados:x.diasEsperados,
           dias_reales:   x.diasHabiles,
           dias_extra:    x.diasExtra,
@@ -736,66 +788,90 @@ function _liqPopTab(proc, tab, cruce) {
   /* ── GETPOS ─────────────────────────────────────────────────── */
   if (proc === 'getpos') {
     const colsGP = [
-      { key:'_estado',   label:'Estado' },
-      { key:'fecha',     label:'Fecha Skylab' },
-      { key:'suc',       label:'Suc.' },
-      { key:'aut',       label:'Autorización' },
-      { key:'cupon',     label:'Cupón' },
-      { key:'monto_sky', label:'Monto Skylab', cls:'num' },
-      { key:'monto_liq', label:'Monto Liq.',   cls:'num' },
-      { key:'fecha_pago',label:'Fecha Pago' },
+      { key:'_estado',       label:'Estado' },
+      // — Skylab —
+      { key:'fecha',         label:'Fecha SKY' },
+      { key:'suc',           label:'Suc.' },
+      { key:'tarjeta_sky',   label:'Tarjeta SKY' },
+      { key:'plan_sky',      label:'Plan SKY' },
+      { key:'cuotas_sky',    label:'Cuotas SKY', cls:'num' },
+      { key:'factura_sky',   label:'Factura SKY' },
+      { key:'monto_sky',     label:'Monto SKY', cls:'num' },
+      // — Liquidación —
+      { key:'fecha_venta',   label:'Fecha Venta' },
+      { key:'fecha_pago',    label:'Fecha Pago' },
+      { key:'nro_equipo',    label:'Nro Equipo' },
+      { key:'nombre_equipo', label:'Nombre Equipo' },
+      { key:'cupon',         label:'Nro Cupón' },
+      { key:'tarjeta_liq',   label:'Tarjeta Liq.' },
+      { key:'nro_tarjeta',   label:'Nro Tarjeta' },
+      { key:'aut',           label:'Cód. Autorización' },
+      { key:'cuotas_liq',    label:'Cuotas Liq.', cls:'num' },
+      { key:'monto_liq',     label:'Importe Venta', cls:'num' },
+      { key:'nro_comercio',  label:'Nro Comercio' },
+      { key:'banco_pagador', label:'Banco Pagador' },
     ];
+
+    const _skyGP = (sky) => ({
+      fecha:       sky?.fecha   || '',
+      suc:         sky?.suc     || '',
+      tarjeta_sky: sky?.tarjeta || '',
+      plan_sky:    sky?.plan    || '',
+      cuotas_sky:  sky?.cuotas  || '',
+      factura_sky: sky?.opNum   || '',
+      monto_sky:   fmtM(sky?.monto),
+    });
+    const _liqGP = (r, aut, cupon) => ({
+      fecha_venta:   r?.fecha_venta   || '—',
+      fecha_pago:    r?.fecha_pago    || '—',
+      nro_equipo:    r?.equipo        || '—',
+      nombre_equipo: r?.nombre_equipo || '—',
+      cupon:         cupon            || r?.cupon || '—',
+      tarjeta_liq:   r?.tarjeta       || '—',
+      nro_tarjeta:   r?.nro_tarjeta   || '—',
+      aut:           aut              || r?.aut   || '—',
+      cuotas_liq:    r?.cuotas        || '—',
+      monto_liq:     r ? fmtM(r.monto) : '—',
+      nro_comercio:  r?.nro_comercio  || '—',
+      banco_pagador: r?.banco_pagador || '—',
+    });
+    const _noLiqGP = (aut, cupon) => ({
+      fecha_venta:'—', fecha_pago:'—', nro_equipo:'—', nombre_equipo:'—',
+      cupon: cupon || '—', tarjeta_liq:'—', nro_tarjeta:'—',
+      aut: aut || '—', cuotas_liq:'—', monto_liq:'—', nro_comercio:'—', banco_pagador:'—',
+    });
 
     if (tab === 'liq') {
       _liqRenderTable(`tbl-liq-getpos-liq`, colsGP,
         cruce.liquidadas.map(x => ({
-          _estado:   '✓ Liquidada',
-          fecha:     x.fila.sky?.fecha || '',
-          suc:       x.fila.sky?.suc  || '',
-          aut:       x.aut,
-          cupon:     x.fila.proc?.cupon || x.fila.sky?.cupon || '',
-          monto_sky: fmtM(x.fila.sky?.monto),
-          monto_liq: fmtM(x.liqRow?.monto),
-          fecha_pago:x.liqRow?.fecha_pago || '',
+          _estado: '✓ Liquidada',
+          ..._skyGP(x.fila.sky),
+          ..._liqGP(x.liqRow, x.aut, x.fila.proc?.cupon || x.fila.sky?.cupon),
         })));
     }
     if (tab === 'noliq') {
       _liqRenderTable(`tbl-liq-getpos-noliq`, colsGP,
         cruce.noLiquidadas.map(x => ({
-          _estado:   x.enLiq === null ? '⚠ Sin archivo' : '✗ No liquidada',
-          fecha:     x.fila.sky?.fecha || '',
-          suc:       x.fila.sky?.suc  || '',
-          aut:       x.aut,
-          cupon:     x.fila.proc?.cupon || x.fila.sky?.cupon || '',
-          monto_sky: fmtM(x.fila.sky?.monto),
-          monto_liq: '—',
-          fecha_pago:'—',
+          _estado: x.enLiq === null ? '⚠ Sin archivo' : '✗ No liquidada',
+          ..._skyGP(x.fila.sky),
+          ..._noLiqGP(x.aut, x.fila.proc?.cupon || x.fila.sky?.cupon),
         })));
     }
     if (tab === 'sinconf') {
       _liqRenderTable(`tbl-liq-getpos-sinconf`, colsGP,
         cruce.sinConfirmar.map(f => ({
-          _estado:   f.estado || 'SIN MATCH',
-          fecha:     f.sky?.fecha || '',
-          suc:       f.sky?.suc  || '',
-          aut:       '',
-          cupon:     f.sky?.cupon|| '',
-          monto_sky: fmtM(f.sky?.monto),
-          monto_liq: '—',
-          fecha_pago:'—',
+          _estado: f.estado || 'SIN MATCH',
+          ..._skyGP(f.sky),
+          ..._noLiqGP('', f.sky?.cupon),
         })));
     }
     if (tab === 'extras') {
       _liqRenderTable(`tbl-liq-getpos-extras`, colsGP,
         cruce.extras.map(r => ({
-          _estado:   '⚠ Extra',
-          fecha:     r.fecha_venta || '',
-          suc:       '',
-          aut:       r.aut,
-          cupon:     r.cupon,
-          monto_sky: '—',
-          monto_liq: fmtM(r.monto),
-          fecha_pago:r.fecha_pago || '',
+          _estado: '⚠ Extra en Liq.',
+          fecha: r.fecha_venta || '', suc: '', tarjeta_sky: '—', plan_sky: '—',
+          cuotas_sky: '—', factura_sky: '—', monto_sky: '—',
+          ..._liqGP(r, r.aut, r.cupon),
         })));
     }
   }
