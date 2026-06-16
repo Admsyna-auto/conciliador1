@@ -372,21 +372,30 @@ function importarTMExcel(key, input) {
       };
 
       const map = mapCols[key] || {};
+      // Normaliza header: minúsculas, reemplaza vocales acentuadas, sin espacios/puntos
+      const normHdr = h => String(h ?? '').toLowerCase()
+        .replace(/[áàâä]/g,'a').replace(/[éèêë]/g,'e')
+        .replace(/[íìîï]/g,'i').replace(/[óòôö]/g,'o')
+        .replace(/[úùûü]/g,'u').replace(/[ñ]/g,'n')
+        .replace(/[\s.()]/g,'');
       const imported = rows.map(r => {
         const obj = {};
         for (const [col, field] of Object.entries(map)) {
-          // Buscar columna case-insensitive
-          const found = Object.keys(r).find(k => k.toLowerCase().replace(/[\s.]/g,'') === col.replace(/[\s.]/g,''));
+          const found = Object.keys(r).find(k => normHdr(k) === col.replace(/[\s.]/g,''));
           if (found !== undefined && obj[field] === undefined) obj[field] = String(r[found] ?? '');
         }
         return obj;
       }).filter(r => Object.values(r).some(v => v !== ''));
 
-      // Post-proceso: fechas serial Excel → ISO (tasas y plazos)
+      // Post-proceso: fechas serial Excel → ISO  (también acepta DD/MM/YYYY texto)
       const serialToISO = v => {
         const n = parseFloat(v);
-        if (isNaN(n) || n < 10000) return v;
-        return new Date(Math.round((n - 25569) * 86400000)).toISOString().slice(0, 10);
+        if (!isNaN(n) && n >= 10000)
+          return new Date(Math.round((n - 25569) * 86400000)).toISOString().slice(0, 10);
+        // Fecha en texto DD/MM/YYYY o D/M/YYYY (formato argentino)
+        const m = String(v).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (m) return `${m[3]}-${m[2].padStart(2,'0')}-${m[1].padStart(2,'0')}`;
+        return v;
       };
       if (key === 'tasas') {
         imported.forEach(row => {

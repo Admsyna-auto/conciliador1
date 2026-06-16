@@ -243,11 +243,16 @@ function _cruzarLiqFiserv() {
   const sinConfirmar  = [];
 
   for (const fila of filasFis) {
-    const esOK = fila.estado?.startsWith('OK');
-    if (!esOK) { sinConfirmar.push(fila); continue; }
+    const esConfirmada = fila.estado?.startsWith('OK') ||
+      fila.estado === 'DIF. CUOTAS' ||
+      fila.estado?.startsWith('COM. ERRADO') ||
+      fila.estado?.startsWith('MAL FACTURADO');
+    if (!esConfirmada) { sinConfirmar.push(fila); continue; }
+    // Devoluciones/anulaciones no aparecen en LIQUIDACIONES (se omiten al parsear)
+    if (fila.esDevolucion === 'SI' || fila.sky?.esNeg) { sinConfirmar.push(fila); continue; }
 
-    const lote  = _liqNorm(fila.proc?.lote   || fila.sky?.lote   || '');
-    const cupon = _liqNorm(fila.proc?.ticket  || fila.proc?.cupon || fila.sky?.cupon || '');
+    const lote  = _liqNorm(fila.proc?.lote   || '');
+    const cupon = _liqNorm(fila.proc?.ticket  || fila.proc?.cupon || '');
     const aut   = _liqNormAut(fila.proc?.aut  || '');
 
     if (!_LIQ_CUPONES.length) {
@@ -255,7 +260,7 @@ function _cruzarLiqFiserv() {
       continue;
     }
 
-    // Buscar en liquidación: primero por lote+cupón, luego por autorización
+    // Buscar en liquidación: primero por lote+cupón (solo datos proc), luego por autorización
     const liqRow = byLoteCupon[`${lote}-${cupon}`] || byAut[aut];
 
     if (liqRow) {
@@ -314,8 +319,12 @@ function _cruzarLiqGetpos() {
   const sinConfirmar = [];
 
   for (const fila of filasGP) {
-    const esOK = fila.estado?.startsWith('OK');
-    if (!esOK) { sinConfirmar.push(fila); continue; }
+    const esConfirmada = fila.estado?.startsWith('OK') ||
+      fila.estado === 'DIF. CUOTAS' ||
+      fila.estado?.startsWith('COM. ERRADO') ||
+      fila.estado?.startsWith('MAL FACTURADO');
+    if (!esConfirmada) { sinConfirmar.push(fila); continue; }
+    if (fila.esDevolucion === 'SI' || fila.sky?.esNeg) { sinConfirmar.push(fila); continue; }
 
     const aut = _liqNormAut(fila.proc?.aut || '');
 
@@ -452,6 +461,97 @@ function _liqFileSection(proc, procLabel, icon, hasFile, count) {
   </div>`;
 }
 
+// ── Exportar todas las pestañas de un módulo a Excel multi-hoja ──────
+function _liqExportarTodo(proc) {
+  const cruce = _liqCache[proc];
+  if (!cruce) { _showToast('Primero ejecutá el cruce de Liquidaciones.'); return; }
+
+  const wb  = XLSX.utils.book_new();
+  const hoy = new Date().toISOString().slice(0, 10);
+  const num = v => (typeof v === 'number' ? v : parseFloat(String(v).replace(/[^0-9.,-]/g,'').replace(',','.')) || 0);
+
+  const addSheet = (name, headers, rows) => {
+    if (!rows.length) return;
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+  };
+
+  /* ── FISERV ── */
+  if (proc === 'fiserv') {
+    const H = ['Estado','Fecha Skylab','Suc.','Lote','Cupón','Autorización',
+               'Monto Skylab','Monto Liq.','Fecha Pago','N° Liq.'];
+    addSheet('Liquidadas', H, cruce.liquidadas.map(x => [
+      'Liquidada', x.fila.sky?.fecha||'', x.fila.sky?.suc||'',
+      x.lote, x.cupon, x.aut,
+      num(x.fila.sky?.monto), num(x.liqRow?.monto),
+      x.liqRow?.fecha_pago||'', x.liqRow?.liq_id||'']));
+    addSheet('No liquidadas', H, cruce.noLiquidadas.map(x => [
+      x.enLiq===null ? 'Sin archivo' : 'No liquidada',
+      x.fila.sky?.fecha||'', x.fila.sky?.suc||'',
+      x.lote, x.cupon, x.aut,
+      num(x.fila.sky?.monto), '', '', '']));
+    addSheet('Sin confirmar', H, cruce.sinConfirmar.map(f => [
+      f.estado||'SIN MATCH', f.sky?.fecha||'', f.sky?.suc||'',
+      f.sky?.lote||'', f.sky?.cupon||'', '',
+      num(f.sky?.monto), '', '', '']));
+    addSheet('Extras en Liq.', H, cruce.extras.map(r => [
+      'Extra', r.fecha_venta||'', '',
+      r.lote, r.cupon, r.aut,
+      '', num(r.monto), r.fecha_pago||'', r.liq_id||'']));
+    if (cruce.fueraPlazo?.length) {
+      addSheet('Fuera de plazo',
+        ['Estado','Fecha Venta','Suc.','Lote','Cupón','Tarjeta','Comercio',
+         'Monto','Fecha Pago','Días Esperados','Días Reales','Días Extra'],
+        cruce.fueraPlazo.map(x => [
+          `+${x.diasExtra}d`, x.liqRow?.fecha_venta||'', x.fila.sky?.suc||'',
+          x.lote, x.cupon, x.liqRow?.tarjeta||'', x.liqRow?.nro_comercio||'',
+          num(x.liqRow?.monto), x.liqRow?.fecha_pago||'',
+          x.diasEsperados, x.diasHabiles, x.diasExtra]));
+    }
+  }
+
+  /* ── GETPOS ── */
+  if (proc === 'getpos') {
+    const H = ['Estado','Fecha Skylab','Suc.','Autorización','Cupón',
+               'Monto Skylab','Monto Liq.','Fecha Pago'];
+    addSheet('Liquidadas', H, cruce.liquidadas.map(x => [
+      'Liquidada', x.fila.sky?.fecha||'', x.fila.sky?.suc||'',
+      x.aut, x.fila.proc?.cupon||x.fila.sky?.cupon||'',
+      num(x.fila.sky?.monto), num(x.liqRow?.monto), x.liqRow?.fecha_pago||'']));
+    addSheet('No liquidadas', H, cruce.noLiquidadas.map(x => [
+      x.enLiq===null ? 'Sin archivo' : 'No liquidada',
+      x.fila.sky?.fecha||'', x.fila.sky?.suc||'',
+      x.aut, x.fila.proc?.cupon||x.fila.sky?.cupon||'',
+      num(x.fila.sky?.monto), '', '']));
+    addSheet('Sin confirmar', H, cruce.sinConfirmar.map(f => [
+      f.estado||'SIN MATCH', f.sky?.fecha||'', f.sky?.suc||'',
+      '', f.sky?.cupon||'', num(f.sky?.monto), '', '']));
+    addSheet('Extras en Liq.', H, cruce.extras.map(r => [
+      'Extra', r.fecha_venta||'', '',
+      r.aut, r.cupon, '', num(r.monto), r.fecha_pago||'']));
+  }
+
+  /* ── GoC ── */
+  if (proc === 'goc') {
+    const H = ['Estado','Fecha Skylab','Sucursal','N° Orden GoC',
+               'Cupón Skylab','Monto Skylab','Fecha Pago GoC','Método'];
+    addSheet('Liquidadas', H, cruce.liquidadas.map(x => [
+      x.fila.estado||'Con orden', x.fila.sky?.fecha||'', x.fila.sky?.suc||'',
+      x.orden, x.fila.sky?.cupon||'', num(x.fila.sky?.monto), '', x.fila.metodo||'']));
+    addSheet('No liquidadas', H, cruce.noLiquidadas.map(x => [
+      x.fila.estado||'SIN MATCH', x.fila.sky?.fecha||'', x.fila.sky?.suc||'',
+      '', x.fila.sky?.cupon||'', num(x.fila.sky?.monto), '', '']));
+    addSheet('Extras', H, cruce.extras.map(p => [
+      'Pago sin Skylab', p.fechaOrigen||'', p.sucNombre||'',
+      p.orden, p.refExt||'', num(p.importe), p.fechaPago||'', p.fuente||'']));
+  }
+
+  if (!wb.SheetNames.length) { _showToast('Sin datos para exportar.'); return; }
+  const label = proc.toUpperCase();
+  XLSX.writeFile(wb, `liquidaciones_${label}_${hoy}.xlsx`);
+  _showToast(`✓ liquidaciones_${label}_${hoy}.xlsx`);
+}
+
 // ── Panel genérico (KPIs + tabs + tablas) ────────────────────────────
 function _liqBuildPanel(opts) {
   const { id, kpis, tabs, fileSection } = opts;
@@ -472,12 +572,21 @@ function _liqBuildPanel(opts) {
     </div>
 
     <!-- Tab strip -->
-    <div class="tab-strip" id="tab-strip-liq-${id}">
-      ${tabs.map((t,i)=>`
-        <button class="tb${i===0?' active':''}" data-tab="${t.key}"
-          onclick="showTab('liqtab-${id}-${t.key}','tab-strip-liq-${id}',this);_liqRenderTab('${id}','${t.key}')">
-          ${t.label} <span class="cnt" style="${t.cs||''}">${t.n}</span>
-        </button>`).join('')}
+    <div style="display:flex;align-items:center;gap:6px">
+      <div class="tab-strip" id="tab-strip-liq-${id}" style="display:flex;align-items:center;flex-wrap:wrap;flex:1;margin-bottom:0">
+        ${tabs.map((t,i)=>`
+          <button class="tb${i===0?' active':''}" data-tab="${t.key}"
+            onclick="showTab('liqtab-${id}-${t.key}','tab-strip-liq-${id}',this);_liqRenderTab('${id}','${t.key}')">
+            ${t.label} <span class="cnt" style="${t.cs||''}">${t.n}</span>
+          </button>`).join('')}
+      </div>
+      <button onclick="_liqExportarTodo('${id}')"
+        style="background:none;border:1px solid var(--b2);color:var(--m1);
+          border-radius:4px;padding:3px 10px;font-size:9px;cursor:pointer;
+          font-family:var(--sans);white-space:nowrap;flex-shrink:0"
+        title="Exportar todas las pestañas a Excel">
+        ↓ Exportar todo
+      </button>
     </div>
 
     <!-- Tab bodies -->
@@ -1013,12 +1122,13 @@ function _cruzarTasas() {
   const pasarDescuento = [];   // error vendedor: tasa cobrada ≠ tasa del plan Skylab
   const reclamarProc   = [];   // error procesadora: tasa cobrada > tasa acordada para SU plan
   const sinTasa        = [];   // no hay config en TM.tasas para esta operación
+  let   _okCount       = 0;   // con liqRow+CFO, tasa configurada y sin diferencia
 
   const filas = RESULTADO.filter(r => !r.sky?.esGOCUOTAS);
 
   for (const fila of filas) {
-    const lote  = _liqNorm(fila.proc?.lote   || fila.sky?.lote  || '');
-    const cupon = _liqNorm(fila.proc?.cupon  || fila.proc?.ticket || fila.sky?.cupon || '');
+    const lote  = _liqNorm(fila.proc?.lote   || '');
+    const cupon = _liqNorm(fila.proc?.cupon  || fila.proc?.ticket || '');
     const aut   = _liqNormAut(fila.proc?.aut || '');
 
     const liqRow = byLoteCupon[`${lote}-${cupon}`] || byAut[aut];
@@ -1048,28 +1158,34 @@ function _cruzarTasas() {
     }
 
     // Case 1 — PASAR A DESCUENTO: tasa cobrada ≠ tasa del plan Skylab
+    let hayDifSky = false;
     if (tmSky) {
       const td_fact = parseFloat(tmSky.tasa || 0) / 100;
       const difPct  = td_cobrada - td_fact;
       if (Math.abs(difPct) >= 0.0005) {
         pasarDescuento.push({ fila, liqRow, td_cobrada, td_fact, tmRow: tmSky, difPct,
           difMonto: difPct * liqRow.monto, procNom });
+        hayDifSky = true;
       }
     }
 
     // Case 2 — RECLAMAR A PROCESADORA: tasa cobrada > tasa acordada para SU propio plan
+    let hayDifProc = false;
     if (tmLiq) {
       const td_ac  = parseFloat(tmLiq.tasa || 0) / 100;
       const difPct = td_cobrada - td_ac;
       if (difPct > 0.0005) {
         reclamarProc.push({ fila, liqRow, td_cobrada, td_ac, tmRow: tmLiq, difPct,
           difMonto: difPct * liqRow.monto, procNom });
+        hayDifProc = true;
       }
     }
+
+    if (!hayDifSky && !hayDifProc) _okCount++;
   }
 
   return {
-    pasarDescuento, reclamarProc, sinTasa,
+    pasarDescuento, reclamarProc, sinTasa, _okCount,
     montoPD: pasarDescuento.reduce((s, x) => s + Math.abs(x.difMonto), 0),
     montoRP: reclamarProc.reduce((s, x) => s + Math.abs(x.difMonto), 0),
     tieneTasas: !!(TM?.tasas?.length),
@@ -1293,8 +1409,10 @@ function renderModuloLiqTasas() {
     <div style="display:flex;gap:10px;padding:12px 16px;flex-shrink:0;flex-wrap:wrap;
       border-bottom:1px solid var(--b1)">
       ${[
-        { label:'📊 Ops analizadas',  val:(RESULTADO?.filter(r=>!r.sky?.esGOCUOTAS).length||0).toLocaleString('es-AR'),
-          bc:'rgba(79,142,247,.3)', cls:'cyn', sub:`${_LIQ_CUPONES.filter(r=>r.cfo>0).length} con CFO` },
+        { label:'📊 Con tasa cobrada', val:(pasarDescuento.length+reclamarProc.length+sinTasa.length+
+            (cruce._okCount||0)).toLocaleString('es-AR'),
+          bc:'rgba(79,142,247,.3)', cls:'cyn',
+          sub:`de ${(RESULTADO?.filter(r=>!r.sky?.esGOCUOTAS).length||0).toLocaleString('es-AR')} no-GoC · GoC excluido` },
         { label:'⚠ Error vendedor',   val:pasarDescuento.length.toLocaleString('es-AR'),
           bc:'rgba(251,191,36,.3)', cls:'yel', sub:_liqFmtARS(montoPD) },
         { label:'🔴 Reclamar proc.',  val:reclamarProc.length.toLocaleString('es-AR'),

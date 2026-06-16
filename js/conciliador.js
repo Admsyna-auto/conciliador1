@@ -593,6 +593,13 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
       if (hit) return armarFilaGoC(s, hit, procEsp, met);
     }
 
+    // GoC en Skylab pero sin archivo GoC cargado → estado diferenciado para no inflar SIN MATCH
+    if (s.esGOCUOTAS && !_allGocPagos.length) {
+      return { sky:s, proc:null, metodo:'SIN ARCHIVO', estado:'SIN ARCHIVO GOC',
+        procEncontrada:'', procEsperada:procEsp, comOK:'', sucOK:'',
+        matchParcial:'', esDevolucion:'NO', esAnulSinCobro:'NO' };
+    }
+
     return { sky:s, proc:null, metodo:'SIN MATCH', estado:'SIN MATCH',
       procEncontrada:'', procEsperada:procEsp, comOK:'', sucOK:'',
       matchParcial:'', esDevolucion:'NO', esAnulSinCobro:'NO' };
@@ -742,6 +749,8 @@ function aplicarCorreccionesManuales() {
     // ── Correcciones de Go Cuotas (proc=GOCUOTAS o GOCELULAR) ──────
     const isGoC = cor.proc === 'GOCUOTAS' || cor.proc === 'GOCELULAR';
     if (isGoC) {
+      // Sin archivo GoC cargado → no intentar corrección, dejar en SIN ARCHIVO GOC
+      if (fila.estado === 'SIN ARCHIVO GOC') continue;
       // Si la cascada automática YA encontró un match GoC → marcar como CRUZADO y no pisar
       if (fila.estado?.includes('GoC') || fila.estado?.includes('GoCelular')) {
         CORREGIDAS[key] = { ...cor,
@@ -928,16 +937,17 @@ async function conciliar() {
 
 function contarEstados() {
   return {
-    ok:   RESULTADO.filter(r=>r.estado==='OK'||r.estado==='OK (equiv.)'||r.estado==='OK (integrado)').length,
-    sin:  RESULTADO.filter(r=>r.estado==='SIN MATCH').length,
-    mal:  RESULTADO.filter(r=>r.estado?.startsWith('MAL FACTURADO')).length,
-    com:  RESULTADO.filter(r=>r.estado==='COM. ERRADO').length,
-    int:  RESULTADO.filter(r=>r.estado==='INTEGRADO').length,
-    urg:  RESULTADO.filter(r=>r.estado==='REVISION URGENTE').length,
-    ref:  RESULTADO.filter(r=>r.estado==='REFACTURADO').length,
-    anul: RESULTADO.filter(r=>r.estado==='ANULACION SIN COBRO').length,
-    dev:  RESULTADO.filter(r=>r.sky.esNeg).length,
-    dif:  RESULTADO.filter(r=>r.estado==='DIF. CUOTAS').length,
+    ok:       RESULTADO.filter(r=>r.estado==='OK'||r.estado==='OK (equiv.)'||r.estado==='OK (integrado)').length,
+    sin:      RESULTADO.filter(r=>r.estado==='SIN MATCH').length,
+    mal:      RESULTADO.filter(r=>r.estado?.startsWith('MAL FACTURADO')).length,
+    com:      RESULTADO.filter(r=>r.estado==='COM. ERRADO').length,
+    int:      RESULTADO.filter(r=>r.estado==='INTEGRADO').length,
+    urg:      RESULTADO.filter(r=>r.estado==='REVISION URGENTE').length,
+    ref:      RESULTADO.filter(r=>r.estado==='REFACTURADO').length,
+    anul:     RESULTADO.filter(r=>r.estado==='ANULACION SIN COBRO').length,
+    dev:      RESULTADO.filter(r=>r.sky.esNeg).length,
+    dif:      RESULTADO.filter(r=>r.estado==='DIF. CUOTAS').length,
+    sinArch:  RESULTADO.filter(r=>r.estado==='SIN ARCHIVO GOC').length,
   };
 }
 
@@ -1020,6 +1030,10 @@ function updateCounts() {
   // Badge del módulo 3 muestra la suma de diferencias accionables
   const mcntDif = document.getElementById('mcnt-diferencias');
   if (mcntDif) mcntDif.textContent = (difCuotasCount + difProcCount).toLocaleString();
+
+  // GoC sin archivo: mostrar/ocultar KPI en el dashboard
+  const kSinArch = document.getElementById('k-sin-arch');
+  if (kSinArch) kSinArch.textContent = st.sinArch.toLocaleString('es-AR');
 
   // Contadores mega-tabs
   const cntMegaOps = document.getElementById('cnt-mega-ops');
