@@ -315,7 +315,9 @@ function importarTMExcel(key, input) {
         planes:      { 'plan':'plan','cuotas':'cuotas','tarjeta':'tarjeta','procesadora':'procesadora','codigos':'codigos' },
         tasas:       { 'acuerdo':'acuerdo','procesadora':'procesadora','comercio':'comercio',
                        'tarjeta':'tarjeta','plan':'plan','cuotas':'cuotas',
-                       'tasa':'tasa','coeficiente':'coef','desde':'vigDesde','hasta':'vigHasta' },
+                       'tasa':'tasa','tasa%':'tasa',
+                       'coef':'coef','coeficiente':'coef',
+                       'desde':'vigDesde','hasta':'vigHasta' },
       };
 
       const map = mapCols[key] || {};
@@ -324,10 +326,27 @@ function importarTMExcel(key, input) {
         for (const [col, field] of Object.entries(map)) {
           // Buscar columna case-insensitive
           const found = Object.keys(r).find(k => k.toLowerCase().replace(/[\s.]/g,'') === col.replace(/[\s.]/g,''));
-          if (found !== undefined) obj[field] = String(r[found] ?? '');
+          if (found !== undefined && obj[field] === undefined) obj[field] = String(r[found] ?? '');
         }
         return obj;
       }).filter(r => Object.values(r).some(v => v !== ''));
+
+      // Post-proceso para tasas: convertir tasa decimal→%, fechas serial→ISO
+      if (key === 'tasas') {
+        const serialToISO = v => {
+          const n = parseFloat(v);
+          if (isNaN(n) || n < 10000) return v;
+          return new Date(Math.round((n - 25569) * 86400000)).toISOString().slice(0, 10);
+        };
+        imported.forEach(row => {
+          if (row.tasa) {
+            const n = parseFloat(row.tasa);
+            if (!isNaN(n) && n > 0 && n < 1) row.tasa = (n * 100).toFixed(4).replace(/\.?0+$/, '');
+          }
+          if (row.vigDesde) row.vigDesde = serialToISO(row.vigDesde);
+          if (row.vigHasta) row.vigHasta = serialToISO(row.vigHasta);
+        });
+      }
 
       if (!TM[key]) TM[key] = [];
       TM[key].push(...imported);
