@@ -351,6 +351,7 @@ function importarTMExcel(key, input) {
       if (!TM[key]) TM[key] = [];
       TM[key].push(...imported);
       showTM(key);
+      guardarTM();   // persiste a tablasMaestras inmediatamente (no depende de Guardar cambios)
       scheduleAutoSave();
       alert(`✓ ${imported.length} registros importados en ${tmLabel(key)}`);
     } catch(err) {
