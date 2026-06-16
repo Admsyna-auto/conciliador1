@@ -892,7 +892,7 @@ function _liqTD(r) {
 
 // Lookup en TM.tasas usando la fecha exacta de la operación (no "hoy")
 function _buscarTasaParaFecha(tarjeta, cuotas, procesadora, fecha) {
-  if (!window.TM?.tasas?.length) return null;
+  if (!TM?.tasas?.length) return null;
   const d   = (fecha || '').slice(0, 10) || new Date().toISOString().slice(0, 10);
   const up  = s => String(s || '').toUpperCase().trim();
   const c   = parseInt(cuotas) || 1;
@@ -984,7 +984,7 @@ function _cruzarTasas() {
     pasarDescuento, reclamarProc, sinTasa,
     montoPD: pasarDescuento.reduce((s, x) => s + Math.abs(x.difMonto), 0),
     montoRP: reclamarProc.reduce((s, x) => s + Math.abs(x.difMonto), 0),
-    tieneTasas: !!(window.TM?.tasas?.length),
+    tieneTasas: !!(TM?.tasas?.length),
   };
 }
 
@@ -1104,7 +1104,7 @@ function renderModuloLiqTasas() {
     return;
   }
 
-  if (!window.TM?.tasas?.length) {
+  if (!TM?.tasas?.length) {
     panel.innerHTML = `<div style="display:flex;flex-direction:column;align-items:center;
       justify-content:center;height:100%;gap:16px;color:var(--m2);text-align:center;padding:40px">
       <div style="font-size:36px;opacity:.15">⚙</div>
