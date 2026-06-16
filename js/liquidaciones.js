@@ -232,59 +232,87 @@ function _liqBuildIndexes() {
 }
 
 // ── CRUCE: FISERV ────────────────────────────────────────────────────
-// Clave: Lote + Cupón (con fallback por autorización)
+// Flujo: LIQ → PROC → SKY
+// 1. Indexar datos proc de RESULTADO por lote+cupon (y aut como secundario)
+// 2. Para cada fila de liquidaciones, buscar proc coincidente
+// 3. Los proc que matchearon → sus ops SKY son "liquidadas"
+// 4. Los proc sin match en liq → "no liquidadas"
+// 5. Las filas de liq sin match en proc → "extras"
 function _cruzarLiqFiserv() {
   if (typeof RESULTADO === 'undefined' || !RESULTADO.length) return null;
 
   const filasFis = RESULTADO.filter(r => !r.sky?.esGETPos && !r.sky?.esGOCUOTAS);
-  const { byLoteCupon, byAut } = _liqBuildIndexes();
-  const autsUsados = new Set();  // para calcular extras
-
-  const liquidadas    = [];
-  const noLiquidadas  = [];
-  const sinConfirmar  = [];
+  const sinConfirmar = [];
+  const confirmadas  = [];
 
   for (const fila of filasFis) {
     const esConfirmada = fila.estado?.startsWith('OK') ||
       fila.estado === 'DIF. CUOTAS' ||
       fila.estado?.startsWith('COM. ERRADO') ||
       fila.estado?.startsWith('MAL FACTURADO');
-    if (!esConfirmada) { sinConfirmar.push(fila); continue; }
-    // Devoluciones/anulaciones no aparecen en LIQUIDACIONES (se omiten al parsear)
-    if (fila.esDevolucion === 'SI' || fila.sky?.esNeg) { sinConfirmar.push(fila); continue; }
+    if (!esConfirmada || fila.esDevolucion === 'SI' || fila.sky?.esNeg) {
+      sinConfirmar.push(fila);
+    } else {
+      confirmadas.push(fila);
+    }
+  }
 
-    const lote  = _liqNorm(fila.proc?.lote   || '');
-    const cupon = _liqNorm(fila.proc?.ticket  || fila.proc?.cupon || '');
-    const aut   = _liqNormAut(fila.proc?.aut  || '');
+  if (!_LIQ_CUPONES.length) {
+    return {
+      liquidadas: [], sinConfirmar, extras: [], fueraPlazo: [],
+      noLiquidadas: confirmadas.map(fila => ({
+        fila,
+        lote:  _liqNorm(fila.proc?.lote || ''),
+        cupon: _liqNorm(fila.proc?.ticket || fila.proc?.cupon || ''),
+        aut:   _liqNormAut(fila.proc?.aut || ''),
+        enLiq: null, liqRow: null,
+      })),
+      montoLiquidado:0, montoNoLiq: confirmadas.reduce((s,f)=>s+Math.abs(f.sky?.monto||0),0),
+      montoExtras:0, montoFueraPlazo:0,
+      totalOK: confirmadas.length, tieneLiq:false, tienePlazos:!!(TM?.plazos?.length),
+    };
+  }
 
-    if (!_LIQ_CUPONES.length) {
-      noLiquidadas.push({ fila, lote, cupon, aut, enLiq: null, liqRow: null });
-      continue;
+  // Índice proc: lote+cupon → [fila, ...] (array para no perder duplicados)
+  const procByLC  = {};   // `${lote}-${cupon}` → [{ fila, lote, cupon, aut }]
+  const procByAut = {};   // `${aut}` → [{ fila, lote, cupon, aut }]
+  for (const fila of confirmadas) {
+    const lote  = _liqNorm(fila.proc?.lote || '');
+    const cupon = _liqNorm(fila.proc?.ticket || fila.proc?.cupon || '');
+    const aut   = _liqNormAut(fila.proc?.aut || '');
+    const entry = { fila, lote, cupon, aut };
+    if (lote && lote !== '0' && cupon && cupon !== '0') {
+      (procByLC[`${lote}-${cupon}`] = procByLC[`${lote}-${cupon}`] || []).push(entry);
+    }
+    if (aut && aut !== '0') {
+      (procByAut[aut] = procByAut[aut] || []).push(entry);
+    }
+  }
+
+  const usados    = new Set();   // sky.idx de ops ya asignadas
+  const liquidadas = [];
+  const extras     = [];
+
+  // Solo filas FISERV de la liq: tienen lote y cupon válidos
+  const liqFiserv = _LIQ_CUPONES.filter(r => r.lote && r.lote !== '0' && r.cupon && r.cupon !== '0');
+  const liqGetpos = _LIQ_CUPONES.filter(r => !r.lote || r.lote === '0');  // para extras GETPOS
+
+  for (const liqRow of liqFiserv) {
+    const liqLote  = _liqNorm(liqRow.lote);
+    const liqCupon = _liqNorm(liqRow.cupon);
+    const liqAut   = _liqNormAut(liqRow.aut || '');
+
+    // 1° intento: lote+cupón exacto
+    let entry = (procByLC[`${liqLote}-${liqCupon}`] || []).find(e => !usados.has(e.fila.sky?.idx));
+
+    // 2° intento: autorización (solo si lote+cupon no matcheó)
+    if (!entry && liqAut && liqAut !== '0') {
+      entry = (procByAut[liqAut] || []).find(e => !usados.has(e.fila.sky?.idx));
     }
 
-    // Buscar en liquidación: primero por lote+cupón (solo datos proc)
-    let liqRow = byLoteCupon[`${lote}-${cupon}`];
-
-    // Fallback por autorización: solo aceptar si monto Y fecha coinciden
-    if (!liqRow && aut) {
-      const cand = byAut[aut];
-      if (cand) {
-        const skyMonto  = Math.abs(fila.sky?.monto || 0);
-        const montoOk   = Math.abs((cand.monto || 0) - skyMonto) <= Math.max(1, skyMonto * 0.01);
-        const skyFecha  = fila.sky?.fecha || '';
-        const liqFecha  = cand.fecha_venta || '';
-        const diasDif   = (skyFecha && liqFecha)
-          ? Math.abs(Math.round((new Date(skyFecha) - new Date(liqFecha)) / 86400000))
-          : 0;
-        const fechaOk   = !skyFecha || !liqFecha || diasDif <= 7;
-        if (montoOk && fechaOk) liqRow = cand;
-      }
-    }
-
-    if (liqRow) {
-      if (liqRow.aut && liqRow.aut !== '0') autsUsados.add(liqRow.aut);
-      // Verificar plazo de acreditación
-      const fechaVenta = liqRow.fecha_venta || fila.sky?.fecha || '';
+    if (entry) {
+      usados.add(entry.fila.sky?.idx);
+      const fechaVenta = liqRow.fecha_venta || entry.fila.sky?.fecha || '';
       const fechaPago  = liqRow.fecha_pago  || '';
       const plazoTM    = _buscarPlazoEnTM('FISERV', liqRow.nro_comercio || '', liqRow.tarjeta || '', fechaVenta);
       let diasHabiles = null, diasEsperados = null, diasExtra = null;
@@ -293,90 +321,115 @@ function _cruzarLiqFiserv() {
         diasEsperados = parseInt(plazoTM.dias_habiles) || 0;
         diasExtra     = diasHabiles - diasEsperados;
       }
-      liquidadas.push({ fila, lote, cupon, aut, liqRow, diasHabiles, diasEsperados, diasExtra, plazoTM });
+      liquidadas.push({ fila: entry.fila, lote: entry.lote, cupon: entry.cupon, aut: entry.aut,
+        liqRow, diasHabiles, diasEsperados, diasExtra, plazoTM });
     } else {
-      noLiquidadas.push({ fila, lote, cupon, aut, enLiq: false, liqRow: null });
+      extras.push(liqRow);
     }
   }
 
-  // Extras: cupones de la liq que ninguna fila de RESULTADO (FISERV) reclamó
-  // Solo contar extras de FISERV (filas con lote+cupón)
-  const extras = _LIQ_CUPONES.filter(r => {
-    if (r.lote === '0' || r.cupon === '0') return false;
-    const k = `${r.lote}-${r.cupon}`;
-    return !byLoteCupon[k] || !liquidadas.some(x =>
-      `${x.lote}-${x.cupon}` === k);
-  });
+  // No liquidadas: ops confirmadas cuyo proc no matcheó ninguna fila de liq
+  const noLiquidadas = confirmadas
+    .filter(fila => !usados.has(fila.sky?.idx))
+    .map(fila => ({
+      fila,
+      lote:  _liqNorm(fila.proc?.lote || ''),
+      cupon: _liqNorm(fila.proc?.ticket || fila.proc?.cupon || ''),
+      aut:   _liqNormAut(fila.proc?.aut || ''),
+      enLiq: false, liqRow: null,
+    }));
 
   const fueraPlazo = liquidadas.filter(x => x.diasExtra !== null && x.diasExtra > 0);
 
   const montoLiquidado  = liquidadas.reduce((s,x) => s + (x.liqRow?.monto || Math.abs(x.fila.sky?.monto||0)), 0);
   const montoNoLiq      = noLiquidadas.reduce((s,x) => s + Math.abs(x.fila.sky?.monto||0), 0);
-  const montoExtras     = extras.reduce((s,r) => s + r.monto, 0);
+  const montoExtras     = extras.reduce((s,r) => s + (r.monto||0), 0);
   const montoFueraPlazo = fueraPlazo.reduce((s,x) => s + (x.liqRow?.monto||0), 0);
 
   return {
     liquidadas, noLiquidadas, sinConfirmar, extras, fueraPlazo,
     montoLiquidado, montoNoLiq, montoExtras, montoFueraPlazo,
     totalOK: liquidadas.length + noLiquidadas.length,
-    tieneLiq: _LIQ_CUPONES.length > 0,
-    tienePlazos: !!(TM?.plazos?.length),
+    tieneLiq: true, tienePlazos: !!(TM?.plazos?.length),
   };
 }
 
 // ── CRUCE: GETPOS ────────────────────────────────────────────────────
-// Clave: Código Autorización
+// Flujo: LIQ → PROC → SKY (por Código Autorización)
 function _cruzarLiqGetpos() {
   if (typeof RESULTADO === 'undefined' || !RESULTADO.length) return null;
 
-  const filasGP = RESULTADO.filter(r => r.sky?.esGETPos && !r.sky?.esGOCUOTAS);
-  const { byAut } = _liqBuildIndexes();
-
-  const liquidadas   = [];
-  const noLiquidadas = [];
+  const filasGP      = RESULTADO.filter(r => r.sky?.esGETPos && !r.sky?.esGOCUOTAS);
   const sinConfirmar = [];
+  const confirmadas  = [];
 
   for (const fila of filasGP) {
     const esConfirmada = fila.estado?.startsWith('OK') ||
       fila.estado === 'DIF. CUOTAS' ||
       fila.estado?.startsWith('COM. ERRADO') ||
       fila.estado?.startsWith('MAL FACTURADO');
-    if (!esConfirmada) { sinConfirmar.push(fila); continue; }
-    if (fila.esDevolucion === 'SI' || fila.sky?.esNeg) { sinConfirmar.push(fila); continue; }
-
-    const aut = _liqNormAut(fila.proc?.aut || '');
-
-    if (!_LIQ_CUPONES.length) {
-      noLiquidadas.push({ fila, aut, enLiq: null, liqRow: null });
-      continue;
-    }
-
-    const liqRow = byAut[aut];
-    if (liqRow) {
-      liquidadas.push({ fila, aut, liqRow });
+    if (!esConfirmada || fila.esDevolucion === 'SI' || fila.sky?.esNeg) {
+      sinConfirmar.push(fila);
     } else {
-      noLiquidadas.push({ fila, aut, enLiq: false, liqRow: null });
+      confirmadas.push(fila);
     }
   }
 
-  // Extras GETPOS: autorizaciones en la liq sin lote (probablemente GETPOS)
-  // que no matchearon con ningún RESULTADO GETPOS
-  const autsUsadosGP = new Set(liquidadas.map(x => x.aut));
-  const extras = _LIQ_CUPONES.filter(r => {
-    // Filas sin lote son candidatas GETPOS
-    const sinLote = r.lote === '0' || !r.lote;
-    return sinLote && r.aut !== '0' && !autsUsadosGP.has(r.aut);
-  });
+  if (!_LIQ_CUPONES.length) {
+    return {
+      liquidadas: [], sinConfirmar, extras: [],
+      noLiquidadas: confirmadas.map(fila => ({
+        fila, aut: _liqNormAut(fila.proc?.aut || ''), enLiq: null, liqRow: null,
+      })),
+      montoLiquidado:0, montoNoLiq: confirmadas.reduce((s,f)=>s+Math.abs(f.sky?.monto||0),0),
+      montoExtras:0, totalOK: confirmadas.length, tieneLiq:false,
+    };
+  }
+
+  // Índice proc por aut
+  const procByAut = {};
+  for (const fila of confirmadas) {
+    const aut = _liqNormAut(fila.proc?.aut || '');
+    if (aut && aut !== '0') {
+      (procByAut[aut] = procByAut[aut] || []).push({ fila, aut });
+    }
+  }
+
+  const usados     = new Set();
+  const liquidadas = [];
+  const extras     = [];
+
+  // Solo filas GETPOS de la liq: sin lote (o lote = '0')
+  const liqGetpos = _LIQ_CUPONES.filter(r => !r.lote || r.lote === '0');
+
+  for (const liqRow of liqGetpos) {
+    const liqAut = _liqNormAut(liqRow.aut || '');
+    if (!liqAut || liqAut === '0') { extras.push(liqRow); continue; }
+
+    const entry = (procByAut[liqAut] || []).find(e => !usados.has(e.fila.sky?.idx));
+    if (entry) {
+      usados.add(entry.fila.sky?.idx);
+      liquidadas.push({ fila: entry.fila, aut: entry.aut, liqRow });
+    } else {
+      extras.push(liqRow);
+    }
+  }
+
+  const noLiquidadas = confirmadas
+    .filter(fila => !usados.has(fila.sky?.idx))
+    .map(fila => ({
+      fila, aut: _liqNormAut(fila.proc?.aut || ''), enLiq: false, liqRow: null,
+    }));
 
   const montoLiquidado = liquidadas.reduce((s,x) => s + (x.liqRow?.monto || Math.abs(x.fila.sky?.monto||0)), 0);
   const montoNoLiq     = noLiquidadas.reduce((s,x) => s + Math.abs(x.fila.sky?.monto||0), 0);
-  const montoExtras    = extras.reduce((s,r) => s + r.monto, 0);
+  const montoExtras    = extras.reduce((s,r) => s + (r.monto||0), 0);
 
   return {
     liquidadas, noLiquidadas, sinConfirmar, extras,
     montoLiquidado, montoNoLiq, montoExtras,
     totalOK: liquidadas.length + noLiquidadas.length,
-    tieneLiq: _LIQ_CUPONES.length > 0,
+    tieneLiq: true,
   };
 }
 
