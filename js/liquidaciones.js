@@ -355,10 +355,9 @@ function _cruzarLiqFiserv() {
 }
 
 // ── CRUCE: GETPOS ────────────────────────────────────────────────────
-// Flujo: LIQ → PROC → SKY (por Nro de Cupón, igual que FISERV usa lote+cupon)
-// El campo proc.cupon (Nro de Cupón del archivo GETPOS) coincide con
-// liqRow.cupon (Nro de Cupón del archivo de liquidaciones).
-// proc.aut (Cód. Aut. GETPOS) ≠ liqRow.aut (Código Autorización liq) → no usable.
+// Flujo: LIQ → PROC → SKY (por Código Autorización: Cód. Aut. GETPOS ↔ Código Autorización liq)
+// Para evitar colisiones con filas FISERV del liq (que también tienen aut),
+// se saltean las filas que ya pertenecen al cruce FISERV (lote+cupon coincidente).
 function _cruzarLiqGetpos() {
   if (typeof RESULTADO === 'undefined' || !RESULTADO.length) return null;
 
@@ -382,55 +381,65 @@ function _cruzarLiqGetpos() {
     return {
       liquidadas: [], sinConfirmar, extras: [],
       noLiquidadas: confirmadas.map(fila => ({
-        fila,
-        cupon: _liqNorm(fila.proc?.cupon || ''),
-        aut:   _liqNormAut(fila.proc?.aut || ''),
-        enLiq: null, liqRow: null,
+        fila, aut: _liqNormAut(fila.proc?.aut || ''), enLiq: null, liqRow: null,
       })),
       montoLiquidado:0, montoNoLiq: confirmadas.reduce((s,f)=>s+Math.abs(f.sky?.monto||0),0),
       montoExtras:0, totalOK: confirmadas.length, tieneLiq:false,
     };
   }
 
-  // Índice proc: cupón (Nro de Cupón del archivo GETPOS) → [entries]
-  const procByCupon = {};
+  // Índice de lote+cupon de proc FISERV, para identificar filas del liq que pertenecen a FISERV
+  const filasFis = RESULTADO.filter(r => !r.sky?.esGETPos && !r.sky?.esGOCUOTAS);
+  const fisLotesCupones = new Set();
+  for (const fila of filasFis) {
+    const l = _liqNorm(fila.proc?.lote || '');
+    const c = _liqNorm(fila.proc?.ticket || fila.proc?.cupon || '');
+    if (l !== '0' && c !== '0') fisLotesCupones.add(`${l}-${c}`);
+  }
+
+  // Índice proc GETPOS por aut (Cód. Aut. del archivo GETPOS)
+  const procByAut = {};
   for (const fila of confirmadas) {
-    const cupon = _liqNorm(fila.proc?.cupon || '');
-    const aut   = _liqNormAut(fila.proc?.aut || '');
-    if (cupon && cupon !== '0') {
-      (procByCupon[cupon] = procByCupon[cupon] || []).push({ fila, cupon, aut });
+    const aut = _liqNormAut(fila.proc?.aut || '');
+    if (aut && aut !== '0') {
+      (procByAut[aut] = procByAut[aut] || []).push({ fila, aut });
     }
   }
 
   const usados     = new Set();
   const liquidadas = [];
 
-  // Iterar sobre todas las filas del liq, matchear por liqRow.cupon → proc.cupon
   for (const liqRow of _LIQ_CUPONES) {
+    // Saltear filas que pertenecen al cruce FISERV (tienen lote+cupon FISERV)
+    const liqLote  = _liqNorm(liqRow.lote  || '');
     const liqCupon = _liqNorm(liqRow.cupon || '');
-    if (!liqCupon || liqCupon === '0') continue;
+    if (liqLote !== '0' && liqCupon !== '0' && fisLotesCupones.has(`${liqLote}-${liqCupon}`)) continue;
 
-    const entry = (procByCupon[liqCupon] || []).find(e => !usados.has(e.fila.sky?.idx));
+    // Matchear por Código Autorización (liqRow.aut = proc.aut en GETPOS)
+    const liqAut = _liqNormAut(liqRow.aut || '');
+    if (!liqAut || liqAut === '0') continue;
+
+    const entry = (procByAut[liqAut] || []).find(e => !usados.has(e.fila.sky?.idx));
     if (entry) {
       usados.add(entry.fila.sky?.idx);
-      liquidadas.push({ fila: entry.fila, cupon: entry.cupon, aut: entry.aut, liqRow });
+      liquidadas.push({ fila: entry.fila, aut: entry.aut, liqRow });
     }
   }
 
   const noLiquidadas = confirmadas
     .filter(fila => !usados.has(fila.sky?.idx))
     .map(fila => ({
-      fila,
-      cupon: _liqNorm(fila.proc?.cupon || ''),
-      aut:   _liqNormAut(fila.proc?.aut || ''),
-      enLiq: false, liqRow: null,
+      fila, aut: _liqNormAut(fila.proc?.aut || ''), enLiq: false, liqRow: null,
     }));
 
-  // Extras: filas de liq cuyo cupón no matcheó ningún proc GETPOS
-  const usadosCupon = new Set(liquidadas.map(x => x.cupon));
+  // Extras: filas sin match FISERV ni GETPOS
+  const usadosAut = new Set(liquidadas.map(x => x.aut));
   const extras = _LIQ_CUPONES.filter(r => {
-    const c = _liqNorm(r.cupon || '');
-    return c && c !== '0' && !usadosCupon.has(c);
+    const liqLote  = _liqNorm(r.lote  || '');
+    const liqCupon = _liqNorm(r.cupon || '');
+    if (liqLote !== '0' && liqCupon !== '0' && fisLotesCupones.has(`${liqLote}-${liqCupon}`)) return false;
+    const a = _liqNormAut(r.aut || '');
+    return a && a !== '0' && !usadosAut.has(a);
   });
 
   const montoLiquidado = liquidadas.reduce((s,x) => s + (x.liqRow?.monto || Math.abs(x.fila.sky?.monto||0)), 0);
