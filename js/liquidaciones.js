@@ -1550,29 +1550,38 @@ function renderModuloLiqTasas() {
 
   const hasGoc = (RESULTADO?.filter(r => r.sky?.esGOCUOTAS).length || 0) > 0;
 
-  const _kpis = (pd, rp, st, okCnt, label) => {
-    const mPD = pd.reduce((s, x) => s + Math.abs(x.difMonto), 0);
-    const mRP = rp.reduce((s, x) => s + Math.abs(x.difMonto), 0);
-    const total = pd.length + rp.length + st.length + (okCnt || 0);
-    return [
-      { label:`📊 Con tasa cobrada`, val: total.toLocaleString('es-AR'),
-        bc:'rgba(79,142,247,.3)', cls:'cyn', sub: label },
-      { label:'⚠ Error vendedor',    val: pd.length.toLocaleString('es-AR'),
-        bc:'rgba(251,191,36,.3)', cls:'yel', sub: _liqFmtARS(mPD) },
-      { label:'🔴 Reclamar proc.',   val: rp.length.toLocaleString('es-AR'),
-        bc:'rgba(248,113,113,.3)', cls:'red', sub: _liqFmtARS(mRP) },
-      { label:'? Sin tasa config.',  val: st.length.toLocaleString('es-AR'),
-        bc:'rgba(107,114,128,.2)', cls:'', sub: 'Sin match en TM' },
-      { label:'💰 Total dif. $',     val: _liqFmtARS(mPD + mRP),
-        bc:'rgba(251,146,60,.25)', cls:'org', sub: `${pd.length+rp.length} ops con diferencia` },
-    ].map(k => `
-      <div style="min-width:130px;flex:1;background:var(--s2);border:1px solid ${k.bc};
+  const _kpis = (pd, rp, st, liqTotal) => {
+    const mPD     = pd.reduce((s, x) => s + Math.abs(x.difMonto), 0);
+    const mRP     = rp.reduce((s, x) => s + Math.abs(x.difMonto), 0);
+    const analizadas = pd.length + rp.length + st.length; // excluye _okCount (sin dif ni sin tasa)
+    const conDif  = pd.length + rp.length;
+    const pctCob  = liqTotal ? Math.round(analizadas / liqTotal * 100) : null;
+    const pctDif  = liqTotal ? Math.round(conDif / liqTotal * 100) : null;
+    const kpiCard = (label, val, sub, bc, cls, extra='') => `
+      <div style="min-width:130px;flex:1;background:var(--s2);border:1px solid ${bc};
         border-radius:6px;padding:10px 14px">
-        <div style="font-size:9px;color:var(--m2);margin-bottom:4px">${k.label}</div>
-        <div style="font-size:18px;font-weight:800;color:${k.cls?`var(--${k.cls})`:'var(--txt)'};
-          font-family:var(--mono)">${k.val}</div>
-        <div style="font-size:9px;color:var(--m2);margin-top:2px">${k.sub}</div>
-      </div>`).join('');
+        <div style="font-size:9px;color:var(--m2);margin-bottom:4px">${label}</div>
+        <div style="font-size:18px;font-weight:800;color:${cls?`var(--${cls})`:'var(--txt)'};
+          font-family:var(--mono)">${val}</div>
+        <div style="font-size:9px;color:var(--m2);margin-top:2px">${sub}</div>
+        ${extra}
+      </div>`;
+    return [
+      // KPI cobertura: analizadas vs liquidadas
+      kpiCard(
+        '📋 Liquidadas analizadas',
+        liqTotal ? `${analizadas.toLocaleString('es-AR')} / ${liqTotal.toLocaleString('es-AR')}` : analizadas.toLocaleString('es-AR'),
+        liqTotal
+          ? `${pctCob}% tienen CFO · ${conDif.toLocaleString('es-AR')} con dif. (${pctDif}%)`
+          : `${conDif.toLocaleString('es-AR')} con diferencia de tasa`,
+        pctDif > 10 ? 'rgba(248,113,113,.25)' : 'rgba(79,142,247,.3)',
+        'cyn'
+      ),
+      kpiCard('⚠ Error vendedor',   pd.length.toLocaleString('es-AR'), _liqFmtARS(mPD),       'rgba(251,191,36,.3)',  'yel'),
+      kpiCard('🔴 Reclamar proc.',  rp.length.toLocaleString('es-AR'), _liqFmtARS(mRP),       'rgba(248,113,113,.3)', 'red'),
+      kpiCard('? Sin tasa config.', st.length.toLocaleString('es-AR'), 'Sin match en TM',     'rgba(107,114,128,.2)', ''),
+      kpiCard('💰 Total dif. $',    _liqFmtARS(mPD + mRP),            `${conDif.toLocaleString('es-AR')} ops con diferencia`, 'rgba(251,146,60,.25)', 'org'),
+    ].join('');
   };
 
   // ── Render sub-tab (pd/rp) ───────────────────────────────────────────
@@ -1658,10 +1667,9 @@ function renderModuloLiqTasas() {
     const pd = proc === 'getpos' ? pd_gp : pd_fis;
     const rp = proc === 'getpos' ? rp_gp : rp_fis;
     const st = proc === 'getpos' ? st_gp : st_fis;
-    const okCnt = (cruce._okCount || 0); // aproximado — no separamos ok por proc
-    const label = proc === 'getpos'
-      ? `de ops GETPOS confirmadas`
-      : `de ops FISERV confirmadas`;
+    const liqTotal = proc === 'getpos'
+      ? (_liqCache.getpos?.liquidadas?.length || 0)
+      : (_liqCache.fiserv?.liquidadas?.length || 0);
 
     // Guardar refs para exportar (filtradas por proc)
     window._cruzeTasasPD = pd;
@@ -1672,7 +1680,7 @@ function renderModuloLiqTasas() {
       <!-- KPIs del proc -->
       <div style="display:flex;gap:10px;padding:12px 16px;flex-shrink:0;flex-wrap:wrap;
         border-bottom:1px solid var(--b1)">
-        ${_kpis(pd, rp, st, 0, label)}
+        ${_kpis(pd, rp, st, liqTotal)}
       </div>
       <!-- Sub-tabs body -->
       <div id="liq-tasas-body" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden"></div>`;
