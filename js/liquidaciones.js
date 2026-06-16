@@ -1310,7 +1310,7 @@ function _cruzarTasas() {
     const tmLiq = _buscarTasaParaFecha(liqTarjeta, liqCuotas, procNom, fecha);
 
     if (!tmSky && !tmLiq) {
-      sinTasa.push({ fila, liqRow, td_cobrada, liqTarjeta, liqCuotas, skyTarjeta, skyCuotas });
+      sinTasa.push({ fila, liqRow, td_cobrada, liqTarjeta, liqCuotas, skyTarjeta, skyCuotas, procNom });
       continue;
     }
 
@@ -1530,105 +1530,195 @@ function renderModuloLiqTasas() {
     return;
   }
 
-  const { pasarDescuento, reclamarProc, sinTasa, montoPD, montoRP } = cruce;
-  const totalDif = pasarDescuento.length + reclamarProc.length;
+  const { pasarDescuento, reclamarProc, sinTasa } = cruce;
 
-  // ── Tab activa ──────────────────────────────────────────────────────
-  if (!window._liqTasasTab) window._liqTasasTab = 'pd';
+  // ── Estado activo ────────────────────────────────────────────────────
+  if (!window._liqTasasProc) window._liqTasasProc = 'fiserv';
+  if (!window._liqTasasTab)  window._liqTasasTab  = 'pd';
 
-  const renderTab = tab => {
+  // ── Filtrar por procesadora ──────────────────────────────────────────
+  const byProc = (arr, p) => p === 'getpos'
+    ? arr.filter(x => x.procNom === 'GETPOS')
+    : arr.filter(x => x.procNom !== 'GETPOS');
+
+  const pd_fis = byProc(pasarDescuento, 'fiserv');
+  const rp_fis = byProc(reclamarProc,   'fiserv');
+  const st_fis = byProc(sinTasa,        'fiserv');
+  const pd_gp  = byProc(pasarDescuento, 'getpos');
+  const rp_gp  = byProc(reclamarProc,   'getpos');
+  const st_gp  = byProc(sinTasa,        'getpos');
+
+  const hasGoc = (RESULTADO?.filter(r => r.sky?.esGOCUOTAS).length || 0) > 0;
+
+  const _kpis = (pd, rp, st, okCnt, label) => {
+    const mPD = pd.reduce((s, x) => s + Math.abs(x.difMonto), 0);
+    const mRP = rp.reduce((s, x) => s + Math.abs(x.difMonto), 0);
+    const total = pd.length + rp.length + st.length + (okCnt || 0);
+    return [
+      { label:`📊 Con tasa cobrada`, val: total.toLocaleString('es-AR'),
+        bc:'rgba(79,142,247,.3)', cls:'cyn', sub: label },
+      { label:'⚠ Error vendedor',    val: pd.length.toLocaleString('es-AR'),
+        bc:'rgba(251,191,36,.3)', cls:'yel', sub: _liqFmtARS(mPD) },
+      { label:'🔴 Reclamar proc.',   val: rp.length.toLocaleString('es-AR'),
+        bc:'rgba(248,113,113,.3)', cls:'red', sub: _liqFmtARS(mRP) },
+      { label:'? Sin tasa config.',  val: st.length.toLocaleString('es-AR'),
+        bc:'rgba(107,114,128,.2)', cls:'', sub: 'Sin match en TM' },
+      { label:'💰 Total dif. $',     val: _liqFmtARS(mPD + mRP),
+        bc:'rgba(251,146,60,.25)', cls:'org', sub: `${pd.length+rp.length} ops con diferencia` },
+    ].map(k => `
+      <div style="min-width:130px;flex:1;background:var(--s2);border:1px solid ${k.bc};
+        border-radius:6px;padding:10px 14px">
+        <div style="font-size:9px;color:var(--m2);margin-bottom:4px">${k.label}</div>
+        <div style="font-size:18px;font-weight:800;color:${k.cls?`var(--${k.cls})`:'var(--txt)'};
+          font-family:var(--mono)">${k.val}</div>
+        <div style="font-size:9px;color:var(--m2);margin-top:2px">${k.sub}</div>
+      </div>`).join('');
+  };
+
+  // ── Render sub-tab (pd/rp) ───────────────────────────────────────────
+  const renderSubTab = (tab, pd, rp, st) => {
     window._liqTasasTab = tab;
     const contenido = document.getElementById('liq-tasas-body');
     if (!contenido) return;
-    const filas = tab === 'pd' ? pasarDescuento : reclamarProc;
+    const filas   = tab === 'pd' ? pd : rp;
+    const expKey  = tab === 'pd' ? 'window._cruzeTasasPD' : 'window._cruzeTasasRP';
+    const pdActive = tab === 'pd';
     contenido.innerHTML = `
+      <!-- sub-tabs -->
+      <div style="display:flex;gap:6px;padding:8px 14px;flex-shrink:0;border-bottom:1px solid var(--b1)">
+        <button id="liq-tasas-tab-pd" onclick="renderModuloLiqTasas._renderSubTab('pd')"
+          style="background:none;border:1px solid ${pdActive?'var(--yel)':'var(--b2)'};
+            color:${pdActive?'var(--yel)':'var(--m1)'};border-radius:4px;padding:4px 14px;
+            font-size:9px;font-weight:${pdActive?'700':'400'};cursor:pointer;font-family:var(--sans)">
+          ⚠ Pasar a descuento (${pd.length})
+        </button>
+        <button id="liq-tasas-tab-rp" onclick="renderModuloLiqTasas._renderSubTab('rp')"
+          style="background:none;border:1px solid ${!pdActive?'var(--red)':'var(--b2)'};
+            color:${!pdActive?'var(--red)':'var(--m1)'};border-radius:4px;padding:4px 14px;
+            font-size:9px;font-weight:${!pdActive?'700':'400'};cursor:pointer;font-family:var(--sans)">
+          🔴 Reclamar a procesadora (${rp.length})
+        </button>
+        ${st.length ? `<div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+          <span style="font-size:9px;color:var(--m2)">⚙ ${st.length.toLocaleString('es-AR')} sin tasa config.</span>
+          <button onclick="_tasasExportarSinTasa(window._cruzeTasasST)"
+            style="background:none;border:1px solid var(--b2);color:var(--m1);border-radius:4px;
+              padding:3px 10px;font-size:9px;cursor:pointer;font-family:var(--sans)">
+            ↓ Exportar Excel
+          </button>
+        </div>` : ''}
+      </div>
+      <!-- tabla -->
       <div style="display:flex;align-items:center;justify-content:flex-end;
-        padding:6px 12px;gap:8px;flex-shrink:0;border-bottom:1px solid var(--b1)">
+        padding:5px 12px;gap:8px;flex-shrink:0;border-bottom:1px solid var(--b0)">
         <span style="font-size:9px;color:var(--m2)">${filas.length} operaciones</span>
-        <button onclick="_tasasExportar(${tab==='pd'?'window._cruzeTasasPD':'window._cruzeTasasRP'},'${tab}')"
+        <button onclick="_tasasExportar(${expKey},'${tab}')"
           style="background:none;border:1px solid var(--b2);color:var(--m1);border-radius:4px;
             padding:3px 10px;font-size:9px;cursor:pointer;font-family:var(--sans)">
           ↓ Exportar Excel
         </button>
       </div>
-      ${_tasasRenderTabla(filas, tab)}`;
+      <div style="flex:1;min-height:0;overflow:hidden">
+        ${_tasasRenderTabla(filas, tab)}
+      </div>`;
   };
 
-  // Guardar refs para exportar
-  window._cruzeTasasPD = pasarDescuento;
-  window._cruzeTasasRP = reclamarProc;
-  window._cruzeTasasST = sinTasa;
+  // ── Render proc tab ──────────────────────────────────────────────────
+  const renderProcTab = proc => {
+    window._liqTasasProc = proc;
+    const area = document.getElementById('liq-tasas-proc-area');
+    if (!area) return;
+
+    // Actualizar estilos de botones del selector
+    ['fiserv','getpos','goc'].forEach(p => {
+      const btn = document.getElementById(`liq-tasas-proc-${p}`);
+      if (!btn) return;
+      const active = p === proc;
+      btn.style.borderColor = active ? 'var(--acc)' : 'var(--b2)';
+      btn.style.color       = active ? 'var(--acc)' : 'var(--m2)';
+      btn.style.fontWeight  = active ? '700' : '400';
+    });
+
+    if (proc === 'goc') {
+      area.innerHTML = `
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;
+          height:100%;gap:12px;color:var(--m2);text-align:center;padding:40px">
+          <div style="font-size:32px;opacity:.15">💳</div>
+          <div style="font-size:12px;font-weight:700;color:var(--txt);opacity:.4">
+            Análisis de tasas Go Cuotas
+          </div>
+          <p style="font-size:10px;max-width:380px;line-height:1.8;color:var(--m2)">
+            El módulo de tasas para Go Cuotas está en desarrollo.<br>
+            Las operaciones GoC usan una estructura de aranceles distinta<br>
+            a la de FISERV / GETPOS.
+          </p>
+        </div>`;
+      return;
+    }
+
+    const pd = proc === 'getpos' ? pd_gp : pd_fis;
+    const rp = proc === 'getpos' ? rp_gp : rp_fis;
+    const st = proc === 'getpos' ? st_gp : st_fis;
+    const okCnt = (cruce._okCount || 0); // aproximado — no separamos ok por proc
+    const label = proc === 'getpos'
+      ? `de ops GETPOS confirmadas`
+      : `de ops FISERV confirmadas`;
+
+    // Guardar refs para exportar (filtradas por proc)
+    window._cruzeTasasPD = pd;
+    window._cruzeTasasRP = rp;
+    window._cruzeTasasST = st;
+
+    area.innerHTML = `
+      <!-- KPIs del proc -->
+      <div style="display:flex;gap:10px;padding:12px 16px;flex-shrink:0;flex-wrap:wrap;
+        border-bottom:1px solid var(--b1)">
+        ${_kpis(pd, rp, st, 0, label)}
+      </div>
+      <!-- Sub-tabs body -->
+      <div id="liq-tasas-body" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden"></div>`;
+
+    renderModuloLiqTasas._renderSubTab = (tab) => renderSubTab(tab, pd, rp, st);
+    renderSubTab(window._liqTasasTab || 'pd', pd, rp, st);
+  };
+
+  // ── HTML principal ───────────────────────────────────────────────────
+  const fisFiserv = RESULTADO.filter(r => !r.sky?.esGETPos && !r.sky?.esGOCUOTAS).length;
+  const fisGetpos = RESULTADO.filter(r => r.sky?.esGETPos && !r.sky?.esGOCUOTAS).length;
+  const fisGoc    = RESULTADO.filter(r => r.sky?.esGOCUOTAS).length;
 
   panel.innerHTML = `
   <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
 
-    <!-- KPIs -->
-    <div style="display:flex;gap:10px;padding:12px 16px;flex-shrink:0;flex-wrap:wrap;
-      border-bottom:1px solid var(--b1)">
-      ${[
-        { label:'📊 Con tasa cobrada', val:(pasarDescuento.length+reclamarProc.length+sinTasa.length+
-            (cruce._okCount||0)).toLocaleString('es-AR'),
-          bc:'rgba(79,142,247,.3)', cls:'cyn',
-          sub:`de ${(RESULTADO?.filter(r=>!r.sky?.esGOCUOTAS).length||0).toLocaleString('es-AR')} no-GoC · GoC excluido` },
-        { label:'⚠ Error vendedor',   val:pasarDescuento.length.toLocaleString('es-AR'),
-          bc:'rgba(251,191,36,.3)', cls:'yel', sub:_liqFmtARS(montoPD) },
-        { label:'🔴 Reclamar proc.',  val:reclamarProc.length.toLocaleString('es-AR'),
-          bc:'rgba(248,113,113,.3)', cls:'red', sub:_liqFmtARS(montoRP) },
-        { label:'? Sin tasa config.', val:sinTasa.length.toLocaleString('es-AR'),
-          bc:'rgba(107,114,128,.2)', cls:'', sub:'Sin match en TM' },
-        { label:'💰 Total dif. $',    val:_liqFmtARS(montoPD+montoRP),
-          bc:'rgba(251,146,60,.25)', cls:'org', sub:`${totalDif} ops con diferencia` },
-      ].map(k => `
-        <div style="min-width:140px;flex:1;background:var(--s2);border:1px solid ${k.bc};
-          border-radius:6px;padding:10px 14px">
-          <div style="font-size:9px;color:var(--m2);margin-bottom:4px">${k.label}</div>
-          <div style="font-size:18px;font-weight:800;color:${k.cls?`var(--${k.cls})`:'var(--txt)'};
-            font-family:var(--mono)">${k.val}</div>
-          <div style="font-size:9px;color:var(--m2);margin-top:2px">${k.sub}</div>
-        </div>`).join('')}
+    <!-- Selector de procesadora -->
+    <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;flex-shrink:0;
+      border-bottom:2px solid var(--b1);background:var(--s1)">
+      <span style="font-size:9px;color:var(--m2);margin-right:4px">Procesadora:</span>
+      <button id="liq-tasas-proc-fiserv" onclick="renderModuloLiqTasas._renderProcTab('fiserv')"
+        style="background:none;border:1px solid var(--acc);color:var(--acc);border-radius:4px;
+          padding:4px 16px;font-size:9px;font-weight:700;cursor:pointer;font-family:var(--sans)">
+        FISERV${pd_fis.length+rp_fis.length ? ` · ${(pd_fis.length+rp_fis.length).toLocaleString('es-AR')} dif.` : ''}
+      </button>
+      <button id="liq-tasas-proc-getpos" onclick="renderModuloLiqTasas._renderProcTab('getpos')"
+        style="background:none;border:1px solid var(--b2);color:var(--m2);border-radius:4px;
+          padding:4px 16px;font-size:9px;font-weight:400;cursor:pointer;font-family:var(--sans)">
+        GETPOS${pd_gp.length+rp_gp.length ? ` · ${(pd_gp.length+rp_gp.length).toLocaleString('es-AR')} dif.` : ''}
+      </button>
+      ${hasGoc ? `<button id="liq-tasas-proc-goc" onclick="renderModuloLiqTasas._renderProcTab('goc')"
+        style="background:none;border:1px solid var(--b2);color:var(--m2);border-radius:4px;
+          padding:4px 16px;font-size:9px;font-weight:400;cursor:pointer;font-family:var(--sans)">
+        Go Cuotas
+      </button>` : ''}
     </div>
 
-    <!-- Tabs -->
-    <div style="display:flex;gap:6px;padding:8px 14px;flex-shrink:0;border-bottom:1px solid var(--b1)">
-      <button id="liq-tasas-tab-pd" onclick="
-          document.getElementById('liq-tasas-tab-pd').style.fontWeight='700';
-          document.getElementById('liq-tasas-tab-pd').style.borderColor='var(--yel)';
-          document.getElementById('liq-tasas-tab-pd').style.color='var(--yel)';
-          document.getElementById('liq-tasas-tab-rp').style.fontWeight='400';
-          document.getElementById('liq-tasas-tab-rp').style.borderColor='var(--b2)';
-          document.getElementById('liq-tasas-tab-rp').style.color='var(--m1)';
-          renderModuloLiqTasas._renderTab('pd')"
-        style="background:none;border:1px solid var(--yel);color:var(--yel);border-radius:4px;
-          padding:4px 14px;font-size:9px;font-weight:700;cursor:pointer;font-family:var(--sans)">
-        ⚠ Pasar a descuento (${pasarDescuento.length})
-      </button>
-      <button id="liq-tasas-tab-rp" onclick="
-          document.getElementById('liq-tasas-tab-rp').style.fontWeight='700';
-          document.getElementById('liq-tasas-tab-rp').style.borderColor='var(--red)';
-          document.getElementById('liq-tasas-tab-rp').style.color='var(--red)';
-          document.getElementById('liq-tasas-tab-pd').style.fontWeight='400';
-          document.getElementById('liq-tasas-tab-pd').style.borderColor='var(--b2)';
-          document.getElementById('liq-tasas-tab-pd').style.color='var(--m1)';
-          renderModuloLiqTasas._renderTab('rp')"
-        style="background:none;border:1px solid var(--b2);color:var(--m1);border-radius:4px;
-          padding:4px 14px;font-size:9px;cursor:pointer;font-family:var(--sans)">
-        🔴 Reclamar a procesadora (${reclamarProc.length})
-      </button>
-      ${sinTasa.length ? `<div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-        <span style="font-size:9px;color:var(--m2)">⚙ ${sinTasa.length.toLocaleString('es-AR')} ops sin tasa configurada</span>
-        <button onclick="_tasasExportarSinTasa(window._cruzeTasasST)"
-          style="background:none;border:1px solid var(--b2);color:var(--m1);border-radius:4px;
-            padding:3px 10px;font-size:9px;cursor:pointer;font-family:var(--sans)">
-          ↓ Exportar Excel
-        </button>
-      </div>` : ''}
-    </div>
-
-    <!-- Body dinámico -->
-    <div id="liq-tasas-body" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden"></div>
+    <!-- Área dinámica por procesadora -->
+    <div id="liq-tasas-proc-area" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden"></div>
   </div>`;
 
-  // Función de render de tab accesible desde los botones inline
-  renderModuloLiqTasas._renderTab = renderTab;
-  renderTab(window._liqTasasTab || 'pd');
+  // Exponer funciones
+  renderModuloLiqTasas._renderProcTab = renderProcTab;
+  renderModuloLiqTasas._renderSubTab  = () => {};
+
+  // Restaurar estado
+  const procActivo = window._liqTasasProc || 'fiserv';
+  renderProcTab(procActivo);
 }
