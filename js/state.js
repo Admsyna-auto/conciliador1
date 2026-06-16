@@ -58,6 +58,42 @@ let TM = {
   tarjetas:    [],  // { tarjeta, equivSkylab, equivProc }
   planes:      [],  // { plan, cuotas, tarjeta, procesadora, codigos }
   tasas:       [],  // { acuerdo, procesadora, comercio, tarjeta, plan, cuotas, tasa, coef, vigDesde, vigHasta }
+  plazos:      [],  // { procesadora, comercio, tarjeta, dias_habiles, vigDesde, vigHasta }
+  feriados:    [    // { fecha YYYY-MM-DD, descripcion }
+    // ── 2025 ──────────────────────────────────────────────────────
+    {fecha:'2025-01-01',descripcion:'Año Nuevo'},
+    {fecha:'2025-03-03',descripcion:'Carnaval'},
+    {fecha:'2025-03-04',descripcion:'Carnaval'},
+    {fecha:'2025-03-24',descripcion:'Día Nac. de la Memoria'},
+    {fecha:'2025-04-02',descripcion:'Día del Veterano (Malvinas)'},
+    {fecha:'2025-04-17',descripcion:'Jueves Santo'},
+    {fecha:'2025-04-18',descripcion:'Viernes Santo'},
+    {fecha:'2025-05-01',descripcion:'Día del Trabajador'},
+    {fecha:'2025-05-25',descripcion:'Día de la Patria'},
+    {fecha:'2025-06-16',descripcion:'Gral. Belgrano (traslado)'},
+    {fecha:'2025-07-09',descripcion:'Día de la Independencia'},
+    {fecha:'2025-08-15',descripcion:'Gral. San Martín (traslado)'},
+    {fecha:'2025-10-13',descripcion:'Diversidad Cultural (traslado)'},
+    {fecha:'2025-11-24',descripcion:'Soberanía Nacional (traslado)'},
+    {fecha:'2025-12-08',descripcion:'Inmaculada Concepción'},
+    {fecha:'2025-12-25',descripcion:'Navidad'},
+    // ── 2026 ──────────────────────────────────────────────────────
+    {fecha:'2026-01-01',descripcion:'Año Nuevo'},
+    {fecha:'2026-02-16',descripcion:'Carnaval'},
+    {fecha:'2026-02-17',descripcion:'Carnaval'},
+    {fecha:'2026-03-24',descripcion:'Día Nac. de la Memoria'},
+    {fecha:'2026-04-02',descripcion:'Día del Veterano (Malvinas) / Jueves Santo'},
+    {fecha:'2026-04-03',descripcion:'Viernes Santo'},
+    {fecha:'2026-05-01',descripcion:'Día del Trabajador'},
+    {fecha:'2026-05-25',descripcion:'Día de la Patria'},
+    {fecha:'2026-06-15',descripcion:'Gral. Belgrano (traslado)'},
+    {fecha:'2026-07-09',descripcion:'Día de la Independencia'},
+    {fecha:'2026-08-17',descripcion:'Gral. San Martín'},
+    {fecha:'2026-10-12',descripcion:'Diversidad Cultural'},
+    {fecha:'2026-11-23',descripcion:'Soberanía Nacional (traslado)'},
+    {fecha:'2026-12-08',descripcion:'Inmaculada Concepción'},
+    {fecha:'2026-12-25',descripcion:'Navidad'},
+  ],
   motivos:     ['Error de digitación','Tarjeta incorrecta','Plan incorrecto','Cuotas incorrectas',
                 'Terminal incorrecta','Procesadora incorrecta','Diferencia de monto','Sin correspondencia','Otro'],
   estados:     ['Pendiente','Corregido','Validado','Sin correspondencia','En revisión'],

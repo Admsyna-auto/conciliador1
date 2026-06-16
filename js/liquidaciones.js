@@ -20,6 +20,42 @@
 // Un solo array cubre FISERV y GETPOS (mismo archivo de cupones liquidados)
 let _LIQ_CUPONES = [];
 
+// ── Días hábiles entre dos fechas ISO (excluye sáb, dom y TM.feriados) ──
+function _diasHabilesEntre(iso1, iso2) {
+  if (!iso1 || !iso2) return null;
+  const feriados = new Set((TM?.feriados || []).map(f => f.fecha));
+  const d1 = new Date(iso1 + 'T00:00:00');
+  const d2 = new Date(iso2 + 'T00:00:00');
+  if (isNaN(d1) || isNaN(d2) || d1 >= d2) return 0;
+  let dias = 0;
+  const cur = new Date(d1);
+  cur.setDate(cur.getDate() + 1);
+  while (cur <= d2) {
+    const dow = cur.getDay();
+    const iso = cur.toISOString().slice(0, 10);
+    if (dow !== 0 && dow !== 6 && !feriados.has(iso)) dias++;
+    cur.setDate(cur.getDate() + 1);
+  }
+  return dias;
+}
+
+// ── Buscar plazo acordado en TM.plazos ──────────────────────────────
+function _buscarPlazoEnTM(procesadora, comercio, tarjeta, fecha) {
+  if (!TM?.plazos?.length) return null;
+  const candidatos = TM.plazos.filter(p => {
+    const mP = !p.procesadora || p.procesadora.toUpperCase() === (procesadora||'').toUpperCase();
+    const mC = !p.comercio    || p.comercio === String(comercio||'');
+    const mT = !p.tarjeta     || p.tarjeta.toUpperCase() === (tarjeta||'').toUpperCase();
+    const vigente = (!p.vigDesde || p.vigDesde <= fecha) && (!p.vigHasta || p.vigHasta >= fecha);
+    return mP && mC && mT && vigente;
+  });
+  if (!candidatos.length) return null;
+  candidatos.sort((a, b) =>
+    [b.procesadora,b.comercio,b.tarjeta].filter(Boolean).length -
+    [a.procesadora,a.comercio,a.tarjeta].filter(Boolean).length);
+  return candidatos[0];
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────
 function _liqGCol(row, ...cands) {
   for (const c of cands) {
@@ -224,7 +260,17 @@ function _cruzarLiqFiserv() {
 
     if (liqRow) {
       if (liqRow.aut && liqRow.aut !== '0') autsUsados.add(liqRow.aut);
-      liquidadas.push({ fila, lote, cupon, aut, liqRow });
+      // Verificar plazo de acreditación
+      const fechaVenta = liqRow.fecha_venta || fila.sky?.fecha || '';
+      const fechaPago  = liqRow.fecha_pago  || '';
+      const plazoTM    = _buscarPlazoEnTM('FISERV', liqRow.nro_comercio || '', liqRow.tarjeta || '', fechaVenta);
+      let diasHabiles = null, diasEsperados = null, diasExtra = null;
+      if (plazoTM && fechaVenta && fechaPago) {
+        diasHabiles   = _diasHabilesEntre(fechaVenta, fechaPago);
+        diasEsperados = parseInt(plazoTM.dias_habiles) || 0;
+        diasExtra     = diasHabiles - diasEsperados;
+      }
+      liquidadas.push({ fila, lote, cupon, aut, liqRow, diasHabiles, diasEsperados, diasExtra, plazoTM });
     } else {
       noLiquidadas.push({ fila, lote, cupon, aut, enLiq: false, liqRow: null });
     }
@@ -239,15 +285,19 @@ function _cruzarLiqFiserv() {
       `${x.lote}-${x.cupon}` === k);
   });
 
-  const montoLiquidado = liquidadas.reduce((s,x) => s + (x.liqRow?.monto || Math.abs(x.fila.sky?.monto||0)), 0);
-  const montoNoLiq     = noLiquidadas.reduce((s,x) => s + Math.abs(x.fila.sky?.monto||0), 0);
-  const montoExtras    = extras.reduce((s,r) => s + r.monto, 0);
+  const fueraPlazo = liquidadas.filter(x => x.diasExtra !== null && x.diasExtra > 0);
+
+  const montoLiquidado  = liquidadas.reduce((s,x) => s + (x.liqRow?.monto || Math.abs(x.fila.sky?.monto||0)), 0);
+  const montoNoLiq      = noLiquidadas.reduce((s,x) => s + Math.abs(x.fila.sky?.monto||0), 0);
+  const montoExtras     = extras.reduce((s,r) => s + r.monto, 0);
+  const montoFueraPlazo = fueraPlazo.reduce((s,x) => s + (x.liqRow?.monto||0), 0);
 
   return {
-    liquidadas, noLiquidadas, sinConfirmar, extras,
-    montoLiquidado, montoNoLiq, montoExtras,
+    liquidadas, noLiquidadas, sinConfirmar, extras, fueraPlazo,
+    montoLiquidado, montoNoLiq, montoExtras, montoFueraPlazo,
     totalOK: liquidadas.length + noLiquidadas.length,
     tieneLiq: _LIQ_CUPONES.length > 0,
+    tienePlazos: !!(TM?.plazos?.length),
   };
 }
 
@@ -540,6 +590,38 @@ function _liqPopTab(proc, tab, cruce) {
           liq_id:    r.liq_id || '—',
         })));
     }
+    if (tab === 'fueraplazo') {
+      const colsFP = [
+        { key:'_estado',      label:'Estado' },
+        { key:'fecha_venta',  label:'Fecha Venta' },
+        { key:'suc',          label:'Suc.' },
+        { key:'lote',         label:'Lote' },
+        { key:'cupon',        label:'Cupón' },
+        { key:'tarjeta',      label:'Tarjeta' },
+        { key:'comercio',     label:'Comercio' },
+        { key:'monto_liq',    label:'Monto', cls:'num' },
+        { key:'fecha_pago',   label:'Fecha Pago' },
+        { key:'dias_esperados',label:'Días Esperados', cls:'num' },
+        { key:'dias_reales',  label:'Días Reales', cls:'num' },
+        { key:'dias_extra',   label:'Días Extra', cls:'num' },
+      ];
+      _liqRenderTable(`tbl-liq-fiserv-fueraplazo`, colsFP,
+        cruce.fueraPlazo.map(x => ({
+          _estado:       `⏱ +${x.diasExtra}d`,
+          fecha_venta:   x.liqRow?.fecha_venta || '',
+          suc:           x.fila.sky?.suc || '',
+          lote:          x.lote,
+          cupon:         x.cupon,
+          tarjeta:       x.liqRow?.tarjeta || '',
+          comercio:      x.liqRow?.nro_comercio || '',
+          monto_liq:     fmtM(x.liqRow?.monto),
+          fecha_pago:    x.liqRow?.fecha_pago || '',
+          dias_esperados:x.diasEsperados,
+          dias_reales:   x.diasHabiles,
+          dias_extra:    x.diasExtra,
+          _tr_style:     x.diasExtra > 5 ? 'background:rgba(248,113,113,.08)' : 'background:rgba(167,139,250,.06)',
+        })));
+    }
   }
 
   /* ── GETPOS ─────────────────────────────────────────────────── */
@@ -677,8 +759,9 @@ function renderModuloLiqFiserv() {
 
   const cruce = _cruzarLiqFiserv();
   _liqCache.fiserv = cruce;
-  const { liquidadas, noLiquidadas, sinConfirmar, extras,
-          montoLiquidado, montoNoLiq, montoExtras, totalOK, tieneLiq } = cruce;
+  const { liquidadas, noLiquidadas, sinConfirmar, extras, fueraPlazo,
+          montoLiquidado, montoNoLiq, montoExtras, montoFueraPlazo,
+          totalOK, tieneLiq, tienePlazos } = cruce;
   const pct = totalOK ? +_liqPct(liquidadas.length, totalOK) : 0;
 
   const kpis = [
@@ -697,6 +780,9 @@ function renderModuloLiqFiserv() {
       bc:'rgba(79,142,247,.3)',
       cls: pct>=90?'grn':pct>=70?'yel':'red',
       sub: tieneLiq ? `${liquidadas.length} de ${totalOK}` : 'Cargá LIQUIDACIONES.xlsx', pct },
+    ...(tienePlazos ? [{ label:'⏱ Fuera de plazo', val:fueraPlazo.length.toLocaleString('es-AR'),
+      bc:'rgba(167,139,250,.3)', cls: fueraPlazo.length ? 'red' : 'grn',
+      sub: fueraPlazo.length ? _liqFmtARS(montoFueraPlazo) : 'Todos en plazo' }] : []),
   ];
 
   const tabs = [
@@ -708,6 +794,8 @@ function renderModuloLiqFiserv() {
       cs:'background:rgba(251,191,36,.1);color:#fbbf24' }] : []),
     ...(extras.length ? [{ key:'extras', label:'⚠ Extras', n:extras.length,
       cs:'background:rgba(251,146,60,.12);color:var(--org)' }] : []),
+    ...(tienePlazos && fueraPlazo.length ? [{ key:'fueraplazo', label:'⏱ Fuera de plazo', n:fueraPlazo.length,
+      cs:`background:rgba(167,139,250,.12);color:#a78bfa;font-weight:700` }] : []),
   ];
 
   panel.innerHTML = _liqBuildPanel({

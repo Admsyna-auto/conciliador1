@@ -30,7 +30,7 @@ function renderModuloTM() {
     <div class="tm-layout">
       <div class="tm-sidebar">
         ${['sucursales','vendedores','terminales','comercios','tarjetas','planes','tasas',
-           'equivalencias','motivos','estados'].map(k => `
+           'plazos','feriados','equivalencias','motivos','estados'].map(k => `
           <button class="tm-nav-btn" id="tmnav-${k}" onclick="showTM('${k}')">${tmLabel(k)}</button>
         `).join('')}
       </div>
@@ -43,8 +43,8 @@ function tmLabel(k) {
   return {
     sucursales:'Sucursales', vendedores:'Vendedores', terminales:'Terminales',
     comercios:'Nros. Comercio', tarjetas:'Tarjetas', planes:'Planes/Cuotas',
-    tasas:'Tasas / Acuerdos', equivalencias:'Equiv. Comercio',
-    motivos:'Motivos', estados:'Estados',
+    tasas:'Tasas / Acuerdos', plazos:'Plazos Acreditación', feriados:'Feriados',
+    equivalencias:'Equiv. Comercio', motivos:'Motivos', estados:'Estados',
   }[k] || k;
 }
 
@@ -70,6 +70,11 @@ function showTM(key) {
     case 'planes':       body.innerHTML = renderTMGeneric(key, ['plan','cuotas','tarjeta','procesadora','codigos'],
       ['Plan','Cuotas','Tarjeta','Procesadora','Códigos'], () => ({plan:'',cuotas:'',tarjeta:'',procesadora:'',codigos:''})); break;
     case 'tasas':        body.innerHTML = renderTMTasas(); break;
+    case 'plazos':       body.innerHTML = renderTMGeneric(key,
+      ['procesadora','comercio','tarjeta','dias_habiles','vigDesde','vigHasta'],
+      ['Procesadora','Comercio','Tarjeta','Días Háb.','Desde','Hasta'],
+      () => ({procesadora:'FISERV',comercio:'',tarjeta:'',dias_habiles:'2',vigDesde:'',vigHasta:''})); break;
+    case 'feriados':     body.innerHTML = renderTMFeriados(); break;
     case 'equivalencias':body.innerHTML = renderTMEquiv(); break;
     case 'motivos':      body.innerHTML = renderTMCatalogo('motivos','Motivos de diferencia'); break;
     case 'estados':      body.innerHTML = renderTMCatalogo('estados','Estados de conciliación'); break;
@@ -134,6 +139,46 @@ function renderTMTasas() {
   const headers = ['Acuerdo','Procesadora','Comercio','Tarjeta','Plan','Cuotas','Tasa %','Coef.','Desde','Hasta'];
   return renderTMGeneric('tasas', fields, headers,
     () => ({acuerdo:'',procesadora:'',comercio:'',tarjeta:'',plan:'',cuotas:'',tasa:'',coef:'',vigDesde:'',vigHasta:''}));
+}
+
+// ── Feriados nacionales
+function renderTMFeriados() {
+  const rows = TM.feriados || [];
+  const bodyRows = rows.map((r, i) => `
+    <tr>
+      <td><input class="tm-inp" value="${esc(r.fecha||'')}" placeholder="YYYY-MM-DD"
+        onchange="updateTMRow('feriados',${i},'fecha',this.value)"></td>
+      <td><input class="tm-inp" value="${esc(r.descripcion||'')}" placeholder="Descripción"
+        onchange="updateTMRow('feriados',${i},'descripcion',this.value)"></td>
+      <td><button class="tm-del-btn" onclick="deleteTMRow('feriados',${i})">×</button></td>
+    </tr>`).join('');
+
+  return `
+    <div class="tm-panel">
+      <div class="tm-panel-hdr">
+        <span class="tm-panel-title">Feriados Nacionales</span>
+        <div class="tm-panel-actions">
+          <label class="tm-import-btn" title="Importar desde Excel">
+            📥 Importar Excel
+            <input type="file" accept=".xlsx,.xls,.csv" style="display:none"
+              onchange="importarTMExcel('feriados',this)">
+          </label>
+          <button class="tm-export-btn" onclick="exportarTM('feriados')">📤 Exportar</button>
+          <button class="tm-add-btn" onclick="addTMRow('feriados')">+ Agregar</button>
+        </div>
+      </div>
+      <div class="tm-table-wrap">
+        <table class="tm-table">
+          <thead><tr><th>Fecha</th><th>Descripción</th><th style="width:50px"></th></tr></thead>
+          <tbody id="tmbody-feriados">${bodyRows}</tbody>
+        </table>
+      </div>
+      <div class="tm-footer">
+        <span class="tm-count">${rows.length} feriados</span>
+        <button class="tm-discard-btn" onclick="descartarTM('feriados')">↩ Descartar</button>
+        <button class="tm-save-btn" onclick="saveTM()">💾 Guardar cambios</button>
+      </div>
+    </div>`;
 }
 
 // ── Equivalencias de comercio
@@ -231,6 +276,8 @@ function addTMRow(key) {
     tarjetas:    { tarjeta:'', equivSkylab:'', equivProc:'' },
     planes:      { plan:'', cuotas:'', tarjeta:'', procesadora:'', codigos:'' },
     tasas:       { acuerdo:'', procesadora:'', comercio:'', tarjeta:'', plan:'', cuotas:'', tasa:'', coef:'', vigDesde:'', vigHasta:'' },
+    plazos:      { procesadora:'FISERV', comercio:'', tarjeta:'', dias_habiles:'2', vigDesde:'', vigHasta:'' },
+    feriados:    { fecha:'', descripcion:'' },
   };
   if (!TM[key]) TM[key] = [];
   TM[key].push({ ...(defaults[key] || {}) });
@@ -318,6 +365,10 @@ function importarTMExcel(key, input) {
                        'tasa':'tasa','tasa%':'tasa',
                        'coef':'coef','coeficiente':'coef',
                        'desde':'vigDesde','hasta':'vigHasta' },
+        plazos:      { 'procesadora':'procesadora','comercio':'comercio','tarjeta':'tarjeta',
+                       'diashabiles':'dias_habiles','diashab':'dias_habiles','dias':'dias_habiles',
+                       'desde':'vigDesde','hasta':'vigHasta' },
+        feriados:    { 'fecha':'fecha','descripcion':'descripcion','descripción':'descripcion' },
       };
 
       const map = mapCols[key] || {};
@@ -331,13 +382,13 @@ function importarTMExcel(key, input) {
         return obj;
       }).filter(r => Object.values(r).some(v => v !== ''));
 
-      // Post-proceso para tasas: convertir tasa decimal→%, fechas serial→ISO
+      // Post-proceso: fechas serial Excel → ISO (tasas y plazos)
+      const serialToISO = v => {
+        const n = parseFloat(v);
+        if (isNaN(n) || n < 10000) return v;
+        return new Date(Math.round((n - 25569) * 86400000)).toISOString().slice(0, 10);
+      };
       if (key === 'tasas') {
-        const serialToISO = v => {
-          const n = parseFloat(v);
-          if (isNaN(n) || n < 10000) return v;
-          return new Date(Math.round((n - 25569) * 86400000)).toISOString().slice(0, 10);
-        };
         imported.forEach(row => {
           if (row.tasa) {
             const n = parseFloat(row.tasa);
@@ -345,6 +396,17 @@ function importarTMExcel(key, input) {
           }
           if (row.vigDesde) row.vigDesde = serialToISO(row.vigDesde);
           if (row.vigHasta) row.vigHasta = serialToISO(row.vigHasta);
+        });
+      }
+      if (key === 'plazos') {
+        imported.forEach(row => {
+          if (row.vigDesde) row.vigDesde = serialToISO(row.vigDesde);
+          if (row.vigHasta) row.vigHasta = serialToISO(row.vigHasta);
+        });
+      }
+      if (key === 'feriados') {
+        imported.forEach(row => {
+          if (row.fecha) row.fecha = serialToISO(row.fecha);
         });
       }
 

@@ -2417,7 +2417,7 @@ document.addEventListener('DOMContentLoaded', () => {
       // Poblar nav
       const nav = document.getElementById('tm-sidebar-nav');
       if (nav) nav.innerHTML = ['sucursales','vendedores','terminales','comercios','tarjetas',
-        'planes','tasas','equivalencias','motivos','estados'].map(k =>
+        'planes','tasas','plazos','feriados','equivalencias','motivos','estados'].map(k =>
         `<button class="tm-nav-btn" id="tmnav-${k}" onclick="showTM('${k}')">${tmLabel(k)}</button>`
       ).join('');
       showTM('sucursales');
