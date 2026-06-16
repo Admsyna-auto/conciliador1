@@ -36,7 +36,7 @@ function _bibMakeLoader(rec) {
     case 'GOC_PAGOS':      return () => loadGocPagos(fi, 'GOCUOTAS');
     case 'GOC_CELULAR':    return () => loadGocPagos(fi, 'GOCELULAR');
     case 'GOC_VENTAS':     return () => loadGocVentas(fi);
-    case 'LIQUIDACION':    return () => loadLiquidaciones(fi);
+    case 'LIQUIDACION':    return () => { loadLiquidaciones(fi); liqCargarCupones(fi); };
     case 'GOC_LIQ_PAGOS':  return () => loadGocPagosLiq(fi, 'GOCUOTAS');
     case 'GOC_LIQ_CELULAR':return () => loadGocPagosLiq(fi, 'GOCELULAR');
     default:               return null;
