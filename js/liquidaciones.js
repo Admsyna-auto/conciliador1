@@ -355,7 +355,10 @@ function _cruzarLiqFiserv() {
 }
 
 // ── CRUCE: GETPOS ────────────────────────────────────────────────────
-// Flujo: LIQ → PROC → SKY (por Código Autorización)
+// Flujo: LIQ → PROC → SKY (por Nro de Cupón, igual que FISERV usa lote+cupon)
+// El campo proc.cupon (Nro de Cupón del archivo GETPOS) coincide con
+// liqRow.cupon (Nro de Cupón del archivo de liquidaciones).
+// proc.aut (Cód. Aut. GETPOS) ≠ liqRow.aut (Código Autorización liq) → no usable.
 function _cruzarLiqGetpos() {
   if (typeof RESULTADO === 'undefined' || !RESULTADO.length) return null;
 
@@ -379,49 +382,55 @@ function _cruzarLiqGetpos() {
     return {
       liquidadas: [], sinConfirmar, extras: [],
       noLiquidadas: confirmadas.map(fila => ({
-        fila, aut: _liqNormAut(fila.proc?.aut || ''), enLiq: null, liqRow: null,
+        fila,
+        cupon: _liqNorm(fila.proc?.cupon || ''),
+        aut:   _liqNormAut(fila.proc?.aut || ''),
+        enLiq: null, liqRow: null,
       })),
       montoLiquidado:0, montoNoLiq: confirmadas.reduce((s,f)=>s+Math.abs(f.sky?.monto||0),0),
       montoExtras:0, totalOK: confirmadas.length, tieneLiq:false,
     };
   }
 
-  // Índice proc por aut
-  const procByAut = {};
+  // Índice proc: cupón (Nro de Cupón del archivo GETPOS) → [entries]
+  const procByCupon = {};
   for (const fila of confirmadas) {
-    const aut = _liqNormAut(fila.proc?.aut || '');
-    if (aut && aut !== '0') {
-      (procByAut[aut] = procByAut[aut] || []).push({ fila, aut });
+    const cupon = _liqNorm(fila.proc?.cupon || '');
+    const aut   = _liqNormAut(fila.proc?.aut || '');
+    if (cupon && cupon !== '0') {
+      (procByCupon[cupon] = procByCupon[cupon] || []).push({ fila, cupon, aut });
     }
   }
 
   const usados     = new Set();
   const liquidadas = [];
 
-  // Iterar sobre TODAS las filas del liq por aut (no filtrar por sinLote —
-  // el archivo de liquidaciones puede tener lote en filas GETPOS también)
+  // Iterar sobre todas las filas del liq, matchear por liqRow.cupon → proc.cupon
   for (const liqRow of _LIQ_CUPONES) {
-    const liqAut = _liqNormAut(liqRow.aut || '');
-    if (!liqAut || liqAut === '0') continue;
+    const liqCupon = _liqNorm(liqRow.cupon || '');
+    if (!liqCupon || liqCupon === '0') continue;
 
-    const entry = (procByAut[liqAut] || []).find(e => !usados.has(e.fila.sky?.idx));
+    const entry = (procByCupon[liqCupon] || []).find(e => !usados.has(e.fila.sky?.idx));
     if (entry) {
       usados.add(entry.fila.sky?.idx);
-      liquidadas.push({ fila: entry.fila, aut: entry.aut, liqRow });
+      liquidadas.push({ fila: entry.fila, cupon: entry.cupon, aut: entry.aut, liqRow });
     }
   }
 
   const noLiquidadas = confirmadas
     .filter(fila => !usados.has(fila.sky?.idx))
     .map(fila => ({
-      fila, aut: _liqNormAut(fila.proc?.aut || ''), enLiq: false, liqRow: null,
+      fila,
+      cupon: _liqNorm(fila.proc?.cupon || ''),
+      aut:   _liqNormAut(fila.proc?.aut || ''),
+      enLiq: false, liqRow: null,
     }));
 
-  // Extras: filas sin lote en la liq cuyo aut no matcheó ningún proc GETPOS
-  const usadosAut = new Set(liquidadas.map(x => x.aut));
+  // Extras: filas de liq cuyo cupón no matcheó ningún proc GETPOS
+  const usadosCupon = new Set(liquidadas.map(x => x.cupon));
   const extras = _LIQ_CUPONES.filter(r => {
-    const sinLote = !r.lote || r.lote === '0';
-    return sinLote && r.aut !== '0' && !usadosAut.has(_liqNormAut(r.aut || ''));
+    const c = _liqNorm(r.cupon || '');
+    return c && c !== '0' && !usadosCupon.has(c);
   });
 
   const montoLiquidado = liquidadas.reduce((s,x) => s + (x.liqRow?.monto || Math.abs(x.fila.sky?.monto||0)), 0);
