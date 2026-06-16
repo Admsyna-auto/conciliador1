@@ -765,6 +765,30 @@ function _bibLimpiarUI() {
   } catch(e) { console.warn('_bibLimpiarUI:', e); }
 }
 
+// ══ VACIAR ARCHIVOS HUÉRFANOS ═════════════════════════════════════════
+
+async function bibLimpiarArchivos() {
+  const db = await dbOpen();
+  const count = await new Promise(res => {
+    const tx = db.transaction('archivos', 'readonly');
+    tx.objectStore('archivos').count().onsuccess = e => res(e.target.result);
+  });
+  if (count === 0) {
+    _showToast('La biblioteca ya está vacía.');
+    return;
+  }
+  if (!confirm(`Hay ${count} archivo(s) guardados en la biblioteca.\n¿Eliminar todos? Esta acción no se puede deshacer.`)) return;
+  await new Promise((res, rej) => {
+    const tx = db.transaction('archivos', 'readwrite');
+    const req = tx.objectStore('archivos').clear();
+    req.onsuccess = () => res();
+    req.onerror   = e => rej(e.target.error);
+  });
+  await _actualizarBadgeBiblioteca();
+  _renderBiblioteca();
+  _showToast(`🗑 ${count} archivo(s) eliminados de la biblioteca.`);
+}
+
 // ══ INIT ══════════════════════════════════════════════════════════════
 
 document.addEventListener('DOMContentLoaded', () => {

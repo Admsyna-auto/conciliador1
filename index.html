@@ -1963,6 +1963,11 @@ tr.row-int td{background:rgba(52,211,153,.02)}
       </div>
       <div style="display:flex;align-items:center;gap:8px">
         <button class="bib-save-btn" onclick="bibAbrirNuevoPeriodo()" style="align-self:auto">＋ Nuevo período</button>
+        <button onclick="bibLimpiarArchivos()" title="Eliminar todos los archivos guardados en la biblioteca"
+          style="background:none;border:1px solid rgba(248,113,113,.4);color:var(--red);
+            border-radius:4px;padding:4px 10px;font-size:9px;cursor:pointer;font-family:var(--sans)">
+          🗑 Limpiar archivos
+        </button>
         <button class="bib-close" onclick="cerrarBiblioteca()">✕</button>
       </div>
     </div>
