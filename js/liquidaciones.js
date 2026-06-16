@@ -170,10 +170,9 @@ function parseLiqCupones(wb) {
   }
 
   console.log(`[LIQ] Parseados: ${out.length} cupones liquidados`);
-  // Debug muestra (primeras 3 filas)
   if (out.length > 0) {
-    console.debug('[LIQ] Muestra:', out.slice(0,3).map(r =>
-      `lote=${r.lote} cupon=${r.cupon} aut=${r.aut} monto=${r.monto}`).join(' | '));
+    console.debug('[LIQ] Muestra:', out.slice(0,5).map(r =>
+      `lote=${r.lote} cupon=${r.cupon} monto=${r.monto} cfo=${r.cfo} arancel=${r.arancel} cuotas=${r.cuotas}`).join('\n'));
   }
   return out;
 }
