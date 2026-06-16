@@ -1704,6 +1704,31 @@ async function loadGocPagos(input, fuente) {
   } catch(err) { if (st) { st.textContent = '✗ Error'; st.className = 'fc-st'; } console.error(err); }
 }
 
+// Carga GoC para LIQUIDACIONES — no pisa los arrays de OPERACIONES
+async function loadGocPagosLiq(input, fuente) {
+  fuente = fuente || 'GOCUOTAS';
+  const file = input.files[0]; if (!file) return;
+  // Guarda estado actual de OPERACIONES para restaurar después
+  const savedPagos   = _GOC_PAGOS.slice();
+  const savedCelular = _GOC_CELULAR.slice();
+  try {
+    const rows = await parseGocPagos(file, fuente);
+    // parseGocPagos escribió en _GOC_PAGOS/_GOC_CELULAR — captura en LIQ y restaura
+    if (fuente === 'GOCELULAR') {
+      _GOC_LIQ_CELULAR = rows;
+      _GOC_CELULAR = savedCelular;
+    } else {
+      _GOC_LIQ_PAGOS = rows;
+      _GOC_PAGOS = savedPagos;
+    }
+    const label = fuente === 'GOCELULAR' ? 'Go Celular Liq' : 'Go Cuotas Liq';
+    typeof _showToast === 'function'
+      && _showToast(`✓ ${label}: ${rows.length.toLocaleString('es-AR')} registros cargados`);
+    if (document.getElementById('mod-liq-goc')?.classList.contains('active'))
+      typeof renderModuloLiqGoC === 'function' && renderModuloLiqGoC();
+  } catch(err) { console.error('[GOC-LIQ]', err); }
+}
+
 function loadGocVentas(input) {
   const file = input.files[0]; if (!file) return;
   const st = document.getElementById('st-goc-ven');

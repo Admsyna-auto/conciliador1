@@ -16,7 +16,9 @@ const _BIB_TIPOS = [
   { id:'GOC_CELULAR', label:'Go Celular CSV',                   modulo:'OPERACIONES', accept:'.csv,.txt',  badge:'GK',  bg:'#1a1040', color:'#a78bfa' },
   { id:'GOC_VENTAS',  label:'GoC Ventas (IMEI)',                modulo:'OPERACIONES', accept:'.xlsx,.xls', badge:'GV',  bg:'#1a1f10', color:'#fbbf24' },
   // ── LIQUIDACIONES: cruce ops confirmadas vs pagos de procesadora ─
-  { id:'LIQUIDACION', label:'Cupones Liquidados (FISERV+GETPOS)',modulo:'LIQUIDACIONES', accept:'.xlsx,.xls', badge:'LIQ', bg:'#291000', color:'#fb923c' },
+  { id:'LIQUIDACION',     label:'Cupones Liquidados (FISERV+GETPOS)', modulo:'LIQUIDACIONES', accept:'.xlsx,.xls', badge:'LIQ', bg:'#291000', color:'#fb923c' },
+  { id:'GOC_LIQ_PAGOS',  label:'Go Cuotas Liquidación CSV',           modulo:'LIQUIDACIONES', accept:'.csv,.txt',  badge:'GQL', bg:'#0a2018', color:'#4ade80' },
+  { id:'GOC_LIQ_CELULAR',label:'Go Celular Liquidación CSV',           modulo:'LIQUIDACIONES', accept:'.csv,.txt',  badge:'GCL', bg:'#130a30', color:'#a78bfa' },
 ];
 
 // ── Loader: convierte un registro de la biblioteca en función de carga ─
@@ -31,11 +33,13 @@ function _bibMakeLoader(rec) {
     case 'FISERV_CTR':  return () => loadContracargos(fi, 'fis');
     case 'GETPOS':      return () => loadFile(fi, 'gp');
     case 'GETPOS_CTR':  return () => loadContracargos(fi, 'gp');
-    case 'GOC_PAGOS':   return () => loadGocPagos(fi, 'GOCUOTAS');
-    case 'GOC_CELULAR': return () => loadGocPagos(fi, 'GOCELULAR');
-    case 'GOC_VENTAS':  return () => loadGocVentas(fi);
-    case 'LIQUIDACION': return () => loadLiquidaciones(fi);
-    default:            return null;
+    case 'GOC_PAGOS':      return () => loadGocPagos(fi, 'GOCUOTAS');
+    case 'GOC_CELULAR':    return () => loadGocPagos(fi, 'GOCELULAR');
+    case 'GOC_VENTAS':     return () => loadGocVentas(fi);
+    case 'LIQUIDACION':    return () => loadLiquidaciones(fi);
+    case 'GOC_LIQ_PAGOS':  return () => loadGocPagosLiq(fi, 'GOCUOTAS');
+    case 'GOC_LIQ_CELULAR':return () => loadGocPagosLiq(fi, 'GOCELULAR');
+    default:               return null;
   }
 }
 
@@ -634,16 +638,25 @@ function _bibAutoTipo(nombre) {
   const n   = nombre.toLowerCase();
   const sel = document.getElementById('bib-tipo');
   if (!sel || sel.value) return;
-  if      (n.includes('skylab'))                            sel.value = 'SKYLAB';
-  else if (n.includes('terminal'))                          sel.value = 'TERMINALES';
-  else if (n.includes('fiserv') && n.includes('contra'))    sel.value = 'FISERV_CTR';
-  else if (n.includes('fiserv') || n.includes('liq'))       sel.value = 'FISERV_LIQ';
-  else if (n.includes('getpos') && n.includes('contra'))    sel.value = 'GETPOS_CTR';
-  else if (n.includes('getpos'))                            sel.value = 'GETPOS';
-  else if (n.includes('celular'))                           sel.value = 'GOC_CELULAR';
-  else if (n.includes('cuota') || n.includes('gocuota'))    sel.value = 'GOC_PAGOS';
-  else if (n.includes('venta'))                             sel.value = 'GOC_VENTAS';
-  else if (n.includes('liquid'))                            sel.value = 'LIQUIDACION';
+  const esCelular = n.includes('celular');
+  const esCuota   = n.includes('cuota') || n.includes('gocuota');
+  const esLiq     = n.includes('liquid') || n.includes('liq');
+  if      (n.includes('skylab'))                               sel.value = 'SKYLAB';
+  else if (n.includes('terminal'))                             sel.value = 'TERMINALES';
+  else if (n.includes('fiserv') && n.includes('contra'))       sel.value = 'FISERV_CTR';
+  else if (n.includes('getpos') && n.includes('contra'))       sel.value = 'GETPOS_CTR';
+  else if (n.includes('getpos'))                               sel.value = 'GETPOS';
+  // GoC Liquidaciones (tiene "cuota"/"celular" + "liquid") — antes de los de OPERACIONES
+  else if (esCelular && esLiq)                                 sel.value = 'GOC_LIQ_CELULAR';
+  else if (esCuota   && esLiq)                                 sel.value = 'GOC_LIQ_PAGOS';
+  // GoC Operaciones
+  else if (esCelular)                                          sel.value = 'GOC_CELULAR';
+  else if (esCuota)                                            sel.value = 'GOC_PAGOS';
+  else if (n.includes('venta'))                                sel.value = 'GOC_VENTAS';
+  // FISERV / LIQUIDACIONES xlsx (sin "cuota"/"celular")
+  else if (n.includes('fiserv') || (esLiq && (n.endsWith('.xlsx') || n.endsWith('.xls'))))
+                                                               sel.value = 'FISERV_LIQ';
+  else if (esLiq)                                              sel.value = 'LIQUIDACION';
 }
 
 // ══ BADGE Y PILL ══════════════════════════════════════════════════════

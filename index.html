@@ -1922,6 +1922,9 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   <!-- ── MÓDULO: LIQ GO CUOTAS ────────────────────────────── -->
   <div class="mod-panel" id="mod-liq-goc"></div>
 
+  <!-- ── MÓDULO: LIQ TASAS ─────────────────────────────────── -->
+  <div class="mod-panel" id="mod-liq-tasas"></div>
+
   <!-- ── MÓDULO 8: HISTÓRICO ──────────────────────────────── -->
   <div class="mod-panel" id="mod-hist">
     <div id="mod-hist-inner" style="display:flex;flex:1;min-height:0;overflow:hidden;flex-direction:column"></div>
@@ -2015,7 +2018,7 @@ function _initProcGroups() {
 const MEGA_MAP = {
   resumen:        [{ id:'dashboard', label:'Dashboard' },{ id:'hist', label:'Histórico' }],
   operaciones:    [{ id:'cruce', label:'Cruce automático' },{ id:'revision', label:'Revisión manual' },{ id:'fiserv', label:'FISERV' },{ id:'getpos', label:'GETPOS' },{ id:'goc', label:'Go Cuotas' }],
-  liquidaciones:  [{ id:'liq-fiserv', label:'FISERV' },{ id:'liq-getpos', label:'GETPOS' },{ id:'liq-goc', label:'Go Cuotas' }],
+  liquidaciones:  [{ id:'liq-fiserv', label:'FISERV' },{ id:'liq-getpos', label:'GETPOS' },{ id:'liq-goc', label:'Go Cuotas' },{ id:'liq-tasas', label:'Tasas' }],
   diferencias:    [{ id:'diferencias', label:'Diferencias' },{ id:'cobros', label:'Cobros' },{ id:'ctr', label:'Contracargos' }],
   configuracion:  [{ id:'tm', label:'Tablas maestras' }],
 };
@@ -2085,6 +2088,7 @@ function showMod(mod, _btn) {   // _btn mantenido por compatibilidad (ignorado)
   if (mod === 'liq-fiserv')  { if (typeof renderModuloLiqFiserv  === 'function') renderModuloLiqFiserv(); }
   if (mod === 'liq-getpos')  { if (typeof renderModuloLiqGetpos  === 'function') renderModuloLiqGetpos(); }
   if (mod === 'liq-goc')     { if (typeof renderModuloLiqGoC     === 'function') renderModuloLiqGoC(); }
+  if (mod === 'liq-tasas')   { if (typeof renderModuloLiqTasas   === 'function') renderModuloLiqTasas(); }
 }
 
 // ══ PERIOD DROPDOWN (topbar) ═══════════════════════════

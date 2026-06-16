@@ -7,11 +7,13 @@
 //   IMEI requerido cuando plan contiene "CELULAR" o artículo es teléfono
 // ═══════════════════════════════════════════════════════════════════
 
-let _GOC_SKY     = [];   // Skylab Go Cuotas parseado
-let _GOC_PAGOS   = [];   // Go Cuotas CSV parseado (fuente: 'GOCUOTAS')
-let _GOC_CELULAR = [];   // Go Celular CSV parseado (fuente: 'GOCELULAR')
-let _GOC_VENTAS  = [];   // Ventas XLSX parseado
-let _GOC_RESULT  = [];   // resultado del cruce
+let _GOC_SKY        = [];   // Skylab Go Cuotas parseado
+let _GOC_PAGOS      = [];   // Go Cuotas CSV parseado (fuente: 'GOCUOTAS') — OPERACIONES
+let _GOC_CELULAR    = [];   // Go Celular CSV parseado (fuente: 'GOCELULAR') — OPERACIONES
+let _GOC_VENTAS     = [];   // Ventas XLSX parseado
+let _GOC_RESULT     = [];   // resultado del cruce
+let _GOC_LIQ_PAGOS  = [];   // Go Cuotas CSV de LIQUIDACIONES (archivo distinto al de OPERACIONES)
+let _GOC_LIQ_CELULAR= [];   // Go Celular CSV de LIQUIDACIONES
 
 // ── Helpers de formato ──────────────────────────────────────────────
 function _gFmt(v)  { return typeof fmtARS === 'function' ? fmtARS(v) : '$'+v; }
