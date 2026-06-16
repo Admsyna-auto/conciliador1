@@ -966,6 +966,12 @@ function renderTodo() {
     && typeof renderModuloFiserv  === 'function')   renderModuloFiserv();
   if (document.getElementById('mod-getpos')?.classList.contains('active')
     && typeof renderModuloGetpos  === 'function')   renderModuloGetpos();
+  // Invalidar cache de liquidaciones para que los cruces reflejen las correcciones
+  if (typeof _liqCache !== 'undefined') {
+    _liqCache.fiserv = null;
+    _liqCache.getpos = null;
+    _liqCache.goc    = null;
+  }
   // Refrescar liquidaciones si están activas
   if (document.getElementById('mod-liq-fiserv')?.classList.contains('active')
     && typeof renderModuloLiqFiserv === 'function') renderModuloLiqFiserv();
@@ -973,6 +979,8 @@ function renderTodo() {
     && typeof renderModuloLiqGetpos === 'function') renderModuloLiqGetpos();
   if (document.getElementById('mod-liq-goc')?.classList.contains('active')
     && typeof renderModuloLiqGoC    === 'function') renderModuloLiqGoC();
+  if (document.getElementById('mod-liq-tasas')?.classList.contains('active')
+    && typeof renderModuloLiqTasas  === 'function') renderModuloLiqTasas();
 }
 
 function renderTablas() {

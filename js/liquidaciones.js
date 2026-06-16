@@ -245,7 +245,8 @@ function _cruzarLiqFiserv() {
     const esConfirmada = fila.estado?.startsWith('OK') ||
       fila.estado === 'DIF. CUOTAS' ||
       fila.estado?.startsWith('COM. ERRADO') ||
-      fila.estado?.startsWith('MAL FACTURADO');
+      fila.estado?.startsWith('MAL FACTURADO') ||
+      (fila.estado?.startsWith('CORREGIDO MANUAL') && !!fila.proc);
     if (!esConfirmada || fila.esDevolucion === 'SI' || fila.sky?.esNeg) sinConfirmar.push(fila);
     else confirmadas.push(fila);
   }
@@ -347,7 +348,8 @@ function _cruzarLiqGetpos() {
     const esConfirmada = fila.estado?.startsWith('OK') ||
       fila.estado === 'DIF. CUOTAS' ||
       fila.estado?.startsWith('COM. ERRADO') ||
-      fila.estado?.startsWith('MAL FACTURADO');
+      fila.estado?.startsWith('MAL FACTURADO') ||
+      (fila.estado?.startsWith('CORREGIDO MANUAL') && !!fila.proc);
     if (!esConfirmada || fila.esDevolucion === 'SI' || fila.sky?.esNeg) sinConfirmar.push(fila);
     else confirmadas.push(fila);
   }
@@ -1268,7 +1270,15 @@ function _cruzarTasas() {
   if (typeof RESULTADO === 'undefined' || !RESULTADO.length) return null;
   if (!_LIQ_CUPONES.length) return null;
 
-  const { byLoteCupon, byAut } = _liqBuildIndexes();
+  // Asegurar que los cruces FISERV/GETPOS estén computados (usan la dirección correcta PROC→LIQ)
+  if (!_liqCache.fiserv) _liqCache.fiserv = _cruzarLiqFiserv();
+  if (!_liqCache.getpos) _liqCache.getpos = _cruzarLiqGetpos();
+
+  // Usar el liqRow ya encontrado correctamente por los cruces PROC→LIQ
+  const filaLiqMap = new Map();
+  for (const x of (_liqCache.fiserv?.liquidadas  || [])) filaLiqMap.set(x.fila, x.liqRow);
+  for (const x of (_liqCache.fiserv?.fueraPlazo  || [])) filaLiqMap.set(x.fila, x.liqRow);
+  for (const x of (_liqCache.getpos?.liquidadas  || [])) filaLiqMap.set(x.fila, x.liqRow);
 
   const pasarDescuento = [];   // error vendedor: tasa cobrada ≠ tasa del plan Skylab
   const reclamarProc   = [];   // error procesadora: tasa cobrada > tasa acordada para SU plan
@@ -1278,11 +1288,7 @@ function _cruzarTasas() {
   const filas = RESULTADO.filter(r => !r.sky?.esGOCUOTAS);
 
   for (const fila of filas) {
-    const lote  = _liqNorm(fila.proc?.lote   || '');
-    const cupon = _liqNorm(fila.proc?.cupon  || fila.proc?.ticket || '');
-    const aut   = _liqNormAut(fila.proc?.aut || '');
-
-    const liqRow = byLoteCupon[`${lote}-${cupon}`] || byAut[aut];
+    const liqRow = filaLiqMap.get(fila) || null;
     if (!liqRow || !liqRow.monto) continue;
 
     const td_cobrada = _liqTD(liqRow);
