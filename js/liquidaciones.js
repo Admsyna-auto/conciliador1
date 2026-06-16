@@ -75,8 +75,8 @@ function _liqNorm(v) {
 }
 
 function _liqNormAut(v) {
-  // Autorizaciones pueden tener espacios al final (p.ej. "756870  ")
-  return _liqNorm(String(v ?? '').trim());
+  // Strip leading apostrophes (Excel text prefix) y espacios, luego quita ceros iniciales
+  return _liqNorm(String(v ?? '').replace(/^['"]+/, '').trim());
 }
 
 function _liqMonto(v) {
@@ -363,8 +363,10 @@ function _cruzarLiqGetpos() {
     };
   }
 
-  // Índice de liqRows: "aut|monto|equipo|cuotas" → [liqRows]
-  // Se indexa con monto, monto+1 y monto-1 para tolerar redondeo de centavos
+  // Índice de liqRows con dos claves por entrada:
+  //   FULL:  "aut|monto|equipo|cuotas"  (con equipo)
+  //   SHORT: "aut|monto||cuotas"        (sin equipo, fallback si proc.pos está vacío)
+  // monto se indexa también con ±1 para tolerar redondeo de centavos
   const liqIdx = {};
   for (const r of _LIQ_CUPONES) {
     const aut = _liqNormAut(r.aut || '');
@@ -373,8 +375,10 @@ function _cruzarLiqGetpos() {
     const eq = _liqNorm(r.equipo || '');
     const cu = r.cuotas || 0;
     for (const mv of [m, m + 1, Math.max(0, m - 1)]) {
-      const k = `${aut}|${mv}|${eq}|${cu}`;
-      (liqIdx[k] = liqIdx[k] || []).push(r);
+      const kFull  = `${aut}|${mv}|${eq}|${cu}`;
+      const kShort = `${aut}|${mv}||${cu}`;
+      (liqIdx[kFull]  = liqIdx[kFull]  || []).push(r);
+      if (eq !== '0') (liqIdx[kShort] = liqIdx[kShort] || []).push(r);
     }
   }
 
@@ -388,8 +392,15 @@ function _cruzarLiqGetpos() {
     const pEquipo = _liqNorm(String(fila.proc?.pos || fila.proc?.equipo || ''));
     const pCuotas = parseInt(fila.proc?.cuotas || fila.sky?.cuotas) || 0;
 
-    const k      = `${pAut}|${pMonto}|${pEquipo}|${pCuotas}`;
-    const liqRow = (liqIdx[k] || []).find(r => !usadosLiq.has(r)) || null;
+    // 1°: clave completa aut+monto+equipo+cuotas
+    const kFull  = `${pAut}|${pMonto}|${pEquipo}|${pCuotas}`;
+    // 2°: fallback sin equipo (cuando proc.pos está vacío o no coincide)
+    const kShort = `${pAut}|${pMonto}||${pCuotas}`;
+
+    const liqRow =
+      (liqIdx[kFull]  || []).find(r => !usadosLiq.has(r)) ||
+      (pEquipo === '0' ? (liqIdx[kShort] || []).find(r => !usadosLiq.has(r)) : null) ||
+      null;
 
     if (liqRow) {
       usadosLiq.add(liqRow);
