@@ -1056,6 +1056,36 @@ function _tasasRenderTabla(filas, modo) {
 }
 
 // ── Exportar a Excel ───────────────────────────────────────────────────
+function _tasasExportarSinTasa(filas) {
+  if (!filas || !filas.length) { _showToast && _showToast('Sin filas para exportar'); return; }
+  const pctFmt = v => `${(v * 100).toFixed(4).replace(/\.?0+$/, '')}%`;
+  const data = filas.map(x => {
+    const { fila, liqRow, td_cobrada, liqTarjeta, liqCuotas, skyTarjeta, skyCuotas } = x;
+    const sky = fila?.sky || {};
+    return {
+      'Fecha Venta':            liqRow?.fecha_venta || '',
+      'Nro Equipo':             liqRow?.equipo || '',
+      'SUC':                    sky.suc || '',
+      'Nro de Lote':            liqRow?.lote || '',
+      'Nro de Cupón':           liqRow?.cupon || '',
+      'Tarjeta Cobrada':        liqTarjeta || '',
+      'Plan Cobrado (cuotas)':  liqCuotas || 1,
+      'Importe Venta':          liqRow?.monto || 0,
+      'Tasa Cobrada':           pctFmt(td_cobrada),
+      'Tarjeta Facturada':      skyTarjeta || '',
+      'Plan Facturado (cuotas)':skyCuotas || 1,
+      'VENDEDOR':               sky.vendedor || '',
+      'ID':                     sky.opId || '',
+      'N° FC':                  sky.opNum || '',
+      'MOTIVO':                 'Sin tasa acordada en TM',
+    };
+  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.json_to_sheet(data);
+  XLSX.utils.book_append_sheet(wb, ws, 'Sin tasa config');
+  XLSX.writeFile(wb, `sin_tasa_configurada_${new Date().toISOString().slice(0,10)}.xlsx`);
+}
+
 function _tasasExportar(filas, modo) {
   if (!filas.length) { _showToast && _showToast('Sin filas para exportar'); return; }
   const pctFmt = v => `${(v * 100).toFixed(4).replace(/\.?0+$/, '')}%`;
@@ -1166,6 +1196,7 @@ function renderModuloLiqTasas() {
   // Guardar refs para exportar
   window._cruzeTasasPD = pasarDescuento;
   window._cruzeTasasRP = reclamarProc;
+  window._cruzeTasasST = sinTasa;
 
   panel.innerHTML = `
   <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
@@ -1220,8 +1251,14 @@ function renderModuloLiqTasas() {
           padding:4px 14px;font-size:9px;cursor:pointer;font-family:var(--sans)">
         🔴 Reclamar a procesadora (${reclamarProc.length})
       </button>
-      ${sinTasa.length ? `<span style="margin-left:auto;font-size:9px;color:var(--m2);
-        align-self:center">⚙ ${sinTasa.length} ops sin tasa configurada</span>` : ''}
+      ${sinTasa.length ? `<div style="margin-left:auto;display:flex;align-items:center;gap:6px">
+        <span style="font-size:9px;color:var(--m2)">⚙ ${sinTasa.length.toLocaleString('es-AR')} ops sin tasa configurada</span>
+        <button onclick="_tasasExportarSinTasa(window._cruzeTasasST)"
+          style="background:none;border:1px solid var(--b2);color:var(--m1);border-radius:4px;
+            padding:3px 10px;font-size:9px;cursor:pointer;font-family:var(--sans)">
+          ↓ Exportar Excel
+        </button>
+      </div>` : ''}
     </div>
 
     <!-- Body dinámico -->
