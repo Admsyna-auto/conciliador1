@@ -262,8 +262,24 @@ function _cruzarLiqFiserv() {
       continue;
     }
 
-    // Buscar en liquidación: primero por lote+cupón (solo datos proc), luego por autorización
-    const liqRow = byLoteCupon[`${lote}-${cupon}`] || byAut[aut];
+    // Buscar en liquidación: primero por lote+cupón (solo datos proc)
+    let liqRow = byLoteCupon[`${lote}-${cupon}`];
+
+    // Fallback por autorización: solo aceptar si monto Y fecha coinciden
+    if (!liqRow && aut) {
+      const cand = byAut[aut];
+      if (cand) {
+        const skyMonto  = Math.abs(fila.sky?.monto || 0);
+        const montoOk   = Math.abs((cand.monto || 0) - skyMonto) <= Math.max(1, skyMonto * 0.01);
+        const skyFecha  = fila.sky?.fecha || '';
+        const liqFecha  = cand.fecha_venta || '';
+        const diasDif   = (skyFecha && liqFecha)
+          ? Math.abs(Math.round((new Date(skyFecha) - new Date(liqFecha)) / 86400000))
+          : 0;
+        const fechaOk   = !skyFecha || !liqFecha || diasDif <= 7;
+        if (montoOk && fechaOk) liqRow = cand;
+      }
+    }
 
     if (liqRow) {
       if (liqRow.aut && liqRow.aut !== '0') autsUsados.add(liqRow.aut);
