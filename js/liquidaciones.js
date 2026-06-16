@@ -397,21 +397,17 @@ function _cruzarLiqGetpos() {
 
   const usados     = new Set();
   const liquidadas = [];
-  const extras     = [];
 
-  // Solo filas GETPOS de la liq: sin lote (o lote = '0')
-  const liqGetpos = _LIQ_CUPONES.filter(r => !r.lote || r.lote === '0');
-
-  for (const liqRow of liqGetpos) {
+  // Iterar sobre TODAS las filas del liq por aut (no filtrar por sinLote —
+  // el archivo de liquidaciones puede tener lote en filas GETPOS también)
+  for (const liqRow of _LIQ_CUPONES) {
     const liqAut = _liqNormAut(liqRow.aut || '');
-    if (!liqAut || liqAut === '0') { extras.push(liqRow); continue; }
+    if (!liqAut || liqAut === '0') continue;
 
     const entry = (procByAut[liqAut] || []).find(e => !usados.has(e.fila.sky?.idx));
     if (entry) {
       usados.add(entry.fila.sky?.idx);
       liquidadas.push({ fila: entry.fila, aut: entry.aut, liqRow });
-    } else {
-      extras.push(liqRow);
     }
   }
 
@@ -420,6 +416,13 @@ function _cruzarLiqGetpos() {
     .map(fila => ({
       fila, aut: _liqNormAut(fila.proc?.aut || ''), enLiq: false, liqRow: null,
     }));
+
+  // Extras: filas sin lote en la liq cuyo aut no matcheó ningún proc GETPOS
+  const usadosAut = new Set(liquidadas.map(x => x.aut));
+  const extras = _LIQ_CUPONES.filter(r => {
+    const sinLote = !r.lote || r.lote === '0';
+    return sinLote && r.aut !== '0' && !usadosAut.has(_liqNormAut(r.aut || ''));
+  });
 
   const montoLiquidado = liquidadas.reduce((s,x) => s + (x.liqRow?.monto || Math.abs(x.fila.sky?.monto||0)), 0);
   const montoNoLiq     = noLiquidadas.reduce((s,x) => s + Math.abs(x.fila.sky?.monto||0), 0);
