@@ -547,7 +547,7 @@ function _liqExportarTodo(proc) {
     const H = [
       'Estado',
       // SKY
-      'Fecha SKY','Suc.','Tarjeta SKY','Plan SKY','Cuotas SKY','Factura SKY','Monto SKY',
+      'Fecha SKY','Suc.','Tarjeta SKY','Plan SKY','Cuotas SKY','Lote SKY','Cupón SKY','Nro. Asiento','Monto SKY',
       // LIQ
       'Fecha Venta','Fecha Pago','Nro Equipo','Nombre Equipo',
       'Nro Lote','Nro Cupón','Tarjeta Liq.','Nro Tarjeta','Cód. Autorización',
@@ -555,7 +555,7 @@ function _liqExportarTodo(proc) {
     ];
     const _rFis = (sky, r, lote, cupon, aut) => [
       sky?.fecha||'', sky?.suc||'', sky?.tarjeta||'', sky?.plan||'',
-      sky?.cuotas||'', sky?.opNum||'', num(sky?.monto),
+      sky?.cuotas||'', sky?.lote||'', sky?.cupon||'', sky?.asiento||'', num(sky?.monto),
       r?.fecha_venta||'', r?.fecha_pago||'', r?.equipo||'', r?.nombre_equipo||'',
       lote||'', cupon||'', r?.tarjeta||'', r?.nro_tarjeta||'', aut||'',
       r?.cuotas||'', num(r?.monto), r?.nro_comercio||'', r?.banco_pagador||'', r?.liq_id||'',
@@ -585,7 +585,7 @@ function _liqExportarTodo(proc) {
     const H = [
       'Estado',
       // SKY
-      'Fecha SKY','Suc.','Tarjeta SKY','Plan SKY','Cuotas SKY','Factura SKY','Monto SKY',
+      'Fecha SKY','Suc.','Tarjeta SKY','Plan SKY','Cuotas SKY','Lote SKY','Cupón SKY','Nro. Asiento','Monto SKY',
       // LIQ
       'Fecha Venta','Fecha Pago','Nro Equipo','Nombre Equipo',
       'Nro Cupón','Tarjeta Liq.','Nro Tarjeta','Cód. Autorización',
@@ -593,7 +593,7 @@ function _liqExportarTodo(proc) {
     ];
     const _rGP = (sky, r, aut, cupon) => [
       sky?.fecha||'', sky?.suc||'', sky?.tarjeta||'', sky?.plan||'',
-      sky?.cuotas||'', sky?.opNum||'', num(sky?.monto),
+      sky?.cuotas||'', sky?.lote||'', sky?.cupon||'', sky?.asiento||'', num(sky?.monto),
       r?.fecha_venta||'', r?.fecha_pago||'', r?.equipo||'', r?.nombre_equipo||'',
       cupon||r?.cupon||'', r?.tarjeta||'', r?.nro_tarjeta||'', aut||r?.aut||'',
       r?.cuotas||'', num(r?.monto), r?.nro_comercio||'', r?.banco_pagador||'',
@@ -713,7 +713,9 @@ function _liqPopTab(proc, tab, cruce) {
       { key:'tarjeta_sky',   label:'Tarjeta SKY' },
       { key:'plan_sky',      label:'Plan SKY' },
       { key:'cuotas_sky',    label:'Cuotas SKY', cls:'num' },
-      { key:'factura_sky',   label:'Factura SKY' },
+      { key:'lote_sky',      label:'Lote SKY' },
+      { key:'cupon_sky',     label:'Cupón SKY' },
+      { key:'asiento_sky',   label:'Nro. Asiento' },
       { key:'monto_sky',     label:'Monto SKY', cls:'num' },
       // — Liquidación —
       { key:'fecha_venta',   label:'Fecha Venta' },
@@ -738,7 +740,9 @@ function _liqPopTab(proc, tab, cruce) {
       tarjeta_sky:   sky?.tarjeta     || '',
       plan_sky:      sky?.plan        || '',
       cuotas_sky:    sky?.cuotas      || '',
-      factura_sky:   sky?.opNum       || '',
+      lote_sky:      sky?.lote        || '',
+      cupon_sky:     sky?.cupon       || '',
+      asiento_sky:   sky?.asiento     || '',
       monto_sky:     fmtM(sky?.monto),
     });
     const _liqFis = (r) => ({
@@ -762,6 +766,7 @@ function _liqPopTab(proc, tab, cruce) {
       lote:'—', cupon:'—', tarjeta_liq:'—', nro_tarjeta:'—', aut:'—',
       cuotas_liq:'—', monto_liq:'—', nro_comercio:'—', banco_pagador:'—', liq_id:'—',
     });
+
 
     if (tab === 'liq') {
       _liqRenderTable(`tbl-liq-fiserv-liq`, colsFis,
@@ -801,7 +806,7 @@ function _liqPopTab(proc, tab, cruce) {
         cruce.extras.map(r => ({
           _estado: '⚠ Extra en Liq.',
           fecha: r.fecha_venta || '', suc: '', tarjeta_sky: '—', plan_sky: '—',
-          cuotas_sky: '—', factura_sky: '—', monto_sky: '—',
+          cuotas_sky: '—', lote_sky: '—', cupon_sky: '—', asiento_sky: '—', monto_sky: '—',
           ..._liqFis(r),
         })));
     }
@@ -813,7 +818,9 @@ function _liqPopTab(proc, tab, cruce) {
         { key:'tarjeta_sky',   label:'Tarjeta SKY' },
         { key:'plan_sky',      label:'Plan SKY' },
         { key:'cuotas_sky',    label:'Cuotas SKY', cls:'num' },
-        { key:'factura_sky',   label:'Factura SKY' },
+        { key:'lote_sky',      label:'Lote SKY' },
+        { key:'cupon_sky',     label:'Cupón SKY' },
+        { key:'asiento_sky',   label:'Nro. Asiento' },
         { key:'monto_sky',     label:'Monto SKY', cls:'num' },
         { key:'fecha_venta',   label:'Fecha Venta' },
         { key:'fecha_pago',    label:'Fecha Pago' },
@@ -859,7 +866,9 @@ function _liqPopTab(proc, tab, cruce) {
       { key:'tarjeta_sky',   label:'Tarjeta SKY' },
       { key:'plan_sky',      label:'Plan SKY' },
       { key:'cuotas_sky',    label:'Cuotas SKY', cls:'num' },
-      { key:'factura_sky',   label:'Factura SKY' },
+      { key:'lote_sky',      label:'Lote SKY' },
+      { key:'cupon_sky',     label:'Cupón SKY' },
+      { key:'asiento_sky',   label:'Nro. Asiento' },
       { key:'monto_sky',     label:'Monto SKY', cls:'num' },
       // — Liquidación —
       { key:'fecha_venta',   label:'Fecha Venta' },
@@ -882,7 +891,9 @@ function _liqPopTab(proc, tab, cruce) {
       tarjeta_sky: sky?.tarjeta || '',
       plan_sky:    sky?.plan    || '',
       cuotas_sky:  sky?.cuotas  || '',
-      factura_sky: sky?.opNum   || '',
+      lote_sky:    sky?.lote    || '',
+      cupon_sky:   sky?.cupon   || '',
+      asiento_sky: sky?.asiento || '',
       monto_sky:   fmtM(sky?.monto),
     });
     const _liqGP = (r, aut, cupon) => ({
@@ -934,7 +945,7 @@ function _liqPopTab(proc, tab, cruce) {
         cruce.extras.map(r => ({
           _estado: '⚠ Extra en Liq.',
           fecha: r.fecha_venta || '', suc: '', tarjeta_sky: '—', plan_sky: '—',
-          cuotas_sky: '—', factura_sky: '—', monto_sky: '—',
+          cuotas_sky: '—', lote_sky: '—', cupon_sky: '—', asiento_sky: '—', monto_sky: '—',
           ..._liqGP(r, r.aut, r.cupon),
         })));
     }
