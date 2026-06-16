@@ -273,41 +273,63 @@ function _cruzarLiqFiserv() {
     };
   }
 
-  // Índice proc: lote+cupon → [fila, ...] (array para no perder duplicados)
-  const procByLC  = {};   // `${lote}-${cupon}` → [{ fila, lote, cupon, aut }]
-  const procByAut = {};   // `${aut}` → [{ fila, lote, cupon, aut }]
+  // Índice proc FISERV (cuatro niveles, misma lógica que GETPOS):
+  //   1° lote + cupon  (exacto: solo cuando ambos son no-cero en el proc)
+  //   2° aut + equipo  (Nro Equipo: campo que comparten operaciones y liquidaciones)
+  //   3° aut + monto   (proc.montoN ≈ liqRow.monto, tolerancia ±15%)
+  //   4° aut solo      (solo si hay exactamente UN candidato — sin riesgo de colisión)
+  const procByLC    = {};   // lote-cupon → entries
+  const procByAutEq = {};   // aut-equipo → entries
+  const procByAut   = {};   // aut → entries
   for (const fila of confirmadas) {
-    const lote  = _liqNorm(fila.proc?.lote || '');
-    const cupon = _liqNorm(fila.proc?.ticket || fila.proc?.cupon || '');
-    const aut   = _liqNormAut(fila.proc?.aut || '');
-    const entry = { fila, lote, cupon, aut };
-    if (lote && lote !== '0' && cupon && cupon !== '0') {
+    const lote   = _liqNorm(fila.proc?.lote || '');
+    const cupon  = _liqNorm(fila.proc?.ticket || fila.proc?.cupon || '');
+    const aut    = _liqNormAut(fila.proc?.aut || '');
+    const equipo = _liqNorm(String(fila.proc?.equipo || ''));
+    const entry  = { fila, lote, cupon, aut, equipo };
+    if (lote !== '0' && cupon !== '0')
       (procByLC[`${lote}-${cupon}`] = procByLC[`${lote}-${cupon}`] || []).push(entry);
-    }
     if (aut && aut !== '0') {
       (procByAut[aut] = procByAut[aut] || []).push(entry);
+      if (equipo && equipo !== '0')
+        (procByAutEq[`${aut}-${equipo}`] = procByAutEq[`${aut}-${equipo}`] || []).push(entry);
     }
   }
 
-  const usados    = new Set();   // sky.idx de ops ya asignadas
+  const usados     = new Set();
   const liquidadas = [];
   const extras     = [];
 
-  // Solo filas FISERV de la liq: tienen lote y cupon válidos
+  // Todas las filas del liq que tienen lote+cupon (= FISERV clásico)
   const liqFiserv = _LIQ_CUPONES.filter(r => r.lote && r.lote !== '0' && r.cupon && r.cupon !== '0');
-  const liqGetpos = _LIQ_CUPONES.filter(r => !r.lote || r.lote === '0');  // para extras GETPOS
 
   for (const liqRow of liqFiserv) {
-    const liqLote  = _liqNorm(liqRow.lote);
-    const liqCupon = _liqNorm(liqRow.cupon);
-    const liqAut   = _liqNormAut(liqRow.aut || '');
+    const liqLote   = _liqNorm(liqRow.lote);
+    const liqCupon  = _liqNorm(liqRow.cupon);
+    const liqAut    = _liqNormAut(liqRow.aut || '');
+    const liqEquipo = _liqNorm(String(liqRow.equipo || ''));
+    const liqMonto  = Math.abs(liqRow.monto || 0);
 
-    // 1° intento: lote+cupón exacto
+    // 1°: lote + cupon exacto
     let entry = (procByLC[`${liqLote}-${liqCupon}`] || []).find(e => !usados.has(e.fila.sky?.idx));
 
-    // 2° intento: autorización (solo si lote+cupon no matcheó)
+    // 2°: aut + equipo (Nro Equipo — campo compartido entre ambos archivos)
+    if (!entry && liqAut && liqAut !== '0' && liqEquipo && liqEquipo !== '0')
+      entry = (procByAutEq[`${liqAut}-${liqEquipo}`] || []).find(e => !usados.has(e.fila.sky?.idx));
+
+    // 3°: aut + monto (±15%)
+    if (!entry && liqAut && liqAut !== '0' && liqMonto > 0) {
+      entry = (procByAut[liqAut] || []).find(e => {
+        if (usados.has(e.fila.sky?.idx)) return false;
+        const procMonto = Math.abs(e.fila.proc?.montoN || e.fila.sky?.monto || 0);
+        return procMonto > 0 && Math.abs(liqMonto - procMonto) / procMonto <= 0.15;
+      });
+    }
+
+    // 4°: aut solo, solo si hay exactamente UN candidato (sin colisión)
     if (!entry && liqAut && liqAut !== '0') {
-      entry = (procByAut[liqAut] || []).find(e => !usados.has(e.fila.sky?.idx));
+      const cands = (procByAut[liqAut] || []).filter(e => !usados.has(e.fila.sky?.idx));
+      if (cands.length === 1) entry = cands[0];
     }
 
     if (entry) {
