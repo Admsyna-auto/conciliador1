@@ -397,20 +397,21 @@ function _cruzarLiqGetpos() {
     if (l !== '0' && c !== '0') fisLotesCupones.add(`${l}-${c}`);
   }
 
-  // Índice proc GETPOS:
-  //   primario  → aut + cuotas (más discriminante, evita colisiones por aut repetido)
-  //   secundario → aut solo + validación de monto (fallback cuando cuotas no coincide)
-  const procByAutCuotas = {};
-  const procByAut       = {};
+  // Índice proc GETPOS (tres niveles de discriminación):
+  //   1° aut + terminal (proc.pos vs liqRow.equipo)
+  //   2° aut + monto (proc.montoN vs liqRow.monto, tolerancia ±15%)
+  //   3° aut solo, solo si hay exactamente un candidato (sin ambigüedad)
+  const procByAutPos = {};  // aut-terminal → entries
+  const procByAut    = {};  // aut → entries
   for (const fila of confirmadas) {
-    const aut    = _liqNormAut(fila.proc?.aut || '');
-    const cuotas = parseInt(fila.sky?.cuotas || fila.proc?.cuotas) || 0;
+    const aut = _liqNormAut(fila.proc?.aut || '');
+    const pos = _liqNorm(String(fila.proc?.pos || ''));
     if (!aut || aut === '0') continue;
-    const entry = { fila, aut, cuotas };
+    const entry = { fila, aut, pos };
     (procByAut[aut] = procByAut[aut] || []).push(entry);
-    if (cuotas > 0) {
-      const k = `${aut}-${cuotas}`;
-      (procByAutCuotas[k] = procByAutCuotas[k] || []).push(entry);
+    if (pos && pos !== '0') {
+      const k = `${aut}-${pos}`;
+      (procByAutPos[k] = procByAutPos[k] || []).push(entry);
     }
   }
 
@@ -424,25 +425,28 @@ function _cruzarLiqGetpos() {
     if (liqLote !== '0' && liqCupon !== '0' && fisLotesCupones.has(`${liqLote}-${liqCupon}`)) continue;
 
     const liqAut    = _liqNormAut(liqRow.aut || '');
-    const liqCuotas = liqRow.cuotas || 0;
+    const liqEquipo = _liqNorm(String(liqRow.equipo || ''));
+    const liqMonto  = Math.abs(liqRow.monto || 0);
     if (!liqAut || liqAut === '0') continue;
 
-    // 1° clave: aut + cuotas (exacta)
-    let entry = liqCuotas > 0
-      ? (procByAutCuotas[`${liqAut}-${liqCuotas}`] || []).find(e => !usados.has(e.fila.sky?.idx))
+    // 1°: aut + terminal
+    let entry = (liqEquipo && liqEquipo !== '0')
+      ? (procByAutPos[`${liqAut}-${liqEquipo}`] || []).find(e => !usados.has(e.fila.sky?.idx))
       : null;
 
-    // 2° clave: aut solo, pero validando que el monto sea compatible (±15%)
-    if (!entry) {
-      const liqMonto = Math.abs(liqRow.monto || 0);
+    // 2°: aut + monto (±15%)
+    if (!entry && liqMonto > 0) {
       entry = (procByAut[liqAut] || []).find(e => {
         if (usados.has(e.fila.sky?.idx)) return false;
-        if (liqMonto > 0) {
-          const skyMonto = Math.abs(e.fila.sky?.monto || 0);
-          if (skyMonto > 0) return Math.abs(liqMonto - skyMonto) / skyMonto <= 0.15;
-        }
-        return true;
+        const procMonto = Math.abs(e.fila.proc?.montoN || e.fila.sky?.monto || 0);
+        return procMonto > 0 && Math.abs(liqMonto - procMonto) / procMonto <= 0.15;
       });
+    }
+
+    // 3°: aut solo, solo si hay exactamente UN candidato (sin riesgo de colisión)
+    if (!entry) {
+      const cands = (procByAut[liqAut] || []).filter(e => !usados.has(e.fila.sky?.idx));
+      if (cands.length === 1) entry = cands[0];
     }
 
     if (entry) {
