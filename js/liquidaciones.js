@@ -397,12 +397,20 @@ function _cruzarLiqGetpos() {
     if (l !== '0' && c !== '0') fisLotesCupones.add(`${l}-${c}`);
   }
 
-  // Índice proc GETPOS por aut (Cód. Aut. del archivo GETPOS)
-  const procByAut = {};
+  // Índice proc GETPOS:
+  //   primario  → aut + cuotas (más discriminante, evita colisiones por aut repetido)
+  //   secundario → aut solo + validación de monto (fallback cuando cuotas no coincide)
+  const procByAutCuotas = {};
+  const procByAut       = {};
   for (const fila of confirmadas) {
-    const aut = _liqNormAut(fila.proc?.aut || '');
-    if (aut && aut !== '0') {
-      (procByAut[aut] = procByAut[aut] || []).push({ fila, aut });
+    const aut    = _liqNormAut(fila.proc?.aut || '');
+    const cuotas = parseInt(fila.sky?.cuotas || fila.proc?.cuotas) || 0;
+    if (!aut || aut === '0') continue;
+    const entry = { fila, aut, cuotas };
+    (procByAut[aut] = procByAut[aut] || []).push(entry);
+    if (cuotas > 0) {
+      const k = `${aut}-${cuotas}`;
+      (procByAutCuotas[k] = procByAutCuotas[k] || []).push(entry);
     }
   }
 
@@ -415,11 +423,28 @@ function _cruzarLiqGetpos() {
     const liqCupon = _liqNorm(liqRow.cupon || '');
     if (liqLote !== '0' && liqCupon !== '0' && fisLotesCupones.has(`${liqLote}-${liqCupon}`)) continue;
 
-    // Matchear por Código Autorización (liqRow.aut = proc.aut en GETPOS)
-    const liqAut = _liqNormAut(liqRow.aut || '');
+    const liqAut    = _liqNormAut(liqRow.aut || '');
+    const liqCuotas = liqRow.cuotas || 0;
     if (!liqAut || liqAut === '0') continue;
 
-    const entry = (procByAut[liqAut] || []).find(e => !usados.has(e.fila.sky?.idx));
+    // 1° clave: aut + cuotas (exacta)
+    let entry = liqCuotas > 0
+      ? (procByAutCuotas[`${liqAut}-${liqCuotas}`] || []).find(e => !usados.has(e.fila.sky?.idx))
+      : null;
+
+    // 2° clave: aut solo, pero validando que el monto sea compatible (±15%)
+    if (!entry) {
+      const liqMonto = Math.abs(liqRow.monto || 0);
+      entry = (procByAut[liqAut] || []).find(e => {
+        if (usados.has(e.fila.sky?.idx)) return false;
+        if (liqMonto > 0) {
+          const skyMonto = Math.abs(e.fila.sky?.monto || 0);
+          if (skyMonto > 0) return Math.abs(liqMonto - skyMonto) / skyMonto <= 0.15;
+        }
+        return true;
+      });
+    }
+
     if (entry) {
       usados.add(entry.fila.sky?.idx);
       liquidadas.push({ fila: entry.fila, aut: entry.aut, liqRow });
