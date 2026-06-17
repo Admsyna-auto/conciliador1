@@ -1708,15 +1708,10 @@ window._tasasDifRefreshBulkBar = function() {
 window._tasasDifClasificarSeleccion = function(tipo) {
   for (const key of window._tasasDifSeleccion) {
     _tasasMrcSet(key, tipo);
-    const cell = document.getElementById('tmk-' + key);
-    if (cell) cell.innerHTML = _tasasMrcBtnHTML(key, tipo);
-    const chk = document.getElementById('chk-' + key);
-    if (chk) chk.checked = false;
   }
   window._tasasDifSeleccion.clear();
-  _tasasDifRefreshBulkBar();
-  const hdr = document.getElementById('tasas-sel-all');
-  if (hdr) hdr.checked = false;
+  // Re-renderiza la tabla (respeta filtros activos) y actualiza KPIs
+  _tasasDifRefreshTabla();
   _tasasRefreshKpiCounts();
 };
 
@@ -2049,6 +2044,12 @@ function renderModuloLiqTasas() {
           ${_fBtn('tasas-fclasif-vend', 'Vendedor',       "_tasasDifToggleClasif('vend')")}
           ${_fBtn('tasas-fclasif-proc', 'Procesadora',    "_tasasDifToggleClasif('proc')")}
           ${_fBtn('tasas-fclasif-ok',   '✓ Aceptado',    "_tasasDifToggleClasif('ok')")}
+          <button onclick="_tasasDifRefreshTabla()"
+            style="background:none;border:1px solid var(--acc);color:var(--acc);border-radius:4px;
+              padding:3px 12px;font-size:8px;cursor:pointer;font-family:var(--sans);margin-left:6px;
+              font-weight:700" title="Reaplica los filtros activos">
+            ↺ Actualizar
+          </button>
         </div>
       </div>
       <!-- Bulk action bar (oculta hasta que haya selección) -->
