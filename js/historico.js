@@ -105,6 +105,28 @@ function buildPeriodoActual() {
   let tasasMarcaciones = {};
   try { tasasMarcaciones = JSON.parse(localStorage.getItem('tasas_marc') || '{}'); } catch {}
 
+  // Operaciones sin liquidar al cierre — usadas como arrastre en el periodo siguiente
+  const _serNoLiq = (arr, proc) => (arr || []).map(x => ({
+    proc,
+    fecha:    x.fila?.sky?.fecha    || '',
+    suc:      x.fila?.sky?.suc      || '',
+    vendedor: x.fila?.sky?.vendedor || '',
+    tarjeta:  x.fila?.sky?.tarjeta  || '',
+    cuotas:   x.fila?.sky?.cuotas   || 1,
+    monto:    x.fila?.sky?.monto    || 0,
+    plan:     x.fila?.sky?.plan     || '',
+    estado:   x.fila?.estado        || '',
+    lote:     x.lote  || x.fila?.sky?.lote  || '',
+    cupon:    x.cupon || x.fila?.sky?.cupon || '',
+    aut:      x.aut   || x.fila?.proc?.aut  || '',
+    equipo:   x.fila?.proc?.equipo  || x.fila?.proc?.pos || '',
+  }));
+  const pendientesArrastre = [
+    ..._serNoLiq(typeof _liqCache !== 'undefined' ? _liqCache.fiserv?.noLiquidadas : [], 'FISERV'),
+    ..._serNoLiq(typeof _liqCache !== 'undefined' ? _liqCache.getpos?.noLiquidadas : [], 'GETPOS'),
+    ..._serNoLiq(typeof _liqCache !== 'undefined' ? _liqCache.goc?.noLiquidadas    : [], 'GoC'),
+  ];
+
   return {
     id,
     nombre:       SESSION.nombre || `Período ${desde} – ${hasta}`,
@@ -125,6 +147,7 @@ function buildPeriodoActual() {
     diferencias,
     topSucursales,
     tasasMarcaciones,
+    pendientesArrastre,
   };
 }
 

@@ -410,8 +410,121 @@ function cruzarCobros() {
 // Sin liquidar = ops Skylab no encontradas en el archivo liq.
 // Extras       = filas del archivo liq sin op Skylab correspondiente.
 // ══════════════════════════════════════════════════════════════════
-let _cobrosTab = 'sinliq';
-let _cobProc   = '';   // '' | 'FISERV' | 'GETPOS' | 'GoC'
+let _cobrosTab  = 'sinliq';
+let _cobProc    = '';   // '' | 'FISERV' | 'GETPOS' | 'GoC'
+let _cobArrastre = [];  // pendientes cargados desde backup período anterior
+
+// ══════════════════════════════════════════════════════════════════
+// OPTION C — PLAZO DE ACREDITACIÓN
+// ══════════════════════════════════════════════════════════════════
+function _cobFechaAcreditacion(fechaVenta, proc, tarjeta) {
+  if (!fechaVenta || !TM?.plazos?.length) return null;
+  const up = s => String(s || '').toUpperCase().trim();
+  const procUp = up(proc);
+  const tarjUp = up(tarjeta);
+
+  const reglas = TM.plazos.filter(r =>
+    (!r.procesadora || up(r.procesadora) === procUp) &&
+    (!r.tarjeta     || up(r.tarjeta)     === tarjUp)
+  );
+  if (!reglas.length) return null;
+
+  // Más específica primero (proc + tarjeta > proc solo > genérica)
+  const score = r => (r.procesadora ? 2 : 0) + (r.tarjeta ? 1 : 0);
+  const rule = reglas.sort((a, b) => score(b) - score(a))[0];
+
+  const diasHab = parseInt(rule.dias_habiles) || 0;
+  if (!diasHab) return null;
+
+  const feriados = new Set((TM.feriados || []).map(f => f.fecha).filter(Boolean));
+  const esDiaHabil = d => {
+    if (d.getDay() === 0 || d.getDay() === 6) return false;
+    return !feriados.has(d.toISOString().slice(0, 10));
+  };
+
+  // Parsear fecha: YYYY-MM-DD o DD/MM/YYYY o DD-MM-YYYY
+  const s = String(fechaVenta);
+  const parts = s.split(/[-\/]/);
+  let base;
+  if (parts[0].length === 4) {
+    base = new Date(+parts[0], +parts[1] - 1, +parts[2]);
+  } else {
+    base = new Date(+parts[2], +parts[1] - 1, +parts[0]);
+  }
+  if (isNaN(base.getTime())) return null;
+
+  let cur = new Date(base);
+  let added = 0;
+  while (added < diasHab) {
+    cur.setDate(cur.getDate() + 1);
+    if (esDiaHabil(cur)) added++;
+  }
+  return { fechaAcred: cur.toISOString().slice(0, 10), diasHab };
+}
+
+function _cobPlazoCell(op) {
+  const s = op.fila?.sky || op;  // soporta tanto sinLiq como arrastre
+  const res = _cobFechaAcreditacion(s.fecha, op.proc, s.tarjeta);
+  if (!res) return `<td style="color:var(--m2);font-size:9px">—</td>`;
+  const hoy = new Date().toISOString().slice(0, 10);
+  const dias = Math.round(Math.abs(new Date(hoy) - new Date(res.fechaAcred)) / 86400000);
+  if (res.fechaAcred < hoy) {
+    return `<td style="color:var(--red);font-size:9px;font-weight:600" title="Esperado: ${res.fechaAcred}">${res.fechaAcred}<br><span style="font-size:8px">+${dias}d vencido</span></td>`;
+  }
+  return `<td style="color:var(--grn);font-size:9px" title="${res.diasHab} días hábiles">${res.fechaAcred}<br><span style="font-size:8px">en ${dias}d</span></td>`;
+}
+
+// ══════════════════════════════════════════════════════════════════
+// OPTION A — ARRASTRE DESDE BACKUP JSON
+// ══════════════════════════════════════════════════════════════════
+function _cobCargarArrastre(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      const pend = data.pendientesArrastre;
+      if (!Array.isArray(pend) || !pend.length) {
+        alert('El archivo no contiene pendientes de arrastre.\n(Debe ser un backup de período generado con esta versión de la app)');
+        return;
+      }
+      _cobArrastre = pend;
+      if (typeof _showToast === 'function') _showToast(`✓ ${pend.length} pendientes cargados del período anterior`);
+      renderModuloCobros();
+    } catch(err) {
+      alert('Error al leer el archivo: ' + err.message);
+    }
+  };
+  reader.readAsText(file, 'utf-8');
+}
+
+function _cobRematcharArrastre() {
+  const liqCups = (typeof _LIQ_CUPONES !== 'undefined') ? _LIQ_CUPONES : [];
+  const norm  = v => String(v ?? '').replace(/^0+/, '') || '0';
+  const normA = v => String(v ?? '').replace(/^['"]+/, '').trim().replace(/^0+/, '') || '0';
+
+  return _cobArrastre.map(op => {
+    const opAut   = normA(op.aut);
+    const opCupon = norm(op.cupon);
+    const opLote  = norm(op.lote);
+    const opMonto = Math.round(Math.abs(parseFloat(op.monto) || 0));
+
+    let liqRow = null;
+    for (const r of liqCups) {
+      const rAut   = normA(r.aut);
+      const rCupon = norm(r.cupon);
+      const rLote  = norm(r.lote);
+      const rMonto = Math.round(Math.abs(parseFloat(r.monto) || 0));
+
+      if (opAut !== '0' && rAut !== '0' && opAut === rAut && opMonto === rMonto) { liqRow = r; break; }
+      if (opAut !== '0' && rAut !== '0' && opAut === rAut)                       { liqRow = r; break; }
+      if (opCupon !== '0' && rCupon !== '0' && opCupon === rCupon && opLote === rLote) { liqRow = r; break; }
+      if (opCupon !== '0' && rCupon !== '0' && opCupon === rCupon && opMonto === rMonto) { liqRow = r; break; }
+    }
+    return { op, liqRow, acreditoEsteMes: !!liqRow };
+  });
+}
 
 function renderModuloCobros() {
   const cont = document.getElementById('mod-cobros');
@@ -486,9 +599,9 @@ function renderModuloCobros() {
       </div>
     </div>
 
-    <!-- Tabs -->
+    <!-- Tabs + botón arrastre -->
     <div class="tab-strip" id="tstrip-cobros"
-         style="padding:0 20px;border-bottom:1px solid var(--b1);flex-shrink:0">
+         style="padding:0 20px;border-bottom:1px solid var(--b1);flex-shrink:0;display:flex;align-items:center;gap:4px">
       <button class="tb ${_cobrosTab==='sinliq'?'active':''}"
         onclick="showCobrosTab('sinliq',this)">
         Sin liquidar
@@ -499,6 +612,16 @@ function renderModuloCobros() {
         Extras procesadora
         <span class="cnt" style="background:rgba(251,191,36,.15);color:var(--yel)">${extras.length.toLocaleString('es-AR')}</span>
       </button>
+      <button class="tb ${_cobrosTab==='arrastre'?'active':''}"
+        onclick="showCobrosTab('arrastre',this)">
+        Arrastre mes ant.
+        <span class="cnt" style="background:rgba(139,92,246,.15);color:var(--vio)">${_cobArrastre.length.toLocaleString('es-AR')}</span>
+      </button>
+      <label class="btn-exp" style="margin-left:auto;cursor:pointer;font-size:10px;padding:4px 10px"
+             title="Cargar backup JSON del período anterior para re-matchear pendientes">
+        📂 Cargar período ant.
+        <input type="file" accept=".json" style="display:none" onchange="_cobCargarArrastre(this)">
+      </label>
     </div>
 
     <div id="cobros-tab-body"
@@ -526,6 +649,8 @@ function showCobrosTab(tab, btn) {
   if (tab === 'sinliq') {
     const rows = _cobProc ? sinLiq.filter(x => x.proc === _cobProc) : sinLiq;
     _renderCobSinLiq(body, rows);
+  } else if (tab === 'arrastre') {
+    _renderCobArrastre(body);
   } else {
     const rows = _cobProc ? extras.filter(x => x.proc === _cobProc) : extras;
     _renderCobExtras(body, rows);
@@ -559,7 +684,7 @@ function _renderCobSinLiq(body, rows) {
       `<div style="padding:40px;text-align:center;color:var(--m2)">No hay operaciones sin liquidar.</div>`;
     return;
   }
-  const HDR = ['Proc.','Fecha','Suc.','Vendedor','Tarjeta','Plan','Cuotas','Monto SKY','Lote','Cupón','Estado cruce'];
+  const HDR = ['Proc.','Fecha','Suc.','Vendedor','Tarjeta','Plan','Cuotas','Monto SKY','Lote','Cupón','Estado cruce','Acreditación'];
   const tplRow = x => {
     const s = x.fila?.sky || {};
     return `<tr>
@@ -574,6 +699,7 @@ function _renderCobSinLiq(body, rows) {
       <td class="num">${x.lote||s.lote||'—'}</td>
       <td class="num">${x.cupon||s.cupon||'—'}</td>
       <td>${estadoBadge(x.fila?.estado)}</td>
+      ${_cobPlazoCell(x)}
     </tr>`;
   };
   body.innerHTML = _cobToolbar('sinliq', rows, monto) + `
@@ -617,6 +743,89 @@ function _renderCobExtras(body, rows) {
   </div>`;
 }
 
+function _renderCobArrastre(body) {
+  if (!_cobArrastre.length) {
+    body.innerHTML = `
+    <div style="padding:40px;display:flex;flex-direction:column;align-items:center;gap:14px">
+      <div style="color:var(--m2);font-size:13px">No hay pendientes del período anterior cargados.</div>
+      <label class="btn-exp" style="cursor:pointer">
+        📂 Cargar backup período anterior
+        <input type="file" accept=".json" style="display:none" onchange="_cobCargarArrastre(this)">
+      </label>
+      <div style="font-size:11px;color:var(--m2);max-width:400px;text-align:center">
+        Seleccioná el archivo JSON de cierre del período anterior para ver qué operaciones
+        ya acreditaron este mes y cuáles siguen pendientes.
+      </div>
+    </div>`;
+    return;
+  }
+
+  const liqCups = (typeof _LIQ_CUPONES !== 'undefined') ? _LIQ_CUPONES : [];
+  const matched = _cobRematcharArrastre();
+  const display = _cobProc ? matched.filter(x => x.op.proc === _cobProc) : matched;
+
+  const acreditados = matched.filter(x =>  x.acreditoEsteMes);
+  const pendientes  = matched.filter(x => !x.acreditoEsteMes);
+  const montoAcred  = acreditados.reduce((s, x) => s + Math.abs(parseFloat(x.op.monto) || 0), 0);
+  const montoPend   = pendientes.reduce( (s, x) => s + Math.abs(parseFloat(x.op.monto) || 0), 0);
+
+  const HDR = ['Proc.','Estado ant.','Fecha','Suc.','Tarjeta','Cuotas','Monto','Lote','Cupón','Acreditó este mes','Plazo acred.'];
+
+  const tplRow = x => {
+    const op  = x.op;
+    const res = _cobFechaAcreditacion(op.fecha, op.proc, op.tarjeta);
+    let plazoCell = '<td style="color:var(--m2);font-size:9px">—</td>';
+    if (res) {
+      const hoy  = new Date().toISOString().slice(0, 10);
+      const dias = Math.round(Math.abs(new Date(hoy) - new Date(res.fechaAcred)) / 86400000);
+      plazoCell  = res.fechaAcred < hoy
+        ? `<td style="color:var(--red);font-size:9px">${res.fechaAcred}<br><span style="font-size:8px">+${dias}d vencido</span></td>`
+        : `<td style="color:var(--grn);font-size:9px">${res.fechaAcred}<br><span style="font-size:8px">en ${dias}d</span></td>`;
+    }
+    const estadoCell = x.acreditoEsteMes
+      ? `<td><span style="background:rgba(52,211,153,.15);color:var(--grn);border:1px solid rgba(52,211,153,.3);border-radius:4px;padding:1px 6px;font-size:9px">✓ Acreditó</span></td>`
+      : `<td><span style="background:rgba(248,113,113,.15);color:var(--red);border:1px solid rgba(248,113,113,.3);border-radius:4px;padding:1px 6px;font-size:9px">Pendiente</span></td>`;
+    return `<tr>
+      <td>${_cobProcBadge(op.proc)}</td>
+      <td style="font-size:9px;color:var(--m2)">${op.estado||'—'}</td>
+      <td>${op.fecha||'—'}</td>
+      <td>${op.suc||'—'}</td>
+      <td>${op.tarjeta||'—'}</td>
+      <td class="num">${op.cuotas||1}</td>
+      <td class="num" style="font-weight:700">${fmtARS(op.monto)}</td>
+      <td class="num">${op.lote||'—'}</td>
+      <td class="num">${op.cupon||'—'}</td>
+      ${estadoCell}
+      ${plazoCell}
+    </tr>`;
+  };
+
+  body.innerHTML = `
+  <div class="cobros-toolbar">
+    <button class="btn-exp" onclick="exportarCobros('arrastre')">↓ Exportar Excel</button>
+    <select class="filter-sel" onchange="_cobFiltroProc(this.value)">
+      <option value="">Todas las procesadoras</option>
+      <option value="FISERV" ${_cobProc==='FISERV'?'selected':''}>FISERV</option>
+      <option value="GETPOS" ${_cobProc==='GETPOS'?'selected':''}>GETPOS</option>
+      <option value="GoC"    ${_cobProc==='GoC'   ?'selected':''}>Go Cuotas</option>
+    </select>
+    <span style="font-size:10px;color:var(--m2)">${display.length} de ${matched.length} registros</span>
+    <span style="font-size:10px;color:var(--grn)">✓ ${acreditados.length} acreditaron · ${fmtARS(montoAcred)}</span>
+    <span style="font-size:10px;color:var(--red)">✗ ${pendientes.length} pendientes · ${fmtARS(montoPend)}</span>
+    ${!liqCups.length ? '<span style="font-size:10px;color:var(--yel)">⚠ Sin archivo liq cargado</span>' : ''}
+    <label class="btn-exp" style="cursor:pointer;font-size:10px;padding:3px 8px;margin-left:auto">
+      📂 Cambiar período
+      <input type="file" accept=".json" style="display:none" onchange="_cobCargarArrastre(this)">
+    </label>
+  </div>
+  <div class="tbl-wrap">
+    <table class="res-tbl">
+      <thead><tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${display.map(tplRow).join('')}</tbody>
+    </table>
+  </div>`;
+}
+
 function _cobFiltroProc(v) { _cobProc = v; showCobrosTab(_cobrosTab); }
 
 // ══════════════════════════════════════════════════════════════════
@@ -625,31 +834,48 @@ function _cobFiltroProc(v) { _cobProc = v; showCobrosTab(_cobrosTab); }
 function exportarCobros(tab) {
   const sinLiq = window._cobSinLiq || [];
   const extras = window._cobExtras || [];
-  const rows   = tab === 'sinliq'
-    ? (_cobProc ? sinLiq.filter(x => x.proc === _cobProc) : sinLiq)
-    : (_cobProc ? extras.filter(x => x.proc === _cobProc) : extras);
-  if (!rows.length) { alert('No hay datos para exportar.'); return; }
+  let HDR, dataFn, sheetName, rows;
 
-  let HDR, dataFn;
   if (tab === 'sinliq') {
-    HDR = ['Procesadora','Fecha','Suc.','Vendedor','Tarjeta','Plan','Cuotas','Monto SKY','Lote','Cupón','Estado cruce'];
+    rows = _cobProc ? sinLiq.filter(x => x.proc === _cobProc) : sinLiq;
+    HDR  = ['Procesadora','Fecha','Suc.','Vendedor','Tarjeta','Plan','Cuotas','Monto SKY',
+            'Lote','Cupón','Estado cruce','Fecha acred. esperada'];
     dataFn = x => {
-      const s = x.fila?.sky || {};
+      const s   = x.fila?.sky || {};
+      const res = _cobFechaAcreditacion(s.fecha, x.proc, s.tarjeta);
       return [x.proc, s.fecha||'', s.suc||'', s.vendedor||'', s.tarjeta||'', s.plan||'',
-              s.cuotas||1, s.monto||0, x.lote||s.lote||'', x.cupon||s.cupon||'', x.fila?.estado||''];
+              s.cuotas||1, s.monto||0, x.lote||s.lote||'', x.cupon||s.cupon||'',
+              x.fila?.estado||'', res?.fechaAcred||''];
     };
+    sheetName = 'Sin Liquidar';
+  } else if (tab === 'arrastre') {
+    const matched = _cobRematcharArrastre();
+    rows = _cobProc ? matched.filter(x => x.op.proc === _cobProc) : matched;
+    HDR  = ['Procesadora','Estado ant.','Fecha','Suc.','Tarjeta','Cuotas','Monto',
+            'Lote','Cupón','Acreditó este mes','Fecha acred. esperada'];
+    dataFn = x => {
+      const op  = x.op;
+      const res = _cobFechaAcreditacion(op.fecha, op.proc, op.tarjeta);
+      return [op.proc, op.estado||'', op.fecha||'', op.suc||'', op.tarjeta||'',
+              op.cuotas||1, op.monto||0, op.lote||'', op.cupon||'',
+              x.acreditoEsteMes ? 'Sí' : 'No', res?.fechaAcred||''];
+    };
+    sheetName = 'Arrastre';
   } else {
-    HDR = ['Procesadora','Fecha Venta','Equipo','Lote','Cupón','Tarjeta','Cuotas','Monto','Cód. Auth.','Nro Comercio'];
+    rows = _cobProc ? extras.filter(x => x.proc === _cobProc) : extras;
+    HDR  = ['Procesadora','Fecha Venta','Equipo','Lote','Cupón','Tarjeta','Cuotas','Monto','Cód. Auth.','Nro Comercio'];
     dataFn = x => {
       const r = x.liqRow;
       return [x.proc, r.fecha_venta||r.fecha||'', r.equipo||'', r.lote||'', r.cupon||'',
               r.tarjeta||'', r.cuotas||1, r.monto||0, r.aut||'', r.nro_comercio||''];
     };
+    sheetName = 'Extras';
   }
 
+  if (!rows.length) { alert('No hay datos para exportar.'); return; }
   const ws  = XLSX.utils.aoa_to_sheet([HDR, ...rows.map(dataFn)]);
   const wb2 = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb2, ws, tab === 'sinliq' ? 'Sin Liquidar' : 'Extras');
+  XLSX.utils.book_append_sheet(wb2, ws, sheetName);
   const ts = new Date().toISOString().slice(0, 10);
   XLSX.writeFile(wb2, `Cobros_${tab}_${ts}.xlsx`);
 }
