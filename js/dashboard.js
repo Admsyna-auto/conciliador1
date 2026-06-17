@@ -82,7 +82,7 @@ function _dLegend(position='top') {
 function showDashTab(tab, btn) {
   document.querySelectorAll('.dash-itab').forEach(b => b.classList.remove('active'));
   if (btn) btn.classList.add('active');
-  ['tx','pag','fin','tarj'].forEach(t => {
+  ['tx','pag','fin','tarj','liq'].forEach(t => {
     const el = document.getElementById(`dash-tab-${t}`);
     if (el) el.style.display = t === tab ? '' : 'none';
   });
@@ -376,10 +376,11 @@ function renderDashboard() {
         parseFloat(pctMonto)>=90?DASH_CLR.ok:parseFloat(pctMonto)>=70?DASH_CLR.malFact:DASH_CLR.sm);
   }
 
-  // Renderizar tabs pagos, financiero y tarjetas
+  // Renderizar todos los tabs
   _renderDashPagos();
   _renderDashFin();
   _renderDashTarj();
+  _renderDashLiq();
 
   // ── 9. BAR — Monto sin match por sucursal (top 15) ─────────────────
   const sucSMmonto = {};
@@ -1404,4 +1405,187 @@ function _renderDashTarj() {
       el.parentElement?.appendChild(ov);
     }
   }
+}
+
+// ════════════════════════════════════════════════════════════════════
+// RENDER LIQUIDACIONES — Datos de _liqCache + diferencias de tasas
+// ════════════════════════════════════════════════════════════════════
+function _renderDashLiq() {
+  const LIQ_IDS = ['ch-liq-proc','ch-liq-donut','ch-liq-suc-noliq','ch-liq-difs'];
+
+  function _liqNoData(show, msg) {
+    LIQ_IDS.forEach(id => {
+      const canvas = document.getElementById(id);
+      if (!canvas) return;
+      canvas.style.display = show ? 'none' : '';
+      const wrap = canvas.parentElement;
+      if (!wrap) return;
+      let ov = wrap.querySelector('.liq-nodata');
+      if (show) {
+        if (!ov) { ov = document.createElement('div'); ov.className = 'liq-nodata'; ov.style.cssText = 'padding:30px;text-align:center;color:var(--m2);font-size:10px'; wrap.appendChild(ov); }
+        ov.textContent = msg || 'Sin datos'; ov.style.display = '';
+      } else if (ov) { ov.style.display = 'none'; }
+    });
+  }
+
+  const cache = typeof _liqCache !== 'undefined' ? _liqCache : {};
+  const hayCache = cache.fiserv || cache.getpos || cache.goc;
+
+  if (!hayCache) {
+    _liqNoData(true, 'Cargá el archivo de Liquidaciones y ejecutá el cruce en las pestañas de LIQUIDACIONES');
+    // Reset KPIs
+    ['lkpi-liq','lkpi-noliq','lkpi-extras','lkpi-mliq','lkpi-mnoliq','lkpi-difs'].forEach(id => {
+      const e = document.getElementById(id); if (e) e.textContent = '—';
+    });
+    ['lkpi-liq-sub','lkpi-noliq-sub','lkpi-extras-sub','lkpi-difs-sub'].forEach(id => {
+      const e = document.getElementById(id); if (e) e.textContent = '';
+    });
+    return;
+  }
+  _liqNoData(false);
+
+  // ── Consolidar datos de los 3 procesadores ──────────────────────────
+  const procs = [
+    { key:'fiserv', label:'FISERV', color:'#4f8ef7' },
+    { key:'getpos', label:'GETPOS', color:'#a78bfa' },
+    { key:'goc',    label:'GoC',    color:'#34d399' },
+  ];
+  const agg = procs.map(({ key, label, color }) => {
+    const c = cache[key];
+    return {
+      label, color,
+      liq:     c?.liquidadas?.length    || 0,
+      noLiq:   c?.noLiquidadas?.length  || 0,
+      extras:  c?.extras?.length        || 0,
+      mLiq:    c?.montoLiquidado        || 0,
+      mNoLiq:  c?.montoNoLiq            || 0,
+      mExtras: c?.montoExtras           || 0,
+      tieneLiq: !!c?.tieneLiq,
+    };
+  });
+
+  const totLiq    = agg.reduce((s,a) => s + a.liq,    0);
+  const totNoLiq  = agg.reduce((s,a) => s + a.noLiq,  0);
+  const totExtras = agg.reduce((s,a) => s + a.extras,  0);
+  const totMLiq   = agg.reduce((s,a) => s + a.mLiq,   0);
+  const totMNoLiq = agg.reduce((s,a) => s + a.mNoLiq, 0);
+
+  // ── Diferencias de tasas ─────────────────────────────────────────────
+  const marc = (() => { try { return JSON.parse(localStorage.getItem('tasas_marc')||'{}'); } catch { return {}; } })();
+  const difRows = (typeof RESULTADO !== 'undefined')
+    ? RESULTADO.filter(r => r.difTasa != null && !r.sky?.esNeg && !r.sky?.integrado)
+    : [];
+  const difClasif = difRows.reduce((acc, r) => {
+    const k = r._key || '';
+    const m = k ? marc[k] : null;
+    if      (m === 'vendedor')    acc.vendedor++;
+    else if (m === 'procesadora') acc.procesadora++;
+    else if (m === 'ok')          acc.ok++;
+    else                           acc.sinClasif++;
+    return acc;
+  }, { vendedor:0, procesadora:0, ok:0, sinClasif:0 });
+  const totDifs = difRows.length;
+
+  // ── KPIs ────────────────────────────────────────────────────────────
+  const _lk = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+  _lk('lkpi-liq',      totLiq.toLocaleString('es-AR'));
+  _lk('lkpi-liq-sub',  _dFmtM(totMLiq));
+  _lk('lkpi-noliq',    totNoLiq.toLocaleString('es-AR'));
+  _lk('lkpi-noliq-sub',_dFmtM(totMNoLiq));
+  _lk('lkpi-extras',   totExtras.toLocaleString('es-AR'));
+  _lk('lkpi-extras-sub', agg.filter(a=>a.tieneLiq).map(a=>a.label).join('+') || '—');
+  _lk('lkpi-mliq',     _dFmtM(totMLiq));
+  _lk('lkpi-mnoliq',   _dFmtM(totMNoLiq));
+  _lk('lkpi-difs',     totDifs.toLocaleString('es-AR'));
+  _lk('lkpi-difs-sub', totDifs ? `${difClasif.sinClasif} sin clasificar` : 'sin diferencias');
+
+  const C_LIQ  = '#34d399', C_NOLIQ = '#f87171', C_EXT = '#fbbf24';
+
+  // ── 1. GROUPED BAR — Por procesadora ───────────────────────────────
+  _dashCharts.liqProc = new Chart(document.getElementById('ch-liq-proc'), {
+    type: 'bar',
+    data: {
+      labels: agg.filter(a => a.tieneLiq || a.liq || a.noLiq).map(a => a.label),
+      datasets: [
+        { label:'Liquidadas',   data: agg.filter(a=>a.tieneLiq||a.liq||a.noLiq).map(a=>a.liq),    backgroundColor:C_LIQ+'cc',  borderRadius:3, borderWidth:0 },
+        { label:'Sin liquidar', data: agg.filter(a=>a.tieneLiq||a.liq||a.noLiq).map(a=>a.noLiq),  backgroundColor:C_NOLIQ+'cc', borderRadius:3, borderWidth:0 },
+        { label:'Extras proc.', data: agg.filter(a=>a.tieneLiq||a.liq||a.noLiq).map(a=>a.extras), backgroundColor:C_EXT+'cc',  borderRadius:3, borderWidth:0 },
+      ]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ labels:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'}, boxWidth:10 } } },
+      scales: _dScales()
+    }
+  });
+
+  // ── 2. DONUT — Mix global (monto) ──────────────────────────────────
+  _dashCharts.liqDonut = new Chart(document.getElementById('ch-liq-donut'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Liquidado','Sin liquidar','Extras proc.'],
+      datasets: [{ data:[totMLiq, totMNoLiq, agg.reduce((s,a)=>s+a.mExtras,0)],
+        backgroundColor:[C_LIQ+'dd',C_NOLIQ+'dd',C_EXT+'dd'],
+        borderWidth:1, borderColor:'#111827', hoverOffset:8 }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false, cutout:'60%',
+      plugins: {
+        legend: _dLegend('right'),
+        tooltip: { callbacks: { label: ctx => ` ${ctx.label}: ${_dFmtPeso(ctx.parsed)}` } }
+      }
+    }
+  });
+
+  // ── 3. H-BAR — Top 15 suc por monto sin liquidar ───────────────────
+  const sucNoLiq = {};
+  procs.forEach(({ key }) => {
+    (cache[key]?.noLiquidadas || []).forEach(x => {
+      const s = x.fila?.sky?.suc ?? '?';
+      sucNoLiq[s] = (sucNoLiq[s]||0) + Math.abs(x.fila?.sky?.monto||0);
+    });
+  });
+  const sucNoLiqPairs = Object.entries(sucNoLiq).sort((a,b)=>b[1]-a[1]).slice(0,15);
+
+  _dashCharts.liqSucNoLiq = new Chart(document.getElementById('ch-liq-suc-noliq'), {
+    type: 'bar',
+    data: {
+      labels: sucNoLiqPairs.map(([k]) => 'Suc. ' + k),
+      datasets: [{ label:'Monto sin liquidar ($)', data: sucNoLiqPairs.map(([,v])=>v),
+        backgroundColor:C_NOLIQ+'99', borderRadius:3, borderWidth:0 }]
+    },
+    options: {
+      indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label: ctx => ' '+_dFmtPeso(ctx.parsed.x) } } },
+      scales: {
+        x:{ ticks:{ color:DASH_CLR.txt, font:{size:9}, callback:v=>_dFmtM(v) }, grid:{ color:DASH_CLR.grid } },
+        y:{ ticks:{ color:DASH_CLR.txt, font:{size:9,family:'JetBrains Mono'} }, grid:{ display:false } }
+      }
+    }
+  });
+
+  // ── 4. BAR — Diferencias de tasas por clasificación ────────────────
+  const difLabels = ['Responsabilidad vendedor','Responsabilidad procesadora','OK / Acordado','Sin clasificar'];
+  const difData   = [difClasif.vendedor, difClasif.procesadora, difClasif.ok, difClasif.sinClasif];
+  const difColors = ['#f87171cc','#fb923ccc','#34d399cc','#94a3b8cc'];
+
+  _dashCharts.liqDifs = new Chart(document.getElementById('ch-liq-difs'), {
+    type: 'bar',
+    data: {
+      labels: difLabels,
+      datasets: [{ label:'Diferencias de tasas',
+        data: difData,
+        backgroundColor: difColors,
+        borderRadius:4, borderWidth:0 }]
+    },
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false},
+        tooltip:{ callbacks:{ label: ctx => ` ${ctx.parsed.y} diferencia${ctx.parsed.y!==1?'s':''}` } } },
+      scales: {
+        x:{ ticks:{ color:DASH_CLR.txt, font:{size:9}, maxRotation:20 }, grid:{ color:DASH_CLR.grid } },
+        y:{ ticks:{ color:DASH_CLR.txt, font:{size:9} }, grid:{ color:DASH_CLR.grid }, beginAtZero:true }
+      }
+    }
+  });
 }

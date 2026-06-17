@@ -127,6 +127,25 @@ function buildPeriodoActual() {
     ..._serNoLiq(typeof _liqCache !== 'undefined' ? _liqCache.goc?.noLiquidadas    : [], 'GoC'),
   ];
 
+  // Correcciones manuales serializadas con metadata SKY para re-matchear en el próximo período
+  const correccionesArrastre = Object.entries(CORREGIDAS).map(([key, cor]) => {
+    const fila = RESULTADO.find(r => _skyKey(r.sky) === key);
+    return {
+      key,
+      cor: { ...cor },
+      sky: fila ? {
+        asiento:  fila.sky.asiento,
+        suc:      fila.sky.suc,
+        tarjeta:  fila.sky.tarjeta,
+        monto:    fila.sky.monto,
+        cupon:    fila.sky.cupon,
+        plan:     fila.sky.plan,
+        cuotas:   fila.sky.cuotas,
+        vendedor: fila.sky.vendedor,
+      } : null,
+    };
+  });
+
   return {
     id,
     nombre:       SESSION.nombre || `Período ${desde} – ${hasta}`,
@@ -148,6 +167,7 @@ function buildPeriodoActual() {
     topSucursales,
     tasasMarcaciones,
     pendientesArrastre,
+    correccionesArrastre,
   };
 }
 
@@ -528,12 +548,20 @@ function _renderHistTabla(periodos) {
       <td class="num" style="color:var(--grn)">${ct ? ct.ganados : '—'}</td>
       <td class="num" style="color:var(--red)">${ct ? ct.perdidos : '—'}</td>
       <td style="font-size:9px;color:var(--m2)">${p.fechaCierre?.slice(0,10)}</td>
-      <td style="white-space:nowrap">
+      <td style="white-space:nowrap;display:flex;gap:3px;align-items:center">
         <button onclick="descargarPeriodo('${p.id}')" title="Descargar backup JSON"
           style="background:none;border:1px solid var(--b2);border-radius:3px;
-            color:var(--m2);font-size:9px;cursor:pointer;padding:2px 7px;margin-right:3px"
+            color:var(--m2);font-size:9px;cursor:pointer;padding:2px 7px"
           onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'"
           onmouseout="this.style.borderColor='var(--b2)';this.style.color='var(--m2)'">⬇</button>
+        <button onclick="cargarCorreccionesDesde('${p.id}')"
+          title="${(p.correccionesArrastre?.length||0)} corrección(es) guardadas — clic para importar al cruce actual"
+          style="background:none;border:1px solid var(--b2);border-radius:3px;
+            color:${p.correccionesArrastre?.length ? 'var(--acc)' : 'var(--m2)'};
+            font-size:9px;cursor:pointer;padding:2px 7px;opacity:${p.correccionesArrastre?.length?1:.4}"
+          onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)';this.style.opacity=1"
+          onmouseout="this.style.borderColor='var(--b2)';this.style.opacity='${p.correccionesArrastre?.length?1:.4}'">
+          📋 ${p.correccionesArrastre?.length||0}</button>
         <button onclick="borrarPeriodo('${p.id}')" title="Eliminar período del historial"
           style="background:none;border:1px solid var(--b2);border-radius:3px;
             color:var(--m2);font-size:9px;cursor:pointer;padding:2px 7px"
@@ -542,6 +570,97 @@ function _renderHistTabla(periodos) {
       </td>
     </tr>`;
   }).join('');
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ARRASTRE DE CORRECCIONES MANUALES ENTRE PERÍODOS
+// ════════════════════════════════════════════════════════════════════
+
+function _importarCorreccionesArrastre(entries) {
+  if (!entries?.length) {
+    if (typeof _showToast === 'function') _showToast('El período no tiene correcciones guardadas');
+    return;
+  }
+  if (!RESULTADO.length) {
+    alert('Primero ejecutá el cruce del período actual para poder importar correcciones.');
+    return;
+  }
+
+  let exactas = 0, rematch = 0, omitidas = 0;
+
+  for (const { key, cor, sky } of entries) {
+    // 1. Match exacto — mismo asiento número en el nuevo período
+    if (RESULTADO.some(r => _skyKey(r.sky) === key)) {
+      if (!CORREGIDAS[key]) { CORREGIDAS[key] = { ...cor, _arrastre: true }; exactas++; }
+      continue;
+    }
+
+    // 2. Fuzzy — buscar fila con misma suc + tarjeta + cuotas + monto (±2%)
+    if (!sky) { omitidas++; continue; }
+    const tol = Math.abs(sky.monto || 0) * 0.02;
+    const candidatos = RESULTADO.filter(r => {
+      const s = r.sky;
+      return !CORREGIDAS[_skyKey(s)] &&
+        s.suc     === sky.suc &&
+        s.tarjeta === sky.tarjeta &&
+        s.cuotas  == sky.cuotas &&
+        Math.abs(Math.abs(s.monto) - Math.abs(sky.monto)) <= (tol || 1);
+    });
+
+    if (candidatos.length === 1) {
+      const newKey = _skyKey(candidatos[0].sky);
+      CORREGIDAS[newKey] = { ...cor, _arrastre: true, _origKey: key };
+      rematch++;
+    } else {
+      omitidas++;
+    }
+  }
+
+  if (typeof aplicarCorreccionesManuales === 'function') aplicarCorreccionesManuales();
+  scheduleAutoSave();
+
+  const total = exactas + rematch;
+  const msg = `✓ ${total} corrección${total !== 1 ? 'es' : ''} importada${total !== 1 ? 's' : ''}` +
+    (rematch  ? ` (${rematch} re-matcheadas por suc+tarjeta+monto)` : '') +
+    (omitidas ? ` · ${omitidas} sin coincidencia` : '');
+  if (typeof _showToast === 'function') _showToast(msg);
+  else alert(msg);
+
+  if (typeof renderRevision === 'function') renderRevision();
+  if (typeof renderModuloCobros === 'function') renderModuloCobros();
+}
+
+async function cargarCorreccionesDesde(periodoId) {
+  const todos = await listarPeriodos();
+  const p = todos.find(x => x.id === periodoId);
+  if (!p) return;
+  if (!p.correccionesArrastre?.length) {
+    if (typeof _showToast === 'function')
+      _showToast('Este período fue cerrado sin correcciones o con versión anterior de la app');
+    return;
+  }
+  const n = p.correccionesArrastre.length;
+  if (!confirm(`Importar ${n} corrección${n!==1?'es':''} del período ${p.periodoDesde} → ${p.periodoHasta}?\n\nSe agregarán al cruce actual. Las correcciones que no encuentren una operación idéntica se intentan reasignar por suc + tarjeta + monto.`)) return;
+  _importarCorreccionesArrastre(p.correccionesArrastre);
+}
+
+function cargarCorreccionesDesdeJSON(input) {
+  const file = input.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const data = JSON.parse(e.target.result);
+      if (!data.correccionesArrastre?.length) {
+        alert('El archivo no contiene correcciones exportadas.\n(Debe ser un backup generado con esta versión de la app)');
+        return;
+      }
+      const n = data.correccionesArrastre.length;
+      if (!confirm(`Importar ${n} corrección${n!==1?'es':''} del período ${data.periodoDesde||'?'} → ${data.periodoHasta||'?'}?`)) return;
+      _importarCorreccionesArrastre(data.correccionesArrastre);
+    } catch(err) { alert('Error al leer el archivo: ' + err.message); }
+  };
+  reader.readAsText(file, 'utf-8');
 }
 
 // ── Acciones desde tabla ─────────────────────────────────────────────

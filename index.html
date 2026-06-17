@@ -1320,6 +1320,10 @@ tr.row-int td{background:rgba(52,211,153,.02)}
           ⬆ Importar
           <input type="file" accept=".xlsx,.xls" style="display:none" onchange="importarCorrecciones(this)">
         </label>
+        <label class="dl-btn" style="background:#1a2e1a;color:#86efac;border:1px solid #2d5a3a;cursor:pointer;margin-left:4px" title="Cargar correcciones desde backup JSON de un período anterior">
+          📋 Desde período ant.
+          <input type="file" accept=".json" style="display:none" onchange="cargarCorreccionesDesdeJSON(this)">
+        </label>
       </div>
       <!-- Barra de filtros correcciones -->
       <div class="filter-bar" style="flex-shrink:0;flex-wrap:wrap;align-items:center">
@@ -1532,6 +1536,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
             <button class="dash-itab" onclick="showDashTab('pag',this)">💳 Pagos</button>
             <button class="dash-itab" onclick="showDashTab('fin',this)">📈 Financiero</button>
             <button class="dash-itab" onclick="showDashTab('tarj',this)">🃏 Tarjetas</button>
+            <button class="dash-itab" onclick="showDashTab('liq',this)">📦 Liquidaciones</button>
           </div>
           <div style="display:flex;align-items:center;gap:12px">
             <div style="font-size:10px;color:var(--m2)">
@@ -1895,7 +1900,67 @@ tr.row-int td{background:rgba(52,211,153,.02)}
           </div><!-- .dash-grid tarjetas -->
         </div><!-- #dash-tab-tarj -->
 
-      </div><!-- .dash-scroll -->
+
+        <!-- ── TAB: LIQUIDACIONES ───────────────────────── -->
+        <div id="dash-tab-liq" style="display:none">
+
+          <!-- KPI cards liquidaciones -->
+          <div class="dash-kpis" style="grid-template-columns:repeat(6,1fr)">
+            <div class="kpi-card kpi-ok">
+              <div class="kpi-lbl">Ops liquidadas</div>
+              <div class="kpi-val" style="color:var(--grn)" id="lkpi-liq">—</div>
+              <div class="kpi-sub" id="lkpi-liq-sub">—</div>
+            </div>
+            <div class="kpi-card kpi-sm">
+              <div class="kpi-lbl">Sin liquidar</div>
+              <div class="kpi-val" style="color:var(--red)" id="lkpi-noliq">—</div>
+              <div class="kpi-sub" id="lkpi-noliq-sub">—</div>
+            </div>
+            <div class="kpi-card" style="border-color:rgba(251,191,36,.25)">
+              <div class="kpi-lbl">Extras procesadora</div>
+              <div class="kpi-val" style="color:var(--yel)" id="lkpi-extras">—</div>
+              <div class="kpi-sub" id="lkpi-extras-sub">—</div>
+            </div>
+            <div class="kpi-card kpi-ok">
+              <div class="kpi-lbl">Monto liquidado</div>
+              <div class="kpi-val" style="color:var(--grn)" id="lkpi-mliq">—</div>
+            </div>
+            <div class="kpi-card kpi-sm">
+              <div class="kpi-lbl">Monto sin liquidar</div>
+              <div class="kpi-val" style="color:var(--red)" id="lkpi-mnoliq">—</div>
+            </div>
+            <div class="kpi-card" style="border-color:rgba(251,146,60,.25)">
+              <div class="kpi-lbl">Diferencias de tasas</div>
+              <div class="kpi-val" style="color:var(--org)" id="lkpi-difs">—</div>
+              <div class="kpi-sub" id="lkpi-difs-sub">—</div>
+            </div>
+          </div>
+
+          <!-- Charts grid liquidaciones -->
+          <div class="dash-grid">
+
+            <!-- Fila 1: Por procesadora + Donut mix -->
+            <div class="dash-card">
+              <div class="dash-card-title">Liquidadas vs Sin liquidar vs Extras <span>por procesadora</span></div>
+              <div class="dash-cw h220"><canvas id="ch-liq-proc"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Mix global de montos <span>(liquidado / sin liquidar / extras)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-liq-donut"></canvas></div>
+            </div>
+
+            <!-- Fila 2: Top suc sin liquidar + Diferencias clasificadas -->
+            <div class="dash-card">
+              <div class="dash-card-title">Top sucursales <span>— monto sin liquidar ($)</span></div>
+              <div class="dash-cw h220"><canvas id="ch-liq-suc-noliq"></canvas></div>
+            </div>
+            <div class="dash-card">
+              <div class="dash-card-title">Diferencias de tasas <span>— por clasificación manual</span></div>
+              <div class="dash-cw h220"><canvas id="ch-liq-difs"></canvas></div>
+            </div>
+
+          </div><!-- .dash-grid liquidaciones -->
+        </div><!-- #dash-tab-liq -->      </div><!-- .dash-scroll -->
     </div><!-- #dash-content -->
 
   </div><!-- #mod-dashboard -->
@@ -1995,8 +2060,8 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 <script src="js/gocuotas.js"></script>
 <script src="js/procesadoras.js"></script>
 <script src="js/liquidaciones.js"></script>
-<script src="js/historico.js?v=20260617d"></script>
-<script src="js/dashboard.js"></script>
+<script src="js/historico.js?v=20260618a"></script>
+<script src="js/dashboard.js?v=20260618a"></script>
 <script>
 
 // ══ PROCESADORAS — toggle sidebar ════════════════════
