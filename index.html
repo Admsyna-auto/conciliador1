@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
@@ -2024,11 +2024,11 @@ function _initProcGroups() {
 const MEGA_MAP = {
   resumen:        [{ id:'dashboard', label:'Dashboard' },{ id:'hist', label:'Histórico' }],
   operaciones:    [{ id:'cruce', label:'Cruce automático' },{ id:'revision', label:'Revisión manual' },{ id:'fiserv', label:'FISERV' },{ id:'getpos', label:'GETPOS' },{ id:'goc', label:'Go Cuotas' }],
-  liquidaciones:  [{ id:'liq-fiserv', label:'FISERV' },{ id:'liq-getpos', label:'GETPOS' },{ id:'liq-goc', label:'Go Cuotas' },{ id:'liq-tasas', label:'Tasas' }],
-  diferencias:    [{ id:'diferencias', label:'Diferencias' },{ id:'cobros', label:'Cobros' },{ id:'ctr', label:'Contracargos' }],
+  liquidaciones:  [{ id:'liq-fiserv', label:'FISERV' },{ id:'liq-getpos', label:'GETPOS' },{ id:'liq-goc', label:'Go Cuotas' }],
+  diferencias:    [{ id:'liq-tasas', label:'Tasas' },{ id:'cobros', label:'Cobros' },{ id:'ctr', label:'Contracargos' }],
   configuracion:  [{ id:'tm', label:'Tablas maestras' }],
 };
-const _megaActive   = { resumen:'dashboard', operaciones:'cruce', liquidaciones:'liq-fiserv', diferencias:'diferencias', configuracion:'tm' };
+const _megaActive   = { resumen:'dashboard', operaciones:'cruce', liquidaciones:'liq-fiserv', diferencias:'liq-tasas', configuracion:'tm' };
 let   _curMegaTab   = 'resumen';
 
 function showMegaTab(tabId, btn) {

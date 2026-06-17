@@ -1595,6 +1595,8 @@ window._tasasRefreshKpiCounts = function() {
   upd('tasas-kpi-vendedor',  v);
   upd('tasas-kpi-proc',      p);
   upd('tasas-kpi-ok',        ok);
+  // Badge del mega-tab DIFERENCIAS
+  upd('cnt-mega-dif', difs.length);
 };
 
 // ── Filtros de diferencias ────────────────────────────────────────────
