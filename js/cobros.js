@@ -405,11 +405,13 @@ function cruzarCobros() {
 }
 
 // ══════════════════════════════════════════════════════════════════
-// RENDER — MÓDULO
+// RENDER — MÓDULO PENDIENTES / EXTRAS
+// Lee directamente de _liqCache (liquidaciones.js).
+// Sin liquidar = ops Skylab no encontradas en el archivo liq.
+// Extras       = filas del archivo liq sin op Skylab correspondiente.
 // ══════════════════════════════════════════════════════════════════
-let _cobrosTab = 'pendientes';
-let _cobSuc    = '';
-let _cobProc   = '';
+let _cobrosTab = 'sinliq';
+let _cobProc   = '';   // '' | 'FISERV' | 'GETPOS' | 'GoC'
 
 function renderModuloCobros() {
   const cont = document.getElementById('mod-cobros');
@@ -417,91 +419,85 @@ function renderModuloCobros() {
 
   if (!RESULTADO.length) {
     cont.innerHTML = `<div class="cobros-empty">
-      Primero realizá el <b style="color:var(--acc)">Cruce Automático</b> (módulo 1).</div>`;
+      Primero realizá el <b style="color:var(--acc)">Cruce Automático</b>.</div>`;
     return;
   }
-  if (!_LIQ_NORM.length) {
+
+  // Auto-computar caches si hay archivo liq cargado y aún no se corrió el cruce
+  if (typeof _LIQ_CUPONES !== 'undefined' && _LIQ_CUPONES.length) {
+    if (!_liqCache.fiserv) _liqCache.fiserv = _cruzarLiqFiserv();
+    if (!_liqCache.getpos) _liqCache.getpos = _cruzarLiqGetpos();
+    if (!_liqCache.goc)    _liqCache.goc    = _cruzarLiqGoC();
+  }
+
+  const hayCache = _liqCache.fiserv || _liqCache.getpos || _liqCache.goc;
+  if (!hayCache) {
     cont.innerHTML = `<div class="cobros-empty">
-      Cargá el archivo de <b style="color:var(--yel)">Liquidaciones</b> en el panel izquierdo
-      para cruzar los cobros.</div>`;
+      Cargá el archivo de <b style="color:var(--yel)">Liquidaciones</b> y ejecutá el cruce
+      en las pestañas de LIQUIDACIONES para ver pendientes y extras.</div>`;
     return;
   }
 
-  cruzarCobros();
+  // Consolidar sin liquidar y extras de todos los procesadores
+  const sinLiq = [
+    ...(_liqCache.fiserv?.noLiquidadas || []).map(x => ({ ...x, proc: 'FISERV' })),
+    ...(_liqCache.getpos?.noLiquidadas || []).map(x => ({ ...x, proc: 'GETPOS' })),
+    ...(_liqCache.goc?.noLiquidadas    || []).map(x => ({ ...x, proc: 'GoC'    })),
+  ];
+  const extras = [
+    ...(_liqCache.fiserv?.extras || []).map(r => ({ liqRow: r, proc: 'FISERV' })),
+    ...(_liqCache.getpos?.extras || []).map(r => ({ liqRow: r, proc: 'GETPOS' })),
+    ...(_liqCache.goc?.extras    || []).map(r => ({ liqRow: r, proc: 'GoC'    })),
+  ];
 
-  const cobrados   = COBROS_RESULT.filter(c => c.estado === 'COBRADO');
-  const pendientes = COBROS_RESULT.filter(c => c.estado === 'PENDIENTE');
-  const rechazados = COBROS_RESULT.filter(c => c.estado === 'RECHAZADO');
-
-  const sumM   = arr => arr.reduce((s, c) => s + Math.abs(c.fila.sky.monto || 0), 0);
-  const totCob = sumM(cobrados), totPen = sumM(pendientes), totRec = sumM(rechazados);
-  const totTot = totCob + totPen + totRec;
-  const pctCob = totTot ? (totCob / totTot * 100) : 0;
-  const pctPen = totTot ? (totPen / totTot * 100) : 0;
+  const montoSinLiq = sinLiq.reduce((s, x) => s + Math.abs(x.fila?.sky?.monto || 0), 0);
+  const montoExtras = extras.reduce((s, x) => s + Math.abs(x.liqRow?.monto || 0), 0);
 
   const badge = document.getElementById('mcnt-cobros');
-  if (badge) badge.textContent = pendientes.length || '0';
+  if (badge) badge.textContent = sinLiq.length || '0';
 
   cont.innerHTML = `
   <div class="cobros-wrap">
-
     <!-- KPIs -->
     <div class="cobros-kpis">
-      <div class="cob-kpi" style="border-top:3px solid var(--grn)">
-        <div class="cob-kpi-lbl">✓ Cobrados</div>
-        <div class="cob-kpi-n" style="color:var(--grn)">${cobrados.length.toLocaleString()}</div>
-        <div class="cob-kpi-m">${fmtARS(totCob)}</div>
-        <div class="cob-kpi-pct">${pctCob.toFixed(1)}% del total</div>
-      </div>
       <div class="cob-kpi" style="border-top:3px solid var(--red)">
-        <div class="cob-kpi-lbl">⏳ Pendientes de cobro</div>
-        <div class="cob-kpi-n" style="color:var(--red)">${pendientes.length.toLocaleString()}</div>
-        <div class="cob-kpi-m" style="color:var(--red)">${fmtARS(totPen)}</div>
-        <div class="cob-kpi-pct">${pctPen.toFixed(1)}% del total</div>
+        <div class="cob-kpi-lbl">Sin liquidar</div>
+        <div class="cob-kpi-n" style="color:var(--red)">${sinLiq.length.toLocaleString('es-AR')}</div>
+        <div class="cob-kpi-m" style="color:var(--red)">${fmtARS(montoSinLiq)}</div>
+        <div class="cob-kpi-pct">ops sin acreditar en liq</div>
       </div>
       <div class="cob-kpi" style="border-top:3px solid var(--yel)">
-        <div class="cob-kpi-lbl">✗ Rechazados</div>
-        <div class="cob-kpi-n" style="color:var(--yel)">${rechazados.length.toLocaleString()}</div>
-        <div class="cob-kpi-m" style="color:var(--yel)">${fmtARS(totRec)}</div>
-        <div class="cob-kpi-pct">${totTot ? (totRec/totTot*100).toFixed(1) : 0}% del total</div>
+        <div class="cob-kpi-lbl">Extras procesadora</div>
+        <div class="cob-kpi-n" style="color:var(--yel)">${extras.length.toLocaleString('es-AR')}</div>
+        <div class="cob-kpi-m" style="color:var(--yel)">${fmtARS(montoExtras)}</div>
+        <div class="cob-kpi-pct">filas liq sin op en Skylab</div>
       </div>
       <div class="cob-kpi" style="border-top:3px solid var(--acc)">
-        <div class="cob-kpi-lbl">∑ Total analizado</div>
-        <div class="cob-kpi-n" style="color:var(--acc)">${COBROS_RESULT.length.toLocaleString()}</div>
-        <div class="cob-kpi-m">${fmtARS(totTot)}</div>
-        <div class="cob-kpi-pct">ops. activas positivas</div>
+        <div class="cob-kpi-lbl">FISERV sin liquidar</div>
+        <div class="cob-kpi-n">${(_liqCache.fiserv?.noLiquidadas?.length ?? '—').toLocaleString?.() ?? '—'}</div>
+        <div class="cob-kpi-m">${_liqCache.fiserv ? fmtARS(_liqCache.fiserv.montoNoLiq||0) : '—'}</div>
+        <div class="cob-kpi-pct">${_liqCache.fiserv?.tieneLiq ? 'archivo cargado' : 'sin archivo liq'}</div>
+      </div>
+      <div class="cob-kpi" style="border-top:3px solid var(--vio)">
+        <div class="cob-kpi-lbl">GETPOS sin liquidar</div>
+        <div class="cob-kpi-n">${(_liqCache.getpos?.noLiquidadas?.length ?? '—').toLocaleString?.() ?? '—'}</div>
+        <div class="cob-kpi-m">${_liqCache.getpos ? fmtARS(_liqCache.getpos.montoNoLiq||0) : '—'}</div>
+        <div class="cob-kpi-pct">${_liqCache.getpos?.tieneLiq ? 'archivo cargado' : 'sin archivo liq'}</div>
       </div>
     </div>
 
-    <!-- Barra de progreso -->
-    <div style="padding:0 20px 14px">
-      <div style="height:7px;background:var(--b1);border-radius:4px;overflow:hidden;display:flex">
-        <div style="width:${pctCob.toFixed(1)}%;background:var(--grn);transition:width .5s"></div>
-        <div style="width:${pctPen.toFixed(1)}%;background:var(--red);transition:width .5s"></div>
-      </div>
-      <div style="display:flex;justify-content:space-between;margin-top:5px;font-size:9px;color:var(--m2)">
-        <span style="color:var(--grn)">▓ ${pctCob.toFixed(1)}% cobrado</span>
-        <span style="color:var(--red)">▓ ${pctPen.toFixed(1)}% pendiente</span>
-      </div>
-    </div>
-
-    <!-- Tab strip -->
+    <!-- Tabs -->
     <div class="tab-strip" id="tstrip-cobros"
          style="padding:0 20px;border-bottom:1px solid var(--b1);flex-shrink:0">
-      <button class="tb ${_cobrosTab==='cobrados'?'active':''}"
-        onclick="showCobrosTab('cobrados',this)">
-        ✓ Cobrados
-        <span class="cnt" style="background:rgba(52,211,153,.15);color:var(--grn)">${cobrados.length}</span>
+      <button class="tb ${_cobrosTab==='sinliq'?'active':''}"
+        onclick="showCobrosTab('sinliq',this)">
+        Sin liquidar
+        <span class="cnt" style="background:rgba(248,113,113,.15);color:var(--red)">${sinLiq.length.toLocaleString('es-AR')}</span>
       </button>
-      <button class="tb ${_cobrosTab==='pendientes'?'active':''}"
-        onclick="showCobrosTab('pendientes',this)">
-        ⏳ Pendientes
-        <span class="cnt" style="background:rgba(248,113,113,.15);color:var(--red)">${pendientes.length}</span>
-      </button>
-      <button class="tb ${_cobrosTab==='rechazados'?'active':''}"
-        onclick="showCobrosTab('rechazados',this)">
-        ✗ Rechazados
-        <span class="cnt" style="background:rgba(251,191,36,.15);color:var(--yel)">${rechazados.length}</span>
+      <button class="tb ${_cobrosTab==='extras'?'active':''}"
+        onclick="showCobrosTab('extras',this)">
+        Extras procesadora
+        <span class="cnt" style="background:rgba(251,191,36,.15);color:var(--yel)">${extras.length.toLocaleString('es-AR')}</span>
       </button>
     </div>
 
@@ -509,10 +505,12 @@ function renderModuloCobros() {
          style="flex:1;overflow:hidden;display:flex;flex-direction:column;min-height:0"></div>
   </div>`;
 
+  // Guardar datos para tabs y filtros
+  window._cobSinLiq = sinLiq;
+  window._cobExtras = extras;
   showCobrosTab(_cobrosTab);
 }
 
-// ── Cambiar tab activa ──────────────────────────────────────────────
 function showCobrosTab(tab, btn) {
   _cobrosTab = tab;
   if (btn) {
@@ -522,115 +520,63 @@ function showCobrosTab(tab, btn) {
   const body = document.getElementById('cobros-tab-body');
   if (!body) return;
 
-  const MAP = { cobrados:'COBRADO', pendientes:'PENDIENTE', rechazados:'RECHAZADO' };
-  let rows = COBROS_RESULT.filter(c => c.estado === MAP[tab]);
-  if (_cobSuc)  rows = rows.filter(c => c.fila.sky.suc === _cobSuc);
-  if (_cobProc) rows = rows.filter(c => c.fuenteCodigo.startsWith(_cobProc));
+  const sinLiq = window._cobSinLiq || [];
+  const extras = window._cobExtras || [];
 
-  _renderTablaCobros(body, tab, rows);
+  if (tab === 'sinliq') {
+    const rows = _cobProc ? sinLiq.filter(x => x.proc === _cobProc) : sinLiq;
+    _renderCobSinLiq(body, rows);
+  } else {
+    const rows = _cobProc ? extras.filter(x => x.proc === _cobProc) : extras;
+    _renderCobExtras(body, rows);
+  }
 }
 
-// ── Tabla interna ───────────────────────────────────────────────────
-function _renderTablaCobros(body, tipo, rows) {
-  if (!rows.length) {
-    body.innerHTML = `<div style="padding:40px;text-align:center;color:var(--m2)">
-      No hay operaciones ${tipo}.</div>`;
-    return;
-  }
+function _cobProcBadge(proc) {
+  if (proc === 'FISERV') return `<span class="st st-fis">FISERV</span>`;
+  if (proc === 'GETPOS') return `<span class="st st-gp">GETPOS</span>`;
+  return `<span class="st" style="background:rgba(52,211,153,.1);color:var(--grn);border-color:rgba(52,211,153,.3)">GoC</span>`;
+}
 
-  // Sucursales únicas para filtro
-  const MAP2 = { cobrados:'COBRADO', pendientes:'PENDIENTE', rechazados:'RECHAZADO' };
-  const allRows = COBROS_RESULT.filter(c => c.estado === MAP2[tipo]);
-  const sucs = [...new Set(allRows.map(c => c.fila.sky.suc))].sort((a,b)=>+a-+b);
-  const totMonto = rows.reduce((s, c) => s + Math.abs(c.fila.sky.monto || 0), 0);
-
-  let HDR, tplRow;
-
-  if (tipo === 'cobrados') {
-    HDR = ['Suc.','Fecha Vta.','Vendedor','Tarjeta SKY','Plan',
-           'Cupón','Lote','Monto SKY',
-           'Fecha Pago','Nro Liq.','Equipo','Tarjeta Liq.','Cod.Auth.',
-           'Tipo Op.','Código Único'];
-    tplRow = c => {
-      const s = c.fila.sky, l = c.liq;
-      const fuenteBadge = _fuenteBadge(c.fuenteCodigo);
-      return `<tr>
-        <td>${s.suc}</td>
-        <td>${s.fecha}</td>
-        <td class="td-trunc" title="${s.vendedor||''}">${s.vendedor||'—'}</td>
-        <td>${s.tarjeta}</td>
-        <td class="td-trunc" style="font-size:9px" title="${s.plan||''}">${s.plan||'—'}</td>
-        <td class="num">${s.cupon}</td>
-        <td class="num">${s.lote}</td>
-        <td class="num">${fmtARS(s.monto)}</td>
-        <td style="color:var(--grn);font-weight:700">${l.fechaPago||'—'}</td>
-        <td class="num" style="color:var(--cyn)">${l.nroLiq}</td>
-        <td class="num" style="font-size:9px">${l.equipo}</td>
-        <td class="td-trunc" style="font-size:9px" title="${l.tarjeta}">${l.tarjeta}</td>
-        <td class="num" style="font-size:9px">${l.aut||'—'}</td>
-        <td style="font-size:9px">${l.tipoOp||'—'}</td>
-        <td class="num" style="font-size:8px;color:var(--m2)">${c.codigoProc}${fuenteBadge}</td>
-      </tr>`;
-    };
-  } else if (tipo === 'pendientes') {
-    HDR = ['Estado Cruce','Suc.','Fecha Vta.','Vendedor','Tarjeta','Plan',
-           'Cupón','Lote','Monto SKY','Proc. Esperada','Código Único','Fuente'];
-    tplRow = c => {
-      const s = c.fila.sky;
-      const procEsp = c.fila.procEsperada;
-      const fuenteBadge = _fuenteBadge(c.fuenteCodigo);
-      return `<tr>
-        <td>${estadoBadge(c.fila.estado)}</td>
-        <td>${s.suc}</td>
-        <td>${s.fecha}</td>
-        <td class="td-trunc" title="${s.vendedor||''}">${s.vendedor||'—'}</td>
-        <td>${s.tarjeta}</td>
-        <td class="td-trunc" style="font-size:9px" title="${s.plan||''}">${s.plan||'—'}</td>
-        <td class="num">${s.cupon}</td>
-        <td class="num">${s.lote}</td>
-        <td class="num" style="color:var(--red);font-weight:700">${fmtARS(s.monto)}</td>
-        <td><span class="st ${procEsp==='FISERV'?'st-fis':procEsp==='GETPOS'?'st-gp':''}">${procEsp||'—'}</span></td>
-        <td class="num" style="font-size:8px;color:var(--m2)">${c.codigoProc}</td>
-        <td style="font-size:8px">${fuenteBadge}</td>
-      </tr>`;
-    };
-  } else { // rechazados
-    HDR = ['Suc.','Fecha Vta.','Vendedor','Tarjeta','Cupón','Lote','Monto SKY',
-           'Fecha Vta. Liq.','Nro Liq.','Banco Pagador','Rechazo','Tarjeta Liq.','Código Único'];
-    tplRow = c => {
-      const s = c.fila.sky, l = c.liq;
-      return `<tr>
-        <td>${s.suc}</td>
-        <td>${s.fecha}</td>
-        <td class="td-trunc" title="${s.vendedor||''}">${s.vendedor||'—'}</td>
-        <td>${s.tarjeta}</td>
-        <td class="num">${s.cupon}</td>
-        <td class="num">${s.lote}</td>
-        <td class="num" style="color:var(--yel)">${fmtARS(s.monto)}</td>
-        <td>${l?.fechaVenta||'—'}</td>
-        <td class="num">${l?.nroLiq||'—'}</td>
-        <td style="font-size:9px">${l?.banco||'—'}</td>
-        <td style="color:var(--red);font-weight:700">${l?.rechazo||'—'}</td>
-        <td class="td-trunc" style="font-size:9px" title="${l?.tarjeta||''}">${l?.tarjeta||'—'}</td>
-        <td class="num" style="font-size:8px;color:var(--m2)">${c.codigoProc}</td>
-      </tr>`;
-    };
-  }
-
-  body.innerHTML = `
+function _cobToolbar(tab, rows, monto) {
+  return `
   <div class="cobros-toolbar">
-    <button class="btn-exp" onclick="exportarCobros('${tipo}')">↓ Exportar Excel</button>
-    <select class="filter-sel" onchange="_cobFiltroSuc(this.value)">
-      <option value="">Todas las sucursales</option>
-      ${sucs.map(s=>`<option value="${s}" ${_cobSuc===s?'selected':''}>${s}</option>`).join('')}
-    </select>
+    <button class="btn-exp" onclick="exportarCobros('${tab}')">↓ Exportar Excel</button>
     <select class="filter-sel" onchange="_cobFiltroProc(this.value)">
-      <option value="">Ambas procesadoras</option>
+      <option value="">Todas las procesadoras</option>
       <option value="FISERV" ${_cobProc==='FISERV'?'selected':''}>FISERV</option>
       <option value="GETPOS" ${_cobProc==='GETPOS'?'selected':''}>GETPOS</option>
+      <option value="GoC"    ${_cobProc==='GoC'   ?'selected':''}>Go Cuotas</option>
     </select>
-    <span style="font-size:10px;color:var(--m2)">${rows.length.toLocaleString()} ops · ${fmtARS(totMonto)}</span>
-  </div>
+    <span style="font-size:10px;color:var(--m2)">${rows.length.toLocaleString('es-AR')} registros · ${fmtARS(monto)}</span>
+  </div>`;
+}
+
+function _renderCobSinLiq(body, rows) {
+  const monto = rows.reduce((s, x) => s + Math.abs(x.fila?.sky?.monto || 0), 0);
+  if (!rows.length) {
+    body.innerHTML = _cobToolbar('sinliq', rows, 0) +
+      `<div style="padding:40px;text-align:center;color:var(--m2)">No hay operaciones sin liquidar.</div>`;
+    return;
+  }
+  const HDR = ['Proc.','Fecha','Suc.','Vendedor','Tarjeta','Plan','Cuotas','Monto SKY','Lote','Cupón','Estado cruce'];
+  const tplRow = x => {
+    const s = x.fila?.sky || {};
+    return `<tr>
+      <td>${_cobProcBadge(x.proc)}</td>
+      <td>${s.fecha||'—'}</td>
+      <td>${s.suc||'—'}</td>
+      <td class="td-trunc" title="${s.vendedor||''}">${s.vendedor||'—'}</td>
+      <td>${s.tarjeta||'—'}</td>
+      <td class="td-trunc" style="font-size:9px" title="${s.plan||''}">${s.plan||'—'}</td>
+      <td class="num">${s.cuotas||1}</td>
+      <td class="num" style="color:var(--red);font-weight:700">${fmtARS(s.monto)}</td>
+      <td class="num">${x.lote||s.lote||'—'}</td>
+      <td class="num">${x.cupon||s.cupon||'—'}</td>
+      <td>${estadoBadge(x.fila?.estado)}</td>
+    </tr>`;
+  };
+  body.innerHTML = _cobToolbar('sinliq', rows, monto) + `
   <div class="tbl-wrap">
     <table class="res-tbl">
       <thead><tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
@@ -639,70 +585,71 @@ function _renderTablaCobros(body, tipo, rows) {
   </div>`;
 }
 
-// ── Badge de fuente del código ────────────────────────────────────────
-function _fuenteBadge(fuente) {
-  if (!fuente) return '';
-  if (fuente.startsWith('FISERV'))  return `<span style="font-size:7px;margin-left:3px;background:rgba(79,142,247,.12);color:var(--acc);border:1px solid rgba(79,142,247,.25);border-radius:2px;padding:1px 3px">FIS</span>`;
-  if (fuente.startsWith('GETPOS'))  return `<span style="font-size:7px;margin-left:3px;background:rgba(167,139,250,.12);color:var(--vio);border:1px solid rgba(167,139,250,.25);border-radius:2px;padding:1px 3px">GP</span>`;
-  if (fuente.startsWith('MANUAL'))  return `<span style="font-size:7px;margin-left:3px;background:rgba(251,191,36,.12);color:var(--yel);border:1px solid rgba(251,191,36,.25);border-radius:2px;padding:1px 3px">MAN</span>`;
-  return `<span style="font-size:7px;margin-left:3px;background:rgba(107,114,128,.1);color:var(--m2);border:1px solid rgba(107,114,128,.2);border-radius:2px;padding:1px 3px">SKY</span>`;
+function _renderCobExtras(body, rows) {
+  const monto = rows.reduce((s, x) => s + Math.abs(x.liqRow?.monto || 0), 0);
+  if (!rows.length) {
+    body.innerHTML = _cobToolbar('extras', rows, 0) +
+      `<div style="padding:40px;text-align:center;color:var(--m2)">No hay extras de procesadora.</div>`;
+    return;
+  }
+  const HDR = ['Proc.','Fecha Venta','Equipo','Lote','Cupón','Tarjeta','Cuotas','Monto','Cód. Auth.','Nro Comercio'];
+  const tplRow = x => {
+    const r = x.liqRow;
+    return `<tr>
+      <td>${_cobProcBadge(x.proc)}</td>
+      <td>${r.fecha_venta||r.fecha||'—'}</td>
+      <td class="num">${r.equipo||'—'}</td>
+      <td class="num">${r.lote||'—'}</td>
+      <td class="num">${r.cupon||'—'}</td>
+      <td>${r.tarjeta||'—'}</td>
+      <td class="num">${r.cuotas||1}</td>
+      <td class="num" style="color:var(--yel);font-weight:700">${fmtARS(r.monto)}</td>
+      <td class="num" style="font-size:9px">${r.aut||'—'}</td>
+      <td class="num" style="font-size:9px">${r.nro_comercio||'—'}</td>
+    </tr>`;
+  };
+  body.innerHTML = _cobToolbar('extras', rows, monto) + `
+  <div class="tbl-wrap">
+    <table class="res-tbl">
+      <thead><tr>${HDR.map(h=>`<th>${h}</th>`).join('')}</tr></thead>
+      <tbody>${rows.map(tplRow).join('')}</tbody>
+    </table>
+  </div>`;
 }
 
-// ── Filtros ───────────────────────────────────────────────────────────
-function _cobFiltroSuc(v)  { _cobSuc  = v; showCobrosTab(_cobrosTab); }
 function _cobFiltroProc(v) { _cobProc = v; showCobrosTab(_cobrosTab); }
 
 // ══════════════════════════════════════════════════════════════════
 // EXPORTAR EXCEL
 // ══════════════════════════════════════════════════════════════════
-function exportarCobros(tipo) {
-  const MAP = { cobrados:'COBRADO', pendientes:'PENDIENTE', rechazados:'RECHAZADO' };
-  let rows = COBROS_RESULT.filter(c => c.estado === MAP[tipo]);
-  if (_cobSuc)  rows = rows.filter(c => c.fila.sky.suc === _cobSuc);
-  if (_cobProc) rows = rows.filter(c => c.fuenteCodigo.startsWith(_cobProc));
+function exportarCobros(tab) {
+  const sinLiq = window._cobSinLiq || [];
+  const extras = window._cobExtras || [];
+  const rows   = tab === 'sinliq'
+    ? (_cobProc ? sinLiq.filter(x => x.proc === _cobProc) : sinLiq)
+    : (_cobProc ? extras.filter(x => x.proc === _cobProc) : extras);
   if (!rows.length) { alert('No hay datos para exportar.'); return; }
 
   let HDR, dataFn;
-
-  if (tipo === 'cobrados') {
-    HDR = ['Suc.','Fecha Venta','Vendedor','Tarjeta SKY','Plan','Cupón SKY','Lote SKY','Monto SKY',
-           'Fecha Pago','Nro Liquidación','Equipo','Tarjeta Liq.','Cód.Auth.',
-           'Tipo Operación','Arancel','IVA Arancel','CFO','Banco Emisor',
-           'Estado Cruce','Código Único Proc.','Código Único Liq.','Fuente Código'];
-    dataFn = c => {
-      const s = c.fila.sky, l = c.liq;
-      return [s.suc, s.fecha, s.vendedor||'', s.tarjeta, s.plan||'',
-        s.cupon, s.lote, s.monto,
-        l.fechaPago, l.nroLiq, l.equipo, l.tarjeta, l.aut, l.tipoOp,
-        l.arancel, l.ivaArancel, l.cfo, l.bancoEmisor,
-        c.fila.estado, c.codigoProc, c.codigoLiq, c.fuenteCodigo];
-    };
-  } else if (tipo === 'pendientes') {
-    HDR = ['Estado Cruce','Suc.','Fecha Venta','Vendedor','Tarjeta','Plan',
-           'Cupón','Lote','Monto SKY','Proc. Esperada','Nro Comercio',
-           'Código Único Proc.','Fuente Código'];
-    dataFn = c => {
-      const s = c.fila.sky;
-      return [c.fila.estado, s.suc, s.fecha, s.vendedor||'', s.tarjeta, s.plan||'',
-        s.cupon, s.lote, s.monto, c.fila.procEsperada||'', s.nroCom||'',
-        c.codigoProc, c.fuenteCodigo];
+  if (tab === 'sinliq') {
+    HDR = ['Procesadora','Fecha','Suc.','Vendedor','Tarjeta','Plan','Cuotas','Monto SKY','Lote','Cupón','Estado cruce'];
+    dataFn = x => {
+      const s = x.fila?.sky || {};
+      return [x.proc, s.fecha||'', s.suc||'', s.vendedor||'', s.tarjeta||'', s.plan||'',
+              s.cuotas||1, s.monto||0, x.lote||s.lote||'', x.cupon||s.cupon||'', x.fila?.estado||''];
     };
   } else {
-    HDR = ['Suc.','Fecha Venta','Vendedor','Tarjeta','Cupón','Lote','Monto SKY',
-           'Fecha Vta. Liq.','Nro Liquidación','Banco Pagador','Rechazo','Tarjeta Liq.',
-           'Estado Cruce','Código Único Proc.','Código Único Liq.','Fuente Código'];
-    dataFn = c => {
-      const s = c.fila.sky, l = c.liq;
-      return [s.suc, s.fecha, s.vendedor||'', s.tarjeta,
-        s.cupon, s.lote, s.monto,
-        l?.fechaVenta||'', l?.nroLiq||'', l?.banco||'', l?.rechazo||'', l?.tarjeta||'',
-        c.fila.estado, c.codigoProc, c.codigoLiq||'—', c.fuenteCodigo];
+    HDR = ['Procesadora','Fecha Venta','Equipo','Lote','Cupón','Tarjeta','Cuotas','Monto','Cód. Auth.','Nro Comercio'];
+    dataFn = x => {
+      const r = x.liqRow;
+      return [x.proc, r.fecha_venta||r.fecha||'', r.equipo||'', r.lote||'', r.cupon||'',
+              r.tarjeta||'', r.cuotas||1, r.monto||0, r.aut||'', r.nro_comercio||''];
     };
   }
 
   const ws  = XLSX.utils.aoa_to_sheet([HDR, ...rows.map(dataFn)]);
   const wb2 = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb2, ws, tipo[0].toUpperCase() + tipo.slice(1));
+  XLSX.utils.book_append_sheet(wb2, ws, tab === 'sinliq' ? 'Sin Liquidar' : 'Extras');
   const ts = new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb2, `Cobros_${tipo}_${ts}.xlsx`);
+  XLSX.writeFile(wb2, `Cobros_${tab}_${ts}.xlsx`);
 }
