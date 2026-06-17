@@ -1627,7 +1627,7 @@ function renderModuloLiqTasas() {
           ↓ Exportar Excel
         </button>
       </div>
-      <div style="flex:1;min-height:0;overflow:hidden">
+      <div style="flex:1;min-height:0;overflow-y:auto">
         ${_tasasRenderTabla(filas, tab)}
       </div>`;
   };
