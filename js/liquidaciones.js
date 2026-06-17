@@ -1241,6 +1241,14 @@ function _liqTD(r) {
   return fee / r.monto;
 }
 
+// Normaliza nombre de tarjeta de liquidaciones al equivalente Skylab (TM.tarjetas)
+function _liqEquivTarjeta(liqTarjeta) {
+  if (!TM?.tarjetas?.length || !liqTarjeta) return liqTarjeta || '';
+  const up = liqTarjeta.toUpperCase().trim();
+  const match = TM.tarjetas.find(t => (t.tarjeta||'').toUpperCase().trim() === up);
+  return match?.equivSkylab?.trim() || liqTarjeta;
+}
+
 // Lookup en TM.tasas usando la fecha exacta de la operación (no "hoy")
 function _buscarTasaParaFecha(tarjeta, cuotas, procesadora, fecha) {
   if (!TM?.tasas?.length) return null;
@@ -1369,8 +1377,9 @@ function _cruzarTasas() {
     const skyMonto   = Math.abs(parseFloat(fila.sky?.monto || fila.proc?.montoN || 0));
     const liqMonto   = Math.abs(liqRow.monto || 0);
 
+    const liqTarjetaNorm = _liqEquivTarjeta(liqTarjeta);
     const difTarjeta  = !!(skyTarjeta && liqTarjeta &&
-      skyTarjeta.toUpperCase().trim() !== liqTarjeta.toUpperCase().trim());
+      skyTarjeta.toUpperCase().trim() !== liqTarjetaNorm.toUpperCase().trim());
     const difCuotas   = skyCuotas !== liqCuotas;
     const difTasaSky  = td_cobrada > 0 && td_fact2 !== null && Math.abs(td_cobrada - td_fact2) >= 0.0005;
     const difTasaLiq  = td_cobrada > 0 && td_ac2   !== null && (td_cobrada - td_ac2) > 0.0005;

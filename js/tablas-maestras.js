@@ -65,8 +65,7 @@ function showTM(key) {
     case 'comercios':    body.innerHTML = renderTMGeneric(key, ['nroCom','procesadora','acuerdo','vigDesde','vigHasta'],
       ['Nro. Comercio','Procesadora','Acuerdo','Desde','Hasta'],
       () => ({nroCom:'',procesadora:'FISERV',acuerdo:'',vigDesde:'',vigHasta:''})); break;
-    case 'tarjetas':     body.innerHTML = renderTMGeneric(key, ['tarjeta','equivSkylab','equivProc'],
-      ['Tarjeta','Equiv. Skylab','Equiv. Proc.'], () => ({tarjeta:'',equivSkylab:'',equivProc:''})); break;
+    case 'tarjetas':     body.innerHTML = renderTMTarjetas(); break;
     case 'planes':       body.innerHTML = renderTMGeneric(key, ['plan','cuotas','tarjeta','procesadora','codigos'],
       ['Plan','Cuotas','Tarjeta','Procesadora','Códigos'], () => ({plan:'',cuotas:'',tarjeta:'',procesadora:'',codigos:''})); break;
     case 'tasas':        body.innerHTML = renderTMTasas(); break;
@@ -140,6 +139,142 @@ function renderTMTasas() {
   return renderTMGeneric('tasas', fields, headers,
     () => ({acuerdo:'',procesadora:'',comercio:'',tarjeta:'',plan:'',cuotas:'',tasa:'',coef:'',vigDesde:'',vigHasta:''}));
 }
+
+// ── Equivalencias de tarjetas Procesadora ↔ Skylab ───────────────────
+function renderTMTarjetas() {
+  if (!TM.tarjetas) TM.tarjetas = [];
+
+  // Tarjetas únicas conocidas en Skylab (para datalist de sugerencias)
+  const skyTarjetas = [...new Set(
+    (typeof RESULTADO !== 'undefined' ? RESULTADO : [])
+      .map(r => r.sky?.tarjeta).filter(Boolean)
+  )].sort();
+
+  // Tarjetas únicas detectadas en archivos de liquidación cargados
+  const liqTarjetasDetectadas = [...new Set(
+    (typeof _LIQ_CUPONES !== 'undefined' ? _LIQ_CUPONES : [])
+      .map(r => r.tarjeta).filter(Boolean)
+  )].sort();
+
+  const rows = TM.tarjetas;
+  const esc  = v => String(v||'').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+
+  const bodyRows = rows.length ? rows.map((r, i) => `
+    <tr style="border-bottom:1px solid var(--b0)">
+      <td style="padding:4px 6px">
+        <input class="tm-inp" value="${esc(r.tarjeta)}"
+          list="tm-liq-tarjetas-list"
+          placeholder="Ej: TARJETA VISA BANCARIZADA"
+          onchange="updateTMRow('tarjetas',${i},'tarjeta',this.value)"
+          style="width:260px">
+      </td>
+      <td style="padding:4px 6px;text-align:center;color:var(--m2);font-size:18px">→</td>
+      <td style="padding:4px 6px">
+        <input class="tm-inp" value="${esc(r.equivSkylab)}"
+          list="tm-sky-tarjetas-list"
+          placeholder="Ej: VISA"
+          onchange="updateTMRow('tarjetas',${i},'equivSkylab',this.value)"
+          style="width:200px">
+      </td>
+      <td style="padding:4px 6px">
+        <input class="tm-inp" value="${esc(r.equivProc||'')}"
+          placeholder="(opcional)"
+          onchange="updateTMRow('tarjetas',${i},'equivProc',this.value)"
+          style="width:160px">
+      </td>
+      <td style="padding:4px 6px">
+        <button class="tm-del-btn" onclick="deleteTMRow('tarjetas',${i})">×</button>
+      </td>
+    </tr>`).join('')
+  : `<tr><td colspan="5" style="padding:20px;text-align:center;color:var(--m2);font-size:10px">
+      Sin equivalencias configuradas — usá "Detectar desde liquidaciones" para cargar automáticamente
+    </td></tr>`;
+
+  const detectedBadge = liqTarjetasDetectadas.length
+    ? `<span style="font-size:9px;color:var(--grn)">${liqTarjetasDetectadas.length} tarjetas en archivo cargado</span>`
+    : `<span style="font-size:9px;color:var(--m2)">Cargá un archivo de liquidaciones para auto-detectar</span>`;
+
+  return `
+    <datalist id="tm-sky-tarjetas-list">
+      ${skyTarjetas.map(t => `<option value="${esc(t)}">`).join('')}
+    </datalist>
+    <datalist id="tm-liq-tarjetas-list">
+      ${liqTarjetasDetectadas.map(t => `<option value="${esc(t)}">`).join('')}
+    </datalist>
+
+    <div style="display:flex;flex-direction:column;height:100%;overflow:hidden">
+
+      <!-- Header -->
+      <div style="padding:14px 18px 10px;flex-shrink:0;border-bottom:1px solid var(--b1)">
+        <div style="font-size:12px;font-weight:700;color:var(--txt);margin-bottom:4px">
+          Equivalencias de Tarjetas
+        </div>
+        <p style="font-size:9px;color:var(--m2);margin:0;line-height:1.6">
+          Mapea como aparece el nombre de tarjeta en el archivo de liquidaciones (FISERV/GETPOS)
+          al nombre equivalente en Skylab. Se usa para detectar diferencias reales de tarjeta.
+        </p>
+      </div>
+
+      <!-- Toolbar -->
+      <div style="display:flex;align-items:center;gap:10px;padding:8px 18px;
+        flex-shrink:0;border-bottom:1px solid var(--b0);background:var(--s1)">
+        ${detectedBadge}
+        <button class="tm-add-btn" onclick="_tmDetectarTarjetas()"
+          ${liqTarjetasDetectadas.length ? '' : 'disabled'}
+          style="${liqTarjetasDetectadas.length ? '' : 'opacity:.4;cursor:not-allowed'}">
+          ⬇ Detectar desde liquidaciones
+        </button>
+        <div style="flex:1"></div>
+        <span class="tm-count">${rows.length} equivalencias</span>
+        <button class="tm-add-btn" onclick="addTMRow('tarjetas')">+ Agregar manual</button>
+        <button class="tm-discard-btn" onclick="descartarTM('tarjetas')">↩ Descartar</button>
+        <button class="tm-save-btn" onclick="saveTM()">💾 Guardar</button>
+      </div>
+
+      <!-- Tabla -->
+      <div style="flex:1;overflow-y:auto">
+        <table class="tm-table" style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:var(--s2)">
+            <th style="padding:8px 6px;text-align:left;font-size:9px;color:var(--m2);
+              white-space:nowrap;border-bottom:1px solid var(--b1)">
+              Tarjeta en Liquidaciones (Procesadora)
+            </th>
+            <th style="width:32px"></th>
+            <th style="padding:8px 6px;text-align:left;font-size:9px;color:var(--m2);
+              white-space:nowrap;border-bottom:1px solid var(--b1)">
+              Equivalente en Skylab
+            </th>
+            <th style="padding:8px 6px;text-align:left;font-size:9px;color:var(--m2);
+              white-space:nowrap;border-bottom:1px solid var(--b1)">
+              Equiv. Procesadora (opcional)
+            </th>
+            <th style="width:40px;border-bottom:1px solid var(--b1)"></th>
+          </tr></thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
+    </div>`;
+}
+
+window._tmDetectarTarjetas = function() {
+  const liqTarjetas = [...new Set(
+    (typeof _LIQ_CUPONES !== 'undefined' ? _LIQ_CUPONES : [])
+      .map(r => r.tarjeta).filter(Boolean)
+  )].sort();
+  if (!liqTarjetas.length) return;
+  if (!TM.tarjetas) TM.tarjetas = [];
+  const existentes = new Set(TM.tarjetas.map(r => (r.tarjeta||'').toUpperCase().trim()));
+  let added = 0;
+  for (const t of liqTarjetas) {
+    if (!existentes.has(t.toUpperCase().trim())) {
+      TM.tarjetas.push({ tarjeta: t, equivSkylab: '', equivProc: '' });
+      added++;
+    }
+  }
+  scheduleAutoSave();
+  showTM('tarjetas');
+  if (added === 0) alert('Todas las tarjetas detectadas ya están en la tabla.');
+};
 
 // ── Feriados nacionales
 function renderTMFeriados() {
