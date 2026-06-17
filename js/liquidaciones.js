@@ -1315,19 +1315,8 @@ function _cruzarTasas() {
       continue;
     }
 
-    // Case 1 — PASAR A DESCUENTO: tasa cobrada ≠ tasa del plan Skylab
-    let hayDifSky = false;
-    if (tmSky) {
-      const td_fact = parseFloat(tmSky.tasa || 0) / 100;
-      const difPct  = td_cobrada - td_fact;
-      if (Math.abs(difPct) >= 0.0005) {
-        pasarDescuento.push({ fila, liqRow, td_cobrada, td_fact, tmRow: tmSky, difPct,
-          difMonto: difPct * liqRow.monto, procNom });
-        hayDifSky = true;
-      }
-    }
-
     // Case 2 — RECLAMAR A PROCESADORA: tasa cobrada > tasa acordada para SU propio plan
+    // Se evalúa primero: si el procesador es el responsable, no se imputa al vendedor
     let hayDifProc = false;
     if (tmLiq) {
       const td_ac  = parseFloat(tmLiq.tasa || 0) / 100;
@@ -1336,6 +1325,19 @@ function _cruzarTasas() {
         reclamarProc.push({ fila, liqRow, td_cobrada, td_ac, tmRow: tmLiq, difPct,
           difMonto: difPct * liqRow.monto, procNom });
         hayDifProc = true;
+      }
+    }
+
+    // Case 1 — PASAR A DESCUENTO: tasa cobrada ≠ tasa del plan Skylab
+    // Solo aplica si el procesador NO está ya en falta por su propia tasa acordada
+    let hayDifSky = false;
+    if (!hayDifProc && tmSky) {
+      const td_fact = parseFloat(tmSky.tasa || 0) / 100;
+      const difPct  = td_cobrada - td_fact;
+      if (Math.abs(difPct) >= 0.0005) {
+        pasarDescuento.push({ fila, liqRow, td_cobrada, td_fact, tmRow: tmSky, difPct,
+          difMonto: difPct * liqRow.monto, procNom });
+        hayDifSky = true;
       }
     }
 
