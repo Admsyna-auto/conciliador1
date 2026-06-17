@@ -1346,6 +1346,7 @@ function _cruzarTasas() {
 
   // ── Diferencias unificadas: tasa + tarjeta + cuotas (para marcación manual) ──
   const diferencias = [];
+  const _difSeenKeys = new Set();   // evita duplicar el mismo liqRow (2 filas → mismo cupón)
   for (const fila of RESULTADO.filter(r => !r.sky?.esGOCUOTAS)) {
     const liqRow = filaLiqMap.get(fila);
     if (!liqRow || !liqRow.monto) continue;
@@ -1378,6 +1379,10 @@ function _cruzarTasas() {
 
     if (!difTarjeta && !difCuotas && !difTasaSky && !difTasaLiq && !difComercio && !difImporte) continue;
 
+    const _key = `${liqRow.equipo||'0'}_${liqRow.lote||'0'}_${liqRow.cupon||'0'}`;
+    if (_difSeenKeys.has(_key)) continue;   // mismo liqRow ya incluido por otra fila de RESULTADO
+    _difSeenKeys.add(_key);
+
     const difMonto = (td_fact2 !== null ? (td_cobrada - td_fact2)
                     : td_ac2   !== null ? (td_cobrada - td_ac2) : 0) * liqRow.monto;
     diferencias.push({
@@ -1385,8 +1390,7 @@ function _cruzarTasas() {
       skyTarjeta, skyCuotas, liqTarjeta, liqCuotas,
       skyNroCom, liqNroCom, skyMonto, liqMonto,
       difTarjeta, difCuotas, difTasaSky, difTasaLiq, difComercio, difImporte,
-      procNom: procNom2, difMonto,
-      _key: `${liqRow.lote || 'x'}_${liqRow.cupon || 'y'}`,
+      procNom: procNom2, difMonto, _key,
     });
   }
 
@@ -1577,6 +1581,95 @@ window._tasasRefreshKpiCounts = function() {
   upd('tasas-kpi-vendedor',  v);
   upd('tasas-kpi-proc',      p);
   upd('tasas-kpi-ok',        ok);
+};
+
+// ── Filtros de diferencias ────────────────────────────────────────────
+window._tasasDifFiltros = { texto: '', tipos: new Set(), clasif: new Set() };
+
+function _tasasDifFiltrar(difs) {
+  const f  = window._tasasDifFiltros;
+  const marc = _tasasMrcGet();
+  let r = difs;
+
+  if (f.texto) {
+    const q = f.texto.toLowerCase();
+    r = r.filter(x => {
+      const sky = x.fila.sky || {};
+      return [x.liqRow.equipo, x.liqRow.lote, x.liqRow.cupon,
+              x.liqNroCom, x.skyNroCom, x.liqTarjeta, x.skyTarjeta,
+              sky.vendedor, sky.opId, sky.suc].some(v => String(v||'').toLowerCase().includes(q));
+    });
+  }
+
+  if (f.tipos.size > 0) {
+    r = r.filter(x => {
+      for (const t of f.tipos) {
+        if (t==='COMERCIO'  && x.difComercio) return true;
+        if (t==='IMPORTE'   && x.difImporte)  return true;
+        if (t==='TARJETA'   && x.difTarjeta)  return true;
+        if (t==='CUOTAS'    && x.difCuotas)   return true;
+        if (t==='TASA_SKY'  && x.difTasaSky)  return true;
+        if (t==='TASA_PROC' && x.difTasaLiq)  return true;
+      }
+      return false;
+    });
+  }
+
+  if (f.clasif.size > 0) {
+    r = r.filter(x => {
+      const t = marc[String(x._key)] || null;
+      if (f.clasif.has('sin')  && !t)                     return true;
+      if (f.clasif.has('vend') && t==='vendedor')         return true;
+      if (f.clasif.has('proc') && t==='procesadora')      return true;
+      if (f.clasif.has('ok')   && t==='ok')               return true;
+      return false;
+    });
+  }
+
+  return r;
+}
+
+window._tasasDifRefreshTabla = function() {
+  const area = document.getElementById('tasas-dif-tabla');
+  if (!area || !window._tasasDifActuales) return;
+  const filtered = _tasasDifFiltrar(window._tasasDifActuales);
+  const cEl = document.getElementById('tasas-dif-count');
+  if (cEl) cEl.textContent = `${filtered.length.toLocaleString('es-AR')} resultados`;
+  area.innerHTML = _tasasDifRenderTabla(filtered, _tasasMrcGet());
+};
+
+window._tasasDifToggleTipo = function(tipo) {
+  const f = window._tasasDifFiltros;
+  if (f.tipos.has(tipo)) f.tipos.delete(tipo); else f.tipos.add(tipo);
+  const colMap = { COMERCIO:'#9333ea', IMPORTE:'#b45309', TARJETA:'#dc2626',
+                   CUOTAS:'#d97706', TASA_SKY:'#7c3aed', TASA_PROC:'#0891b2' };
+  const btn = document.getElementById('tasas-ftipo-' + tipo);
+  if (btn) {
+    const on = f.tipos.has(tipo);
+    btn.style.background = on ? (colMap[tipo]||'var(--acc)') : 'none';
+    btn.style.color      = on ? '#fff' : 'var(--m2)';
+    btn.style.borderColor= on ? (colMap[tipo]||'var(--acc)') : 'var(--b2)';
+  }
+  _tasasDifRefreshTabla();
+};
+
+window._tasasDifToggleClasif = function(c) {
+  const f = window._tasasDifFiltros;
+  if (f.clasif.has(c)) f.clasif.delete(c); else f.clasif.add(c);
+  const colMap = { sin:'var(--m2)', vend:'var(--yel)', proc:'var(--red)', ok:'var(--grn)' };
+  const btn = document.getElementById('tasas-fclasif-' + c);
+  if (btn) {
+    const on = f.clasif.has(c);
+    btn.style.borderColor = on ? colMap[c] : 'var(--b2)';
+    btn.style.color       = on ? colMap[c] : 'var(--m2)';
+    btn.style.fontWeight  = on ? '700' : '400';
+  }
+  _tasasDifRefreshTabla();
+};
+
+window._tasasDifBuscar = function(q) {
+  window._tasasDifFiltros.texto = q.trim();
+  _tasasDifRefreshTabla();
 };
 
 // ── Tabla única de diferencias con marcación manual ───────────────────
@@ -1842,6 +1935,15 @@ function renderModuloLiqTasas() {
       : (_liqCache.fiserv?.liquidadas?.length || 0);
 
     window._tasasDifActuales = difs;
+    // Limpiar filtros al cambiar procesadora
+    window._tasasDifFiltros = { texto: '', tipos: new Set(), clasif: new Set() };
+
+    const _fBtn = (id, label, onclick, extraStyle='') =>
+      `<button id="${id}" onclick="${onclick}"
+        style="background:none;border:1px solid var(--b2);color:var(--m2);border-radius:4px;
+          padding:3px 10px;font-size:8px;cursor:pointer;font-family:var(--sans);${extraStyle}">
+        ${label}
+      </button>`;
 
     area.innerHTML = `
       <!-- KPIs -->
@@ -1849,22 +1951,45 @@ function renderModuloLiqTasas() {
         border-bottom:1px solid var(--b1)">
         ${_kpisDif(difs, liqTotal)}
       </div>
-      <!-- Toolbar -->
-      <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;flex-shrink:0;
-        border-bottom:1px solid var(--b0);background:var(--s1)">
-        <span style="font-size:9px;color:var(--m2)">
-          ${difs.length.toLocaleString('es-AR')} diferencias encontradas
-        </span>
-        <div style="flex:1"></div>
-        <button onclick="window._tasasExportarDifs(window._tasasDifActuales)"
-          style="background:none;border:1px solid var(--grn);color:var(--grn);border-radius:4px;
-            padding:4px 14px;font-size:9px;cursor:pointer;font-family:var(--sans)">
-          ↓ Exportar Excel
-        </button>
+      <!-- Filtros -->
+      <div style="display:flex;flex-direction:column;gap:6px;padding:8px 14px;flex-shrink:0;
+        border-bottom:1px solid var(--b1);background:var(--s1)">
+        <!-- Búsqueda + export -->
+        <div style="display:flex;align-items:center;gap:8px">
+          <input id="tasas-buscar" type="text" placeholder="Buscar equipo, tarjeta, comercio, vendedor…"
+            oninput="_tasasDifBuscar(this.value)"
+            style="flex:1;background:var(--s2);border:1px solid var(--b2);border-radius:4px;
+              padding:4px 10px;font-size:9px;color:var(--txt);font-family:var(--sans);outline:none">
+          <span id="tasas-dif-count" style="font-size:9px;color:var(--m2);white-space:nowrap">
+            ${difs.length.toLocaleString('es-AR')} resultados
+          </span>
+          <button onclick="window._tasasExportarDifs(window._tasasDifActuales)"
+            style="background:none;border:1px solid var(--grn);color:var(--grn);border-radius:4px;
+              padding:4px 12px;font-size:9px;cursor:pointer;font-family:var(--sans);white-space:nowrap">
+            ↓ Exportar Excel
+          </button>
+        </div>
+        <!-- Filtros por tipo de diferencia -->
+        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+          <span style="font-size:8px;color:var(--m2);margin-right:4px">Tipo:</span>
+          ${_fBtn('tasas-ftipo-COMERCIO',  'COMERCIO',  "_tasasDifToggleTipo('COMERCIO')")}
+          ${_fBtn('tasas-ftipo-IMPORTE',   'IMPORTE',   "_tasasDifToggleTipo('IMPORTE')")}
+          ${_fBtn('tasas-ftipo-TARJETA',   'TARJETA',   "_tasasDifToggleTipo('TARJETA')")}
+          ${_fBtn('tasas-ftipo-CUOTAS',    'CUOTAS',    "_tasasDifToggleTipo('CUOTAS')")}
+          ${_fBtn('tasas-ftipo-TASA_SKY',  'TASA SKY',  "_tasasDifToggleTipo('TASA_SKY')")}
+          ${_fBtn('tasas-ftipo-TASA_PROC', 'TASA PROC', "_tasasDifToggleTipo('TASA_PROC')")}
+          <span style="font-size:8px;color:var(--m2);margin-left:10px;margin-right:4px">Estado:</span>
+          ${_fBtn('tasas-fclasif-sin',  'Sin clasificar', "_tasasDifToggleClasif('sin')")}
+          ${_fBtn('tasas-fclasif-vend', 'Vendedor',       "_tasasDifToggleClasif('vend')")}
+          ${_fBtn('tasas-fclasif-proc', 'Procesadora',    "_tasasDifToggleClasif('proc')")}
+          ${_fBtn('tasas-fclasif-ok',   '✓ Aceptado',    "_tasasDifToggleClasif('ok')")}
+        </div>
       </div>
       <!-- Tabla diferencias -->
       <div style="flex:1;min-height:0;overflow-y:auto">
-        ${_tasasDifRenderTabla(difs, _tasasMrcGet())}
+        <div id="tasas-dif-tabla">
+          ${_tasasDifRenderTabla(difs, _tasasMrcGet())}
+        </div>
       </div>`;
   };
 
