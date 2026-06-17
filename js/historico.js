@@ -101,6 +101,10 @@ function buildPeriodoActual() {
     };
   }
 
+  // Marcaciones manuales de diferencias de tasas (sobreviven al cerrar periodo)
+  let tasasMarcaciones = {};
+  try { tasasMarcaciones = JSON.parse(localStorage.getItem('tasas_marc') || '{}'); } catch {}
+
   return {
     id,
     nombre:       SESSION.nombre || `Período ${desde} – ${hasta}`,
@@ -120,6 +124,7 @@ function buildPeriodoActual() {
     contracargos,
     diferencias,
     topSucursales,
+    tasasMarcaciones,
   };
 }
 

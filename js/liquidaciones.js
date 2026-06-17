@@ -1241,12 +1241,17 @@ function _liqTD(r) {
   return fee / r.monto;
 }
 
-// Normaliza nombre de tarjeta de liquidaciones al equivalente Skylab (TM.tarjetas)
-function _liqEquivTarjeta(liqTarjeta) {
-  if (!TM?.tarjetas?.length || !liqTarjeta) return liqTarjeta || '';
-  const up = liqTarjeta.toUpperCase().trim();
-  const match = TM.tarjetas.find(t => (t.tarjeta||'').toUpperCase().trim() === up);
-  return match?.equivSkylab?.trim() || liqTarjeta;
+// Verifica equivalencia Skylab↔Procesadora. Dirección: tarjeta=skylab, equivProc=procesadora.
+// Retorna skyTarjeta si existe el par en TM (sin diferencia), liqTarjeta si no (hay diferencia).
+function _liqEquivTarjeta(liqTarjeta, skyTarjeta) {
+  if (!TM?.tarjetas?.length || !liqTarjeta || !skyTarjeta) return liqTarjeta || '';
+  const liqUp = liqTarjeta.toUpperCase().trim();
+  const skyUp = skyTarjeta.toUpperCase().trim();
+  const match = TM.tarjetas.find(t =>
+    (t.equivProc || '').toUpperCase().trim() === liqUp &&
+    (t.tarjeta   || '').toUpperCase().trim() === skyUp
+  );
+  return match ? skyTarjeta : liqTarjeta;
 }
 
 // Lookup en TM.tasas usando la fecha exacta de la operación (no "hoy")
@@ -1377,7 +1382,7 @@ function _cruzarTasas() {
     const skyMonto   = Math.abs(parseFloat(fila.sky?.monto || fila.proc?.montoN || 0));
     const liqMonto   = Math.abs(liqRow.monto || 0);
 
-    const liqTarjetaNorm = _liqEquivTarjeta(liqTarjeta);
+    const liqTarjetaNorm = _liqEquivTarjeta(liqTarjeta, skyTarjeta);
     const difTarjeta  = !!(skyTarjeta && liqTarjeta &&
       skyTarjeta.toUpperCase().trim() !== liqTarjetaNorm.toUpperCase().trim());
     const difCuotas   = skyCuotas !== liqCuotas;
