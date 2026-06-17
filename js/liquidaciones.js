@@ -1363,22 +1363,30 @@ function _cruzarTasas() {
     const td_fact2 = tmS ? parseFloat(tmS.tasa || 0) / 100 : null;
     const td_ac2   = tmL ? parseFloat(tmL.tasa || 0) / 100 : null;
 
-    const difTarjeta = !!(skyTarjeta && liqTarjeta &&
-      skyTarjeta.toUpperCase().trim() !== liqTarjeta.toUpperCase().trim());
-    const difCuotas  = skyCuotas !== liqCuotas;
-    const difTasaSky = td_cobrada > 0 && td_fact2 !== null && Math.abs(td_cobrada - td_fact2) >= 0.0005;
-    const difTasaLiq = td_cobrada > 0 && td_ac2   !== null && (td_cobrada - td_ac2) > 0.0005;
+    const skyNroCom  = String(fila.sky?.nroCom || '').trim();
+    const liqNroCom  = String(liqRow.nro_comercio || '').trim();
+    const skyMonto   = Math.abs(parseFloat(fila.sky?.monto || fila.proc?.montoN || 0));
+    const liqMonto   = Math.abs(liqRow.monto || 0);
 
-    if (!difTarjeta && !difCuotas && !difTasaSky && !difTasaLiq) continue;
+    const difTarjeta  = !!(skyTarjeta && liqTarjeta &&
+      skyTarjeta.toUpperCase().trim() !== liqTarjeta.toUpperCase().trim());
+    const difCuotas   = skyCuotas !== liqCuotas;
+    const difTasaSky  = td_cobrada > 0 && td_fact2 !== null && Math.abs(td_cobrada - td_fact2) >= 0.0005;
+    const difTasaLiq  = td_cobrada > 0 && td_ac2   !== null && (td_cobrada - td_ac2) > 0.0005;
+    const difComercio = !!(skyNroCom && liqNroCom && skyNroCom !== liqNroCom);
+    const difImporte  = liqMonto > 0 && skyMonto > 0 && Math.abs(liqMonto - skyMonto) >= 1;
+
+    if (!difTarjeta && !difCuotas && !difTasaSky && !difTasaLiq && !difComercio && !difImporte) continue;
 
     const difMonto = (td_fact2 !== null ? (td_cobrada - td_fact2)
                     : td_ac2   !== null ? (td_cobrada - td_ac2) : 0) * liqRow.monto;
     diferencias.push({
       fila, liqRow, td_cobrada, td_fact: td_fact2, td_ac: td_ac2,
       skyTarjeta, skyCuotas, liqTarjeta, liqCuotas,
-      difTarjeta, difCuotas, difTasaSky, difTasaLiq,
+      skyNroCom, liqNroCom, skyMonto, liqMonto,
+      difTarjeta, difCuotas, difTasaSky, difTasaLiq, difComercio, difImporte,
       procNom: procNom2, difMonto,
-      _key: String(fila.sky?.opId || `${liqRow.lote}_${liqRow.cupon}`),
+      _key: `${liqRow.lote || 'x'}_${liqRow.cupon || 'y'}`,
     });
   }
 
@@ -1580,32 +1588,45 @@ function _tasasDifRenderTabla(difs, marcaciones) {
   const mto = v => typeof _liqFmtARS==='function' ? _liqFmtARS(v) : `$${Math.abs(v||0).toFixed(2)}`;
   const bdg = (cond, txt, col) => cond
     ? `<span style="background:${col};color:#fff;border-radius:3px;padding:1px 5px;font-size:7px;margin-right:2px">${txt}</span>` : '';
-  const th = s => `<th style="padding:5px 8px;text-align:left;color:var(--m2);font-weight:600;
+  const th  = s => `<th style="padding:5px 8px;text-align:left;color:var(--m2);font-weight:600;
+    white-space:nowrap;border-bottom:1px solid var(--b1);position:sticky;top:0;background:var(--s2);z-index:1">${s}</th>`;
+  const thr = s => `<th style="padding:5px 8px;text-align:right;color:var(--m2);font-weight:600;
     white-space:nowrap;border-bottom:1px solid var(--b1);position:sticky;top:0;background:var(--s2);z-index:1">${s}</th>`;
 
   const rows = difs.map(x => {
     const { liqRow, fila, td_cobrada, td_fact, td_ac,
-            difTarjeta, difCuotas, difTasaSky, difTasaLiq, _key } = x;
+            difTarjeta, difCuotas, difTasaSky, difTasaLiq, difComercio, difImporte,
+            skyNroCom, liqNroCom, skyMonto, liqMonto, _key } = x;
     const sky   = fila.sky || {};
     const tipo  = marcaciones[String(_key)];
     const difPct = td_fact != null ? td_cobrada - td_fact : td_ac != null ? td_cobrada - td_ac : 0;
     const dif$  = difPct * (liqRow.monto || 0);
     const dClr  = dif$ > 50 ? 'color:var(--red);font-weight:700'
                 : dif$ < -50 ? 'color:var(--grn)' : 'color:var(--m1)';
+    const iDif$ = liqMonto - skyMonto;
+    const iClr  = Math.abs(iDif$) >= 1
+      ? (iDif$ > 0 ? 'color:var(--red);font-weight:700' : 'color:var(--grn);font-weight:700')
+      : 'color:var(--m2)';
     return `<tr style="border-bottom:1px solid var(--b0)">
-      <td style="padding:4px 8px;font-size:9px">${liqRow.fecha_venta||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px;white-space:nowrap">${liqRow.fecha_venta||'—'}</td>
       <td style="padding:4px 8px;font-size:9px">${liqRow.equipo||'—'}</td>
       <td style="padding:4px 8px;font-size:9px;text-align:center">${sky.suc||'—'}</td>
       <td style="padding:4px 8px;font-size:9px">${liqRow.lote||'—'}</td>
       <td style="padding:4px 8px;font-size:9px">${liqRow.cupon||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px;${difComercio?'color:var(--red);font-weight:700':''}">${liqNroCom||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px;${difComercio?'color:var(--yel)':''}">${skyNroCom||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px;text-align:right;${difImporte?'color:var(--red);font-weight:700':''}">${mto(liqMonto)}</td>
+      <td style="padding:4px 8px;font-size:9px;text-align:right;${difImporte?'color:var(--yel)':''}">${mto(skyMonto)}</td>
+      <td style="padding:4px 8px;font-size:9px;text-align:right;${iClr}">${difImporte ? mto(iDif$) : '—'}</td>
       <td style="padding:4px 8px;font-size:9px;${difTarjeta?'color:var(--red);font-weight:700':''}">${x.liqTarjeta||'—'}</td>
       <td style="padding:4px 8px;font-size:9px;text-align:center;${difCuotas?'color:var(--red);font-weight:700':''}">${x.liqCuotas}</td>
-      <td style="padding:4px 8px;font-size:9px">${x.skyTarjeta||'—'}</td>
-      <td style="padding:4px 8px;font-size:9px;text-align:center">${x.skyCuotas}</td>
+      <td style="padding:4px 8px;font-size:9px;${difTarjeta?'color:var(--yel)':''}">${x.skyTarjeta||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px;text-align:center;${difCuotas?'color:var(--yel)':''}">${x.skyCuotas}</td>
       <td style="padding:4px 8px;font-size:9px;text-align:right;color:var(--yel);font-weight:700">${pct(td_cobrada)}</td>
       <td style="padding:4px 8px;font-size:9px;text-align:right;color:var(--acc)">${pct(td_fact??td_ac)}</td>
       <td style="padding:4px 8px;font-size:9px;text-align:right;${dClr}">${mto(dif$)}</td>
       <td style="padding:4px 8px">
+        ${bdg(difComercio,'COMERCIO','#9333ea')}${bdg(difImporte,'IMPORTE','#b45309')}
         ${bdg(difTarjeta,'TARJETA','#dc2626')}${bdg(difCuotas,'CUOTAS','#d97706')}
         ${bdg(difTasaSky,'TASA SKY','#7c3aed')}${bdg(difTasaLiq,'TASA PROC','#0891b2')}
       </td>
@@ -1621,10 +1642,12 @@ function _tasasDifRenderTabla(difs, marcaciones) {
   return `<table style="width:100%;border-collapse:collapse">
     <thead><tr style="background:var(--s2)">
       ${th('Fecha')}${th('Equipo')}${th('SUC')}${th('Lote')}${th('Cupón')}
+      ${th('Comercio Cob.')}${th('Comercio Fact.')}
+      ${thr('Importe Cob.')}${thr('Importe Fact.')}${thr('Dif Importe')}
       ${th('Tarjeta Cob.')}${th('Cuotas Cob.')}
       ${th('Tarjeta Fact.')}${th('Cuotas Fact.')}
-      ${th('Tasa Cobrada')}${th('Tasa Acordada')}${th('Dif $')}
-      ${th('Tipo de dif.')}${th('Clasificar')}
+      ${thr('Tasa Cobrada')}${thr('Tasa Acordada')}${thr('Dif Tasa $')}
+      ${th('Diferencias')}${th('Clasificar')}
       ${th('Vendedor')}${th('ID')}${th('Estado')}
     </tr></thead>
     <tbody>${rows}</tbody>
@@ -1638,30 +1661,39 @@ window._tasasExportarDifs = function(difs) {
   const pct  = v => v != null ? +((v*100).toFixed(4)) : '';
   const data = difs.map(x => {
     const { liqRow, fila, td_cobrada, td_fact, td_ac,
-            difTarjeta, difCuotas, difTasaSky, difTasaLiq, difMonto, _key } = x;
+            difTarjeta, difCuotas, difTasaSky, difTasaLiq, difComercio, difImporte,
+            skyNroCom, liqNroCom, skyMonto, liqMonto, difMonto, _key } = x;
     const sky  = fila.sky || {};
     const tipo = marc[String(_key)] || '';
-    const motivos = [difTarjeta?'TARJETA':'', difCuotas?'CUOTAS':'',
-      difTasaSky?'TASA_SKY':'', difTasaLiq?'TASA_PROC':''].filter(Boolean).join(', ');
+    const motivos = [
+      difComercio?'COMERCIO':'', difImporte?'IMPORTE':'',
+      difTarjeta?'TARJETA':'',   difCuotas?'CUOTAS':'',
+      difTasaSky?'TASA_SKY':'',  difTasaLiq?'TASA_PROC':'',
+    ].filter(Boolean).join(', ');
     return {
-      'CLASIFICACIÓN':   tipo || 'Sin marcar',
-      'MOTIVOS':         motivos,
-      'FECHA':           liqRow.fecha_venta || '',
-      'EQUIPO':          liqRow.equipo      || '',
-      'SUC':             sky.suc            || '',
-      'LOTE':            liqRow.lote        || '',
-      'CUPÓN':           liqRow.cupon       || '',
-      'TARJETA COBRADA': x.liqTarjeta       || '',
-      'CUOTAS COBRADAS': x.liqCuotas,
-      'TARJETA SKYLAB':  x.skyTarjeta       || '',
-      'CUOTAS SKYLAB':   x.skyCuotas,
-      'TASA COBRADA %':  pct(td_cobrada),
-      'TASA ACORDADA %': pct(td_fact ?? td_ac),
-      'DIF $':           +((difMonto||0).toFixed(2)),
-      'VENDEDOR':        sky.vendedor || '',
-      'ID':              sky.opId     || '',
-      'N° FC':           sky.opNum    || '',
-      'INTEGRADO':       sky.integrado ? 'INTEGRADO' : 'DESINTEGRADO',
+      'CLASIFICACIÓN':      tipo || 'Sin marcar',
+      'MOTIVOS':            motivos,
+      'FECHA':              liqRow.fecha_venta || '',
+      'EQUIPO':             liqRow.equipo      || '',
+      'SUC':                sky.suc            || '',
+      'LOTE':               liqRow.lote        || '',
+      'CUPÓN':              liqRow.cupon       || '',
+      'COMERCIO COBRADO':   liqNroCom          || '',
+      'COMERCIO FACTURADO': skyNroCom          || '',
+      'IMPORTE COBRADO':    +((liqMonto||0).toFixed(2)),
+      'IMPORTE FACTURADO':  +((skyMonto||0).toFixed(2)),
+      'DIF IMPORTE':        +((liqMonto - skyMonto).toFixed(2)),
+      'TARJETA COBRADA':    x.liqTarjeta       || '',
+      'CUOTAS COBRADAS':    x.liqCuotas,
+      'TARJETA SKYLAB':     x.skyTarjeta       || '',
+      'CUOTAS SKYLAB':      x.skyCuotas,
+      'TASA COBRADA %':     pct(td_cobrada),
+      'TASA ACORDADA %':    pct(td_fact ?? td_ac),
+      'DIF TASA $':         +((difMonto||0).toFixed(2)),
+      'VENDEDOR':           sky.vendedor || '',
+      'ID':                 sky.opId     || '',
+      'N° FC':              sky.opNum    || '',
+      'INTEGRADO':          sky.integrado ? 'INTEGRADO' : 'DESINTEGRADO',
     };
   });
   const wb = XLSX.utils.book_new();
