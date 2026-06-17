@@ -1234,9 +1234,11 @@ function renderModuloLiquidaciones() {
 // Fuentes: TM.tasas (acordado) vs CFO/Importe Venta (cobrado real)
 // ══════════════════════════════════════════════════════════════════════
 
-// Tasa directa como fracción decimal: CFO / Importe Venta
+// Tasa directa como fracción decimal: CFO (cuotas) o Arancel (1 cuota) / Importe Venta
 function _liqTD(r) {
-  return (r?.monto > 0) ? (r.cfo || 0) / r.monto : 0;
+  if (!r?.monto || r.monto <= 0) return 0;
+  const fee = r.cfo || r.arancel || 0;
+  return fee / r.monto;
 }
 
 // Lookup en TM.tasas usando la fecha exacta de la operación (no "hoy")
