@@ -1344,8 +1344,46 @@ function _cruzarTasas() {
     if (!hayDifSky && !hayDifProc) _okCount++;
   }
 
+  // ── Diferencias unificadas: tasa + tarjeta + cuotas (para marcación manual) ──
+  const diferencias = [];
+  for (const fila of RESULTADO.filter(r => !r.sky?.esGOCUOTAS)) {
+    const liqRow = filaLiqMap.get(fila);
+    if (!liqRow || !liqRow.monto) continue;
+
+    const td_cobrada  = _liqTD(liqRow);
+    const fecha       = liqRow.fecha_venta || fila.sky?.fecha || '';
+    const skyTarjeta  = fila.sky?.tarjeta || '';
+    const skyCuotas   = parseInt(fila.sky?.cuotas) || 1;
+    const liqTarjeta  = liqRow.tarjeta || '';
+    const liqCuotas   = liqRow.cuotas  || 1;
+    const procNom2    = (fila.procEncontrada || '').toUpperCase().includes('GET') ? 'GETPOS' : 'FISERV';
+
+    const tmS = _buscarTasaParaFecha(skyTarjeta, skyCuotas, procNom2, fecha);
+    const tmL = _buscarTasaParaFecha(liqTarjeta, liqCuotas, procNom2, fecha);
+    const td_fact2 = tmS ? parseFloat(tmS.tasa || 0) / 100 : null;
+    const td_ac2   = tmL ? parseFloat(tmL.tasa || 0) / 100 : null;
+
+    const difTarjeta = !!(skyTarjeta && liqTarjeta &&
+      skyTarjeta.toUpperCase().trim() !== liqTarjeta.toUpperCase().trim());
+    const difCuotas  = skyCuotas !== liqCuotas;
+    const difTasaSky = td_cobrada > 0 && td_fact2 !== null && Math.abs(td_cobrada - td_fact2) >= 0.0005;
+    const difTasaLiq = td_cobrada > 0 && td_ac2   !== null && (td_cobrada - td_ac2) > 0.0005;
+
+    if (!difTarjeta && !difCuotas && !difTasaSky && !difTasaLiq) continue;
+
+    const difMonto = (td_fact2 !== null ? (td_cobrada - td_fact2)
+                    : td_ac2   !== null ? (td_cobrada - td_ac2) : 0) * liqRow.monto;
+    diferencias.push({
+      fila, liqRow, td_cobrada, td_fact: td_fact2, td_ac: td_ac2,
+      skyTarjeta, skyCuotas, liqTarjeta, liqCuotas,
+      difTarjeta, difCuotas, difTasaSky, difTasaLiq,
+      procNom: procNom2, difMonto,
+      _key: String(fila.sky?.opId || `${liqRow.lote}_${liqRow.cupon}`),
+    });
+  }
+
   return {
-    pasarDescuento, reclamarProc, sinTasa, _okCount,
+    pasarDescuento, reclamarProc, sinTasa, diferencias, _okCount,
     montoPD: pasarDescuento.reduce((s, x) => s + Math.abs(x.difMonto), 0),
     montoRP: reclamarProc.reduce((s, x) => s + Math.abs(x.difMonto), 0),
     tieneTasas: !!(TM?.tasas?.length),
@@ -1487,6 +1525,150 @@ function _tasasExportar(filas, modo) {
   XLSX.writeFile(wb, fname);
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// MARCACIONES MANUALES DE TASAS — persiste en localStorage
+// ══════════════════════════════════════════════════════════════════════
+function _tasasMrcGet() {
+  try { return JSON.parse(localStorage.getItem('tasas_marc') || '{}'); } catch { return {}; }
+}
+function _tasasMrcSet(key, val) {
+  const m = _tasasMrcGet();
+  if (val == null) delete m[String(key)]; else m[String(key)] = val;
+  localStorage.setItem('tasas_marc', JSON.stringify(m));
+}
+function _tasasMrcBtnHTML(key, tipo) {
+  const k = String(key).replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+  const next = { vendedor:'procesadora', procesadora:'ok', ok:null };
+  const nextVal = tipo ? (next[tipo] !== undefined ? next[tipo] : 'vendedor') : 'vendedor';
+  const nextJson = nextVal === null ? 'null' : `'${nextVal}'`;
+  let style, label;
+  if (!tipo)                  { style='border:1px dashed var(--b2);color:var(--m2)';                                            label='Sin marcar'; }
+  else if (tipo==='vendedor') { style='border:1px solid var(--yel);color:var(--yel);background:rgba(251,191,36,.12)';          label='Vendedor'; }
+  else if (tipo==='procesadora') { style='border:1px solid var(--red);color:var(--red);background:rgba(248,113,113,.12)';     label='Procesadora'; }
+  else                        { style='border:1px solid var(--grn);color:var(--grn);background:rgba(34,197,94,.12)';          label='✓ Aceptado'; }
+  return `<button onclick="event.stopPropagation();_tasasMarcar('${k}',${nextJson})"
+    style="${style};border-radius:4px;padding:2px 10px;font-size:8px;cursor:pointer;
+      font-family:var(--sans);white-space:nowrap">${label}</button>`;
+}
+window._tasasMarcar = function(key, tipo) {
+  _tasasMrcSet(key, tipo);
+  const cell = document.getElementById('tmk-' + key);
+  if (cell) cell.innerHTML = _tasasMrcBtnHTML(key, tipo);
+  _tasasRefreshKpiCounts();
+};
+window._tasasRefreshKpiCounts = function() {
+  const difs = window._tasasDifActuales || [];
+  const marc = _tasasMrcGet();
+  let s = 0, v = 0, p = 0, ok = 0;
+  for (const d of difs) {
+    const t = marc[String(d._key)];
+    if (!t) s++; else if (t==='vendedor') v++; else if (t==='procesadora') p++; else ok++;
+  }
+  const upd = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val.toLocaleString('es-AR'); };
+  upd('tasas-kpi-sinmarcar', s);
+  upd('tasas-kpi-vendedor',  v);
+  upd('tasas-kpi-proc',      p);
+  upd('tasas-kpi-ok',        ok);
+};
+
+// ── Tabla única de diferencias con marcación manual ───────────────────
+function _tasasDifRenderTabla(difs, marcaciones) {
+  if (!difs.length) return `<div style="display:flex;align-items:center;justify-content:center;
+    height:80px;color:var(--grn);font-size:10px">✓ Sin diferencias encontradas</div>`;
+
+  const pct = v => v != null ? `${(v*100).toFixed(4).replace(/\.?0+$/,'')}%` : '—';
+  const mto = v => typeof _liqFmtARS==='function' ? _liqFmtARS(v) : `$${Math.abs(v||0).toFixed(2)}`;
+  const bdg = (cond, txt, col) => cond
+    ? `<span style="background:${col};color:#fff;border-radius:3px;padding:1px 5px;font-size:7px;margin-right:2px">${txt}</span>` : '';
+  const th = s => `<th style="padding:5px 8px;text-align:left;color:var(--m2);font-weight:600;
+    white-space:nowrap;border-bottom:1px solid var(--b1);position:sticky;top:0;background:var(--s2);z-index:1">${s}</th>`;
+
+  const rows = difs.map(x => {
+    const { liqRow, fila, td_cobrada, td_fact, td_ac,
+            difTarjeta, difCuotas, difTasaSky, difTasaLiq, _key } = x;
+    const sky   = fila.sky || {};
+    const tipo  = marcaciones[String(_key)];
+    const difPct = td_fact != null ? td_cobrada - td_fact : td_ac != null ? td_cobrada - td_ac : 0;
+    const dif$  = difPct * (liqRow.monto || 0);
+    const dClr  = dif$ > 50 ? 'color:var(--red);font-weight:700'
+                : dif$ < -50 ? 'color:var(--grn)' : 'color:var(--m1)';
+    return `<tr style="border-bottom:1px solid var(--b0)">
+      <td style="padding:4px 8px;font-size:9px">${liqRow.fecha_venta||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px">${liqRow.equipo||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px;text-align:center">${sky.suc||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px">${liqRow.lote||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px">${liqRow.cupon||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px;${difTarjeta?'color:var(--red);font-weight:700':''}">${x.liqTarjeta||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px;text-align:center;${difCuotas?'color:var(--red);font-weight:700':''}">${x.liqCuotas}</td>
+      <td style="padding:4px 8px;font-size:9px">${x.skyTarjeta||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px;text-align:center">${x.skyCuotas}</td>
+      <td style="padding:4px 8px;font-size:9px;text-align:right;color:var(--yel);font-weight:700">${pct(td_cobrada)}</td>
+      <td style="padding:4px 8px;font-size:9px;text-align:right;color:var(--acc)">${pct(td_fact??td_ac)}</td>
+      <td style="padding:4px 8px;font-size:9px;text-align:right;${dClr}">${mto(dif$)}</td>
+      <td style="padding:4px 8px">
+        ${bdg(difTarjeta,'TARJETA','#dc2626')}${bdg(difCuotas,'CUOTAS','#d97706')}
+        ${bdg(difTasaSky,'TASA SKY','#7c3aed')}${bdg(difTasaLiq,'TASA PROC','#0891b2')}
+      </td>
+      <td style="padding:4px 8px" id="tmk-${_key}">${_tasasMrcBtnHTML(_key, tipo)}</td>
+      <td style="padding:4px 8px;font-size:9px">${sky.vendedor||'—'}</td>
+      <td style="padding:4px 8px;font-size:9px">${sky.opId||'—'}</td>
+      <td style="padding:4px 8px;font-size:8px;color:${sky.integrado?'var(--grn)':'var(--m2)'}">
+        ${sky.integrado?'INT':'DES'}
+      </td>
+    </tr>`;
+  }).join('');
+
+  return `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="background:var(--s2)">
+      ${th('Fecha')}${th('Equipo')}${th('SUC')}${th('Lote')}${th('Cupón')}
+      ${th('Tarjeta Cob.')}${th('Cuotas Cob.')}
+      ${th('Tarjeta Fact.')}${th('Cuotas Fact.')}
+      ${th('Tasa Cobrada')}${th('Tasa Acordada')}${th('Dif $')}
+      ${th('Tipo de dif.')}${th('Clasificar')}
+      ${th('Vendedor')}${th('ID')}${th('Estado')}
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
+}
+
+// ── Exportar diferencias con marcaciones ──────────────────────────────
+window._tasasExportarDifs = function(difs) {
+  if (!difs || !difs.length) { _showToast && _showToast('Sin diferencias para exportar'); return; }
+  const marc = _tasasMrcGet();
+  const pct  = v => v != null ? +((v*100).toFixed(4)) : '';
+  const data = difs.map(x => {
+    const { liqRow, fila, td_cobrada, td_fact, td_ac,
+            difTarjeta, difCuotas, difTasaSky, difTasaLiq, difMonto, _key } = x;
+    const sky  = fila.sky || {};
+    const tipo = marc[String(_key)] || '';
+    const motivos = [difTarjeta?'TARJETA':'', difCuotas?'CUOTAS':'',
+      difTasaSky?'TASA_SKY':'', difTasaLiq?'TASA_PROC':''].filter(Boolean).join(', ');
+    return {
+      'CLASIFICACIÓN':   tipo || 'Sin marcar',
+      'MOTIVOS':         motivos,
+      'FECHA':           liqRow.fecha_venta || '',
+      'EQUIPO':          liqRow.equipo      || '',
+      'SUC':             sky.suc            || '',
+      'LOTE':            liqRow.lote        || '',
+      'CUPÓN':           liqRow.cupon       || '',
+      'TARJETA COBRADA': x.liqTarjeta       || '',
+      'CUOTAS COBRADAS': x.liqCuotas,
+      'TARJETA SKYLAB':  x.skyTarjeta       || '',
+      'CUOTAS SKYLAB':   x.skyCuotas,
+      'TASA COBRADA %':  pct(td_cobrada),
+      'TASA ACORDADA %': pct(td_fact ?? td_ac),
+      'DIF $':           +((difMonto||0).toFixed(2)),
+      'VENDEDOR':        sky.vendedor || '',
+      'ID':              sky.opId     || '',
+      'N° FC':           sky.opNum    || '',
+      'INTEGRADO':       sky.integrado ? 'INTEGRADO' : 'DESINTEGRADO',
+    };
+  });
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(data), 'Diferencias Tasas');
+  XLSX.writeFile(wb, `diferencias_tasas_${new Date().toISOString().slice(0,10)}.xlsx`);
+};
+
 // ── Render panel TASAS ────────────────────────────────────────────────
 function renderModuloLiqTasas() {
   const panel = document.getElementById('mod-liq-tasas');
@@ -1533,108 +1715,63 @@ function renderModuloLiqTasas() {
     return;
   }
 
-  const { pasarDescuento, reclamarProc, sinTasa } = cruce;
+  const { pasarDescuento, reclamarProc, sinTasa, diferencias } = cruce;
 
   // ── Estado activo ────────────────────────────────────────────────────
   if (!window._liqTasasProc) window._liqTasasProc = 'fiserv';
-  if (!window._liqTasasTab)  window._liqTasasTab  = 'pd';
 
   // ── Filtrar por procesadora ──────────────────────────────────────────
   const byProc = (arr, p) => p === 'getpos'
     ? arr.filter(x => x.procNom === 'GETPOS')
     : arr.filter(x => x.procNom !== 'GETPOS');
 
-  const pd_fis = byProc(pasarDescuento, 'fiserv');
-  const rp_fis = byProc(reclamarProc,   'fiserv');
-  const st_fis = byProc(sinTasa,        'fiserv');
-  const pd_gp  = byProc(pasarDescuento, 'getpos');
-  const rp_gp  = byProc(reclamarProc,   'getpos');
-  const st_gp  = byProc(sinTasa,        'getpos');
+  const pd_fis  = byProc(pasarDescuento, 'fiserv');
+  const rp_fis  = byProc(reclamarProc,   'fiserv');
+  const st_fis  = byProc(sinTasa,        'fiserv');
+  const pd_gp   = byProc(pasarDescuento, 'getpos');
+  const rp_gp   = byProc(reclamarProc,   'getpos');
+  const st_gp   = byProc(sinTasa,        'getpos');
+  const dif_fis = byProc(diferencias || [], 'fiserv');
+  const dif_gp  = byProc(diferencias || [], 'getpos');
 
   const hasGoc = (RESULTADO?.filter(r => r.sky?.esGOCUOTAS).length || 0) > 0;
 
-  const _kpis = (pd, rp, st, liqTotal) => {
-    const mPD     = pd.reduce((s, x) => s + Math.abs(x.difMonto), 0);
-    const mRP     = rp.reduce((s, x) => s + Math.abs(x.difMonto), 0);
-    const analizadas = pd.length + rp.length + st.length; // excluye _okCount (sin dif ni sin tasa)
-    const conDif  = pd.length + rp.length;
-    const pctCob  = liqTotal ? Math.round(analizadas / liqTotal * 100) : null;
-    const pctDif  = liqTotal ? Math.round(conDif / liqTotal * 100) : null;
-    const kpiCard = (label, val, sub, bc, cls, extra='') => `
-      <div style="min-width:130px;flex:1;background:var(--s2);border:1px solid ${bc};
+  const _kpisDif = (difs, liqTotal) => {
+    const marc = _tasasMrcGet();
+    let sinM = 0, vend = 0, proc2 = 0, okM = 0, totalDif$ = 0;
+    for (const d of difs) {
+      const t = marc[String(d._key)];
+      if (!t) sinM++; else if (t==='vendedor') vend++; else if (t==='procesadora') proc2++; else okM++;
+      totalDif$ += Math.abs(d.difMonto || 0);
+    }
+    const pctCob = liqTotal ? Math.round(difs.length / liqTotal * 100) : null;
+    const kpiCard = (label, val, sub, bc, cls, id='') => `
+      <div style="min-width:120px;flex:1;background:var(--s2);border:1px solid ${bc};
         border-radius:6px;padding:10px 14px">
         <div style="font-size:9px;color:var(--m2);margin-bottom:4px">${label}</div>
-        <div style="font-size:18px;font-weight:800;color:${cls?`var(--${cls})`:'var(--txt)'};
+        <div id="${id}" style="font-size:18px;font-weight:800;color:${cls?`var(--${cls})`:'var(--txt)'};
           font-family:var(--mono)">${val}</div>
         <div style="font-size:9px;color:var(--m2);margin-top:2px">${sub}</div>
-        ${extra}
       </div>`;
     return [
-      // KPI cobertura: analizadas vs liquidadas
-      kpiCard(
-        '📋 Liquidadas analizadas',
-        liqTotal ? `${analizadas.toLocaleString('es-AR')} / ${liqTotal.toLocaleString('es-AR')}` : analizadas.toLocaleString('es-AR'),
-        liqTotal
-          ? `${pctCob}% tienen CFO · ${conDif.toLocaleString('es-AR')} con dif. (${pctDif}%)`
-          : `${conDif.toLocaleString('es-AR')} con diferencia de tasa`,
-        pctDif > 10 ? 'rgba(248,113,113,.25)' : 'rgba(79,142,247,.3)',
-        'cyn'
-      ),
-      kpiCard('⚠ Error vendedor',   pd.length.toLocaleString('es-AR'), _liqFmtARS(mPD),       'rgba(251,191,36,.3)',  'yel'),
-      kpiCard('🔴 Reclamar proc.',  rp.length.toLocaleString('es-AR'), _liqFmtARS(mRP),       'rgba(248,113,113,.3)', 'red'),
-      kpiCard('? Sin tasa config.', st.length.toLocaleString('es-AR'), 'Sin match en TM',     'rgba(107,114,128,.2)', ''),
-      kpiCard('💰 Total dif. $',    _liqFmtARS(mPD + mRP),            `${conDif.toLocaleString('es-AR')} ops con diferencia`, 'rgba(251,146,60,.25)', 'org'),
+      kpiCard('📋 Total diferencias',
+        liqTotal ? `${difs.length.toLocaleString('es-AR')} / ${liqTotal.toLocaleString('es-AR')}`
+                 : difs.length.toLocaleString('es-AR'),
+        liqTotal ? `${pctCob}% de las liquidadas con diferencia` : 'con algún tipo de diferencia',
+        'rgba(79,142,247,.3)', 'cyn'),
+      kpiCard('⬜ Sin clasificar', sinM.toLocaleString('es-AR'), 'Pendiente de marcar',
+        'rgba(107,114,128,.25)', '', 'tasas-kpi-sinmarcar'),
+      kpiCard('🟡 Error Vendedor', vend.toLocaleString('es-AR'), 'Marcado por usuario',
+        'rgba(251,191,36,.3)', 'yel', 'tasas-kpi-vendedor'),
+      kpiCard('🔴 Error Procesadora', proc2.toLocaleString('es-AR'), 'Marcado por usuario',
+        'rgba(248,113,113,.3)', 'red', 'tasas-kpi-proc'),
+      kpiCard('💰 Total diferencia $', _liqFmtARS(totalDif$),
+        `${(difs.length - okM).toLocaleString('es-AR')} ops pendientes`,
+        'rgba(251,146,60,.25)', 'org'),
     ].join('');
   };
 
-  // ── Render sub-tab (pd/rp) ───────────────────────────────────────────
-  const renderSubTab = (tab, pd, rp, st) => {
-    window._liqTasasTab = tab;
-    const contenido = document.getElementById('liq-tasas-body');
-    if (!contenido) return;
-    const filas   = tab === 'pd' ? pd : rp;
-    const expKey  = tab === 'pd' ? 'window._cruzeTasasPD' : 'window._cruzeTasasRP';
-    const pdActive = tab === 'pd';
-    contenido.innerHTML = `
-      <!-- sub-tabs -->
-      <div style="display:flex;gap:6px;padding:8px 14px;flex-shrink:0;border-bottom:1px solid var(--b1)">
-        <button id="liq-tasas-tab-pd" onclick="renderModuloLiqTasas._renderSubTab('pd')"
-          style="background:none;border:1px solid ${pdActive?'var(--yel)':'var(--b2)'};
-            color:${pdActive?'var(--yel)':'var(--m1)'};border-radius:4px;padding:4px 14px;
-            font-size:9px;font-weight:${pdActive?'700':'400'};cursor:pointer;font-family:var(--sans)">
-          ⚠ Pasar a descuento (${pd.length})
-        </button>
-        <button id="liq-tasas-tab-rp" onclick="renderModuloLiqTasas._renderSubTab('rp')"
-          style="background:none;border:1px solid ${!pdActive?'var(--red)':'var(--b2)'};
-            color:${!pdActive?'var(--red)':'var(--m1)'};border-radius:4px;padding:4px 14px;
-            font-size:9px;font-weight:${!pdActive?'700':'400'};cursor:pointer;font-family:var(--sans)">
-          🔴 Reclamar a procesadora (${rp.length})
-        </button>
-        ${st.length ? `<div style="margin-left:auto;display:flex;align-items:center;gap:6px">
-          <span style="font-size:9px;color:var(--m2)">⚙ ${st.length.toLocaleString('es-AR')} sin tasa config.</span>
-          <button onclick="_tasasExportarSinTasa(window._cruzeTasasST)"
-            style="background:none;border:1px solid var(--b2);color:var(--m1);border-radius:4px;
-              padding:3px 10px;font-size:9px;cursor:pointer;font-family:var(--sans)">
-            ↓ Exportar Excel
-          </button>
-        </div>` : ''}
-      </div>
-      <!-- tabla -->
-      <div style="display:flex;align-items:center;justify-content:flex-end;
-        padding:5px 12px;gap:8px;flex-shrink:0;border-bottom:1px solid var(--b0)">
-        <span style="font-size:9px;color:var(--m2)">${filas.length} operaciones</span>
-        <button onclick="_tasasExportar(${expKey},'${tab}')"
-          style="background:none;border:1px solid var(--b2);color:var(--m1);border-radius:4px;
-            padding:3px 10px;font-size:9px;cursor:pointer;font-family:var(--sans)">
-          ↓ Exportar Excel
-        </button>
-      </div>
-      <div style="flex:1;min-height:0;overflow-y:auto">
-        ${_tasasRenderTabla(filas, tab)}
-      </div>`;
-  };
-
-  // ── Render proc tab ──────────────────────────────────────────────────
+  // ── Render proc tab (tabla unificada de diferencias) ─────────────────
   const renderProcTab = proc => {
     window._liqTasasProc = proc;
     const area = document.getElementById('liq-tasas-proc-area');
@@ -1667,29 +1804,36 @@ function renderModuloLiqTasas() {
       return;
     }
 
-    const pd = proc === 'getpos' ? pd_gp : pd_fis;
-    const rp = proc === 'getpos' ? rp_gp : rp_fis;
-    const st = proc === 'getpos' ? st_gp : st_fis;
+    const difs = proc === 'getpos' ? dif_gp : dif_fis;
     const liqTotal = proc === 'getpos'
       ? (_liqCache.getpos?.liquidadas?.length || 0)
       : (_liqCache.fiserv?.liquidadas?.length || 0);
 
-    // Guardar refs para exportar (filtradas por proc)
-    window._cruzeTasasPD = pd;
-    window._cruzeTasasRP = rp;
-    window._cruzeTasasST = st;
+    window._tasasDifActuales = difs;
 
     area.innerHTML = `
-      <!-- KPIs del proc -->
+      <!-- KPIs -->
       <div style="display:flex;gap:10px;padding:12px 16px;flex-shrink:0;flex-wrap:wrap;
         border-bottom:1px solid var(--b1)">
-        ${_kpis(pd, rp, st, liqTotal)}
+        ${_kpisDif(difs, liqTotal)}
       </div>
-      <!-- Sub-tabs body -->
-      <div id="liq-tasas-body" style="display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden"></div>`;
-
-    renderModuloLiqTasas._renderSubTab = (tab) => renderSubTab(tab, pd, rp, st);
-    renderSubTab(window._liqTasasTab || 'pd', pd, rp, st);
+      <!-- Toolbar -->
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 14px;flex-shrink:0;
+        border-bottom:1px solid var(--b0);background:var(--s1)">
+        <span style="font-size:9px;color:var(--m2)">
+          ${difs.length.toLocaleString('es-AR')} diferencias encontradas
+        </span>
+        <div style="flex:1"></div>
+        <button onclick="window._tasasExportarDifs(window._tasasDifActuales)"
+          style="background:none;border:1px solid var(--grn);color:var(--grn);border-radius:4px;
+            padding:4px 14px;font-size:9px;cursor:pointer;font-family:var(--sans)">
+          ↓ Exportar Excel
+        </button>
+      </div>
+      <!-- Tabla diferencias -->
+      <div style="flex:1;min-height:0;overflow-y:auto">
+        ${_tasasDifRenderTabla(difs, _tasasMrcGet())}
+      </div>`;
   };
 
   // ── HTML principal ───────────────────────────────────────────────────
@@ -1707,12 +1851,12 @@ function renderModuloLiqTasas() {
       <button id="liq-tasas-proc-fiserv" onclick="renderModuloLiqTasas._renderProcTab('fiserv')"
         style="background:none;border:1px solid var(--acc);color:var(--acc);border-radius:4px;
           padding:4px 16px;font-size:9px;font-weight:700;cursor:pointer;font-family:var(--sans)">
-        FISERV${pd_fis.length+rp_fis.length ? ` · ${(pd_fis.length+rp_fis.length).toLocaleString('es-AR')} dif.` : ''}
+        FISERV${dif_fis.length ? ` · ${dif_fis.length.toLocaleString('es-AR')} dif.` : ''}
       </button>
       <button id="liq-tasas-proc-getpos" onclick="renderModuloLiqTasas._renderProcTab('getpos')"
         style="background:none;border:1px solid var(--b2);color:var(--m2);border-radius:4px;
           padding:4px 16px;font-size:9px;font-weight:400;cursor:pointer;font-family:var(--sans)">
-        GETPOS${pd_gp.length+rp_gp.length ? ` · ${(pd_gp.length+rp_gp.length).toLocaleString('es-AR')} dif.` : ''}
+        GETPOS${dif_gp.length ? ` · ${dif_gp.length.toLocaleString('es-AR')} dif.` : ''}
       </button>
       ${hasGoc ? `<button id="liq-tasas-proc-goc" onclick="renderModuloLiqTasas._renderProcTab('goc')"
         style="background:none;border:1px solid var(--b2);color:var(--m2);border-radius:4px;
@@ -1727,7 +1871,6 @@ function renderModuloLiqTasas() {
 
   // Exponer funciones
   renderModuloLiqTasas._renderProcTab = renderProcTab;
-  renderModuloLiqTasas._renderSubTab  = () => {};
 
   // Restaurar estado
   const procActivo = window._liqTasasProc || 'fiserv';
