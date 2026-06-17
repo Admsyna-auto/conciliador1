@@ -1636,6 +1636,7 @@ window._tasasDifRefreshTabla = function() {
   const cEl = document.getElementById('tasas-dif-count');
   if (cEl) cEl.textContent = `${filtered.length.toLocaleString('es-AR')} resultados`;
   area.innerHTML = _tasasDifRenderTabla(filtered, _tasasMrcGet());
+  _tasasDifRefreshBulkBar();
 };
 
 window._tasasDifToggleTipo = function(tipo) {
@@ -1672,35 +1673,94 @@ window._tasasDifBuscar = function(q) {
   _tasasDifRefreshTabla();
 };
 
+// ── Selección masiva ──────────────────────────────────────────────────
+window._tasasDifSeleccion = new Set();
+
+window._tasasDifToggleSel = function(key, checked) {
+  if (checked) window._tasasDifSeleccion.add(key);
+  else         window._tasasDifSeleccion.delete(key);
+  _tasasDifRefreshBulkBar();
+  const filtered = _tasasDifFiltrar(window._tasasDifActuales || []);
+  const hdr = document.getElementById('tasas-sel-all');
+  if (hdr) hdr.checked = filtered.length > 0 && filtered.every(d => window._tasasDifSeleccion.has(d._key));
+};
+
+window._tasasDifSelectAll = function(checked) {
+  const filtered = _tasasDifFiltrar(window._tasasDifActuales || []);
+  filtered.forEach(d => {
+    if (checked) window._tasasDifSeleccion.add(d._key);
+    else         window._tasasDifSeleccion.delete(d._key);
+    const chk = document.getElementById('chk-' + d._key);
+    if (chk) chk.checked = checked;
+  });
+  _tasasDifRefreshBulkBar();
+};
+
+window._tasasDifRefreshBulkBar = function() {
+  const bar  = document.getElementById('tasas-bulk-bar');
+  const cEl  = document.getElementById('tasas-bulk-count');
+  if (!bar) return;
+  const n = window._tasasDifSeleccion.size;
+  bar.style.display = n > 0 ? 'flex' : 'none';
+  if (cEl) cEl.textContent = `${n.toLocaleString('es-AR')} seleccionadas`;
+};
+
+window._tasasDifClasificarSeleccion = function(tipo) {
+  for (const key of window._tasasDifSeleccion) {
+    _tasasMrcSet(key, tipo);
+    const cell = document.getElementById('tmk-' + key);
+    if (cell) cell.innerHTML = _tasasMrcBtnHTML(key, tipo);
+    const chk = document.getElementById('chk-' + key);
+    if (chk) chk.checked = false;
+  }
+  window._tasasDifSeleccion.clear();
+  _tasasDifRefreshBulkBar();
+  const hdr = document.getElementById('tasas-sel-all');
+  if (hdr) hdr.checked = false;
+  _tasasRefreshKpiCounts();
+};
+
 // ── Tabla única de diferencias con marcación manual ───────────────────
 function _tasasDifRenderTabla(difs, marcaciones) {
   if (!difs.length) return `<div style="display:flex;align-items:center;justify-content:center;
     height:80px;color:var(--grn);font-size:10px">✓ Sin diferencias encontradas</div>`;
 
-  const pct = v => v != null ? `${(v*100).toFixed(4).replace(/\.?0+$/,'')}%` : '—';
-  const mto = v => typeof _liqFmtARS==='function' ? _liqFmtARS(v) : `$${Math.abs(v||0).toFixed(2)}`;
-  const bdg = (cond, txt, col) => cond
+  const sel  = window._tasasDifSeleccion || new Set();
+  const pct  = v => v != null ? `${(v*100).toFixed(4).replace(/\.?0+$/,'')}%` : '—';
+  const mto  = v => typeof _liqFmtARS==='function' ? _liqFmtARS(v) : `$${Math.abs(v||0).toFixed(2)}`;
+  const bdg  = (cond, txt, col) => cond
     ? `<span style="background:${col};color:#fff;border-radius:3px;padding:1px 5px;font-size:7px;margin-right:2px">${txt}</span>` : '';
-  const th  = s => `<th style="padding:5px 8px;text-align:left;color:var(--m2);font-weight:600;
-    white-space:nowrap;border-bottom:1px solid var(--b1);position:sticky;top:0;background:var(--s2);z-index:1">${s}</th>`;
-  const thr = s => `<th style="padding:5px 8px;text-align:right;color:var(--m2);font-weight:600;
-    white-space:nowrap;border-bottom:1px solid var(--b1);position:sticky;top:0;background:var(--s2);z-index:1">${s}</th>`;
+  const thSty = 'padding:5px 8px;color:var(--m2);font-weight:600;white-space:nowrap;' +
+    'border-bottom:1px solid var(--b1);position:sticky;top:0;background:var(--s2);z-index:1';
+  const th   = s => `<th style="${thSty};text-align:left">${s}</th>`;
+  const thr  = s => `<th style="${thSty};text-align:right">${s}</th>`;
+  const thc  = s => `<th style="${thSty};text-align:center">${s}</th>`;
+
+  const allChecked = difs.length > 0 && difs.every(d => sel.has(d._key));
 
   const rows = difs.map(x => {
     const { liqRow, fila, td_cobrada, td_fact, td_ac,
             difTarjeta, difCuotas, difTasaSky, difTasaLiq, difComercio, difImporte,
             skyNroCom, liqNroCom, skyMonto, liqMonto, _key } = x;
-    const sky   = fila.sky || {};
-    const tipo  = marcaciones[String(_key)];
+    const sky    = fila.sky || {};
+    const tipo   = marcaciones[String(_key)];
+    const isSel  = sel.has(_key);
     const difPct = td_fact != null ? td_cobrada - td_fact : td_ac != null ? td_cobrada - td_ac : 0;
-    const dif$  = difPct * (liqRow.monto || 0);
-    const dClr  = dif$ > 50 ? 'color:var(--red);font-weight:700'
-                : dif$ < -50 ? 'color:var(--grn)' : 'color:var(--m1)';
-    const iDif$ = liqMonto - skyMonto;
-    const iClr  = Math.abs(iDif$) >= 1
+    const dif$   = difPct * (liqRow.monto || 0);
+    const dClr   = dif$ > 50 ? 'color:var(--red);font-weight:700'
+                 : dif$ < -50 ? 'color:var(--grn)' : 'color:var(--m1)';
+    const iDif$  = liqMonto - skyMonto;
+    const iClr   = Math.abs(iDif$) >= 1
       ? (iDif$ > 0 ? 'color:var(--red);font-weight:700' : 'color:var(--grn);font-weight:700')
       : 'color:var(--m2)';
-    return `<tr style="border-bottom:1px solid var(--b0)">
+    const rowBg  = isSel ? 'background:rgba(79,142,247,.08)' : '';
+    const kEsc   = _key.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return `<tr style="border-bottom:1px solid var(--b0);${rowBg}">
+      <td style="padding:4px 8px;text-align:center">
+        <input type="checkbox" id="chk-${_key}" ${isSel?'checked':''}
+          onchange="_tasasDifToggleSel('${kEsc}',this.checked)"
+          style="cursor:pointer;accent-color:var(--acc);width:13px;height:13px">
+      </td>
       <td style="padding:4px 8px;font-size:9px;white-space:nowrap">${liqRow.fecha_venta||'—'}</td>
       <td style="padding:4px 8px;font-size:9px">${liqRow.equipo||'—'}</td>
       <td style="padding:4px 8px;font-size:9px;text-align:center">${sky.suc||'—'}</td>
@@ -1710,7 +1770,7 @@ function _tasasDifRenderTabla(difs, marcaciones) {
       <td style="padding:4px 8px;font-size:9px;${difComercio?'color:var(--yel)':''}">${skyNroCom||'—'}</td>
       <td style="padding:4px 8px;font-size:9px;text-align:right;${difImporte?'color:var(--red);font-weight:700':''}">${mto(liqMonto)}</td>
       <td style="padding:4px 8px;font-size:9px;text-align:right;${difImporte?'color:var(--yel)':''}">${mto(skyMonto)}</td>
-      <td style="padding:4px 8px;font-size:9px;text-align:right;${iClr}">${difImporte ? mto(iDif$) : '—'}</td>
+      <td style="padding:4px 8px;font-size:9px;text-align:right;${iClr}">${difImporte?mto(iDif$):'—'}</td>
       <td style="padding:4px 8px;font-size:9px;${difTarjeta?'color:var(--red);font-weight:700':''}">${x.liqTarjeta||'—'}</td>
       <td style="padding:4px 8px;font-size:9px;text-align:center;${difCuotas?'color:var(--red);font-weight:700':''}">${x.liqCuotas}</td>
       <td style="padding:4px 8px;font-size:9px;${difTarjeta?'color:var(--yel)':''}">${x.skyTarjeta||'—'}</td>
@@ -1734,11 +1794,16 @@ function _tasasDifRenderTabla(difs, marcaciones) {
 
   return `<table style="width:100%;border-collapse:collapse">
     <thead><tr style="background:var(--s2)">
-      ${th('Fecha')}${th('Equipo')}${th('SUC')}${th('Lote')}${th('Cupón')}
+      <th style="${thSty};text-align:center;width:32px">
+        <input type="checkbox" id="tasas-sel-all" ${allChecked?'checked':''}
+          onchange="_tasasDifSelectAll(this.checked)"
+          style="cursor:pointer;accent-color:var(--acc);width:13px;height:13px">
+      </th>
+      ${th('Fecha')}${th('Equipo')}${thc('SUC')}${th('Lote')}${th('Cupón')}
       ${th('Comercio Cob.')}${th('Comercio Fact.')}
       ${thr('Importe Cob.')}${thr('Importe Fact.')}${thr('Dif Importe')}
-      ${th('Tarjeta Cob.')}${th('Cuotas Cob.')}
-      ${th('Tarjeta Fact.')}${th('Cuotas Fact.')}
+      ${th('Tarjeta Cob.')}${thc('Cuotas Cob.')}
+      ${th('Tarjeta Fact.')}${thc('Cuotas Fact.')}
       ${thr('Tasa Cobrada')}${thr('Tasa Acordada')}${thr('Dif Tasa $')}
       ${th('Diferencias')}${th('Clasificar')}
       ${th('Vendedor')}${th('ID')}${th('Estado')}
@@ -1935,8 +2000,9 @@ function renderModuloLiqTasas() {
       : (_liqCache.fiserv?.liquidadas?.length || 0);
 
     window._tasasDifActuales = difs;
-    // Limpiar filtros al cambiar procesadora
-    window._tasasDifFiltros = { texto: '', tipos: new Set(), clasif: new Set() };
+    // Limpiar filtros y selección al cambiar procesadora
+    window._tasasDifFiltros   = { texto: '', tipos: new Set(), clasif: new Set() };
+    window._tasasDifSeleccion = new Set();
 
     const _fBtn = (id, label, onclick, extraStyle='') =>
       `<button id="${id}" onclick="${onclick}"
@@ -1984,6 +2050,39 @@ function renderModuloLiqTasas() {
           ${_fBtn('tasas-fclasif-proc', 'Procesadora',    "_tasasDifToggleClasif('proc')")}
           ${_fBtn('tasas-fclasif-ok',   '✓ Aceptado',    "_tasasDifToggleClasif('ok')")}
         </div>
+      </div>
+      <!-- Bulk action bar (oculta hasta que haya selección) -->
+      <div id="tasas-bulk-bar" style="display:none;align-items:center;gap:8px;
+        padding:6px 14px;flex-shrink:0;background:rgba(79,142,247,.12);
+        border-bottom:1px solid rgba(79,142,247,.3)">
+        <span id="tasas-bulk-count" style="font-size:9px;color:var(--acc);font-weight:700"></span>
+        <span style="font-size:9px;color:var(--m2)">— Clasificar como:</span>
+        <button onclick="_tasasDifClasificarSeleccion('vendedor')"
+          style="background:rgba(251,191,36,.15);border:1px solid var(--yel);color:var(--yel);
+            border-radius:4px;padding:3px 12px;font-size:8px;cursor:pointer;font-family:var(--sans)">
+          🟡 Vendedor
+        </button>
+        <button onclick="_tasasDifClasificarSeleccion('procesadora')"
+          style="background:rgba(248,113,113,.15);border:1px solid var(--red);color:var(--red);
+            border-radius:4px;padding:3px 12px;font-size:8px;cursor:pointer;font-family:var(--sans)">
+          🔴 Procesadora
+        </button>
+        <button onclick="_tasasDifClasificarSeleccion('ok')"
+          style="background:rgba(34,197,94,.12);border:1px solid var(--grn);color:var(--grn);
+            border-radius:4px;padding:3px 12px;font-size:8px;cursor:pointer;font-family:var(--sans)">
+          ✓ Aceptar
+        </button>
+        <button onclick="_tasasDifClasificarSeleccion(null)"
+          style="background:none;border:1px solid var(--b2);color:var(--m2);
+            border-radius:4px;padding:3px 12px;font-size:8px;cursor:pointer;font-family:var(--sans)">
+          Quitar clasificación
+        </button>
+        <div style="flex:1"></div>
+        <button onclick="_tasasDifSelectAll(false)"
+          style="background:none;border:none;color:var(--m2);font-size:8px;cursor:pointer;
+            font-family:var(--sans);text-decoration:underline">
+          Deseleccionar todo
+        </button>
       </div>
       <!-- Tabla diferencias -->
       <div style="flex:1;min-height:0;overflow-y:auto">
