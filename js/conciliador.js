@@ -717,6 +717,45 @@ function detectarAnulaciones(resultado) {
   }
 }
 
+// ── AUTO-APLICAR CORRECCIONES DEL PERÍODO ANTERIOR ──────────────────
+// Se llama al finalizar conciliar() solo si CORREGIDAS está vacío (período nuevo).
+function _autoAplicarCorreccionesArrastre() {
+  if (typeof _arrastreGuardado === 'undefined' || !_arrastreGuardado?.correcciones?.length) return;
+  if (Object.keys(CORREGIDAS).length > 0) return; // ya hay correcciones manuales este período
+  if (!RESULTADO.length) return;
+
+  let exactos = 0, fuzzy = 0;
+  for (const { key, cor, sky } of _arrastreGuardado.correcciones) {
+    // Pass 1: coincidencia exacta por asiento
+    if (RESULTADO.some(r => _skyKey(r.sky) === key)) {
+      if (!CORREGIDAS[key]) { CORREGIDAS[key] = { ...cor, _arrastre: true }; exactos++; }
+      continue;
+    }
+    // Pass 2: fuzzy — misma suc + tarjeta + cuotas + monto ±2%
+    if (!sky) continue;
+    const tol = Math.max(Math.abs(sky.monto || 0) * 0.02, 1);
+    const candidatos = RESULTADO.filter(r => {
+      const s = r.sky;
+      return !CORREGIDAS[_skyKey(s)] &&
+        s.suc === sky.suc && s.tarjeta === sky.tarjeta &&
+        s.cuotas == sky.cuotas &&
+        Math.abs(Math.abs(s.monto) - Math.abs(sky.monto)) <= tol;
+    });
+    if (candidatos.length === 1) {
+      const newKey = _skyKey(candidatos[0].sky);
+      CORREGIDAS[newKey] = { ...cor, _arrastre: true, _origKey: key };
+      fuzzy++;
+    }
+  }
+
+  if (exactos + fuzzy > 0) {
+    aplicarCorreccionesManuales();
+    scheduleAutoSave();
+    if (typeof _showToast === 'function')
+      _showToast(`↩ Arrastre: ${exactos} correcciones exactas · ${fuzzy} re-matcheadas del período anterior`);
+  }
+}
+
 // ── CLAVE ESTABLE POR ASIENTO (sobrevive re-ejecuciones del cruce) ──
 // Usa Nro.Asiento si existe; si no, compone clave por fecha+cupon+monto.
 function _skyKey(sky) {
@@ -924,6 +963,9 @@ async function conciliar() {
     document.getElementById('dl-resumen').innerHTML =
       `<b>${RESULTADO.length.toLocaleString()} ops conciliadas</b> · ${st.sin} sin match · ${integrados} integradas`;
     setupDownloads();
+
+    // Auto-aplicar correcciones del período anterior si no hay correcciones manuales aún
+    _autoAplicarCorreccionesArrastre();
 
   } catch(e) {
     document.getElementById('log-dot').className='dot err';

@@ -221,6 +221,18 @@ Se guardará en el historial y se descargará un backup .json.`;
   // Guardar en IndexedDB
   await guardarPeriodo(p);
 
+  // Guardar arrastre en IDB para auto-carga automática en el período siguiente
+  const _arr = {
+    id: 'arrastre_activo',
+    pendientes:   p.pendientesArrastre   || [],
+    correcciones: p.correccionesArrastre || [],
+    periodoHasta: p.periodoHasta,
+    nombre:       p.nombre,
+    ts:           new Date().toISOString(),
+  };
+  await dbPut('sesiones', _arr);
+  _arrastreGuardado = _arr;
+
   // Exportar backup JSON automáticamente
   exportarPeriodoJSON(p);
 

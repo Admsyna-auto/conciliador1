@@ -536,6 +536,11 @@ function renderModuloCobros() {
     return;
   }
 
+  // Auto-cargar arrastre desde IDB si aún no fue cargado manualmente
+  if (!_cobArrastre.length && typeof _arrastreGuardado !== 'undefined' && _arrastreGuardado?.pendientes?.length) {
+    _cobArrastre = _arrastreGuardado.pendientes;
+  }
+
   // Auto-computar caches si hay archivo liq cargado y aún no se corrió el cruce
   if (typeof _LIQ_CUPONES !== 'undefined' && _LIQ_CUPONES.length) {
     if (!_liqCache.fiserv) _liqCache.fiserv = _cruzarLiqFiserv();

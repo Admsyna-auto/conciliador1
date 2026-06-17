@@ -49,6 +49,9 @@ let LOG_AUDIT   = [];   // log de todas las correcciones
 let _PERIODO_ACTIVO_ID = null;   // 'per_...' — período de conciliación activo
 let _LOTE_ACTIVO_ID    = null;   // 'lot_...' — lote activo (para guardar al conciliar)
 
+// ── Arrastre del período anterior (auto-cargado desde IDB al startup) ─
+let _arrastreGuardado = null;    // { pendientes[], correcciones[], periodoHasta, nombre, ts }
+
 // ── Tablas maestras
 let TM = {
   sucursales:  [],  // { id, nombre, estado }
@@ -617,7 +620,14 @@ async function cargarPeriodoCompleto(periodoId) {
   return merged.length > 0;
 }
 
-// Init: cargar TM al arrancar
+// Init: cargar TM y arrastre al arrancar
 cargarTM().then(ok => {
   if (ok) console.log('Tablas maestras restauradas desde IndexedDB');
 });
+
+dbGet('sesiones', 'arrastre_activo').then(rec => {
+  if (rec?.pendientes?.length || rec?.correcciones?.length) {
+    _arrastreGuardado = rec;
+    console.log(`[Arrastre] ${rec.pendientes?.length||0} pendientes · ${rec.correcciones?.length||0} correcciones del período ${rec.periodoHasta}`);
+  }
+}).catch(() => {});
