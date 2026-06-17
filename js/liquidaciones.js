@@ -1584,7 +1584,7 @@ window._tasasRefreshKpiCounts = function() {
 };
 
 // ── Filtros de diferencias ────────────────────────────────────────────
-window._tasasDifFiltros = { texto: '', tipos: new Set(), clasif: new Set() };
+window._tasasDifFiltros = { texto: '', tipos: new Set(), clasif: new Set(), minTasa: 0, minImporte: 0 };
 
 function _tasasDifFiltrar(difs) {
   const f  = window._tasasDifFiltros;
@@ -1618,12 +1618,20 @@ function _tasasDifFiltrar(difs) {
   if (f.clasif.size > 0) {
     r = r.filter(x => {
       const t = marc[String(x._key)] || null;
-      if (f.clasif.has('sin')  && !t)                     return true;
-      if (f.clasif.has('vend') && t==='vendedor')         return true;
-      if (f.clasif.has('proc') && t==='procesadora')      return true;
-      if (f.clasif.has('ok')   && t==='ok')               return true;
+      if (f.clasif.has('sin')  && !t)                return true;
+      if (f.clasif.has('vend') && t==='vendedor')    return true;
+      if (f.clasif.has('proc') && t==='procesadora') return true;
+      if (f.clasif.has('ok')   && t==='ok')          return true;
       return false;
     });
+  }
+
+  if (f.minTasa > 0) {
+    r = r.filter(x => Math.abs(x.difMonto || 0) >= f.minTasa);
+  }
+
+  if (f.minImporte > 0) {
+    r = r.filter(x => Math.abs((x.liqMonto || 0) - (x.skyMonto || 0)) >= f.minImporte);
   }
 
   return r;
@@ -1670,6 +1678,14 @@ window._tasasDifToggleClasif = function(c) {
 
 window._tasasDifBuscar = function(q) {
   window._tasasDifFiltros.texto = q.trim();
+  _tasasDifRefreshTabla();
+};
+window._tasasDifMinTasa = function(v) {
+  window._tasasDifFiltros.minTasa = parseFloat(v) || 0;
+  _tasasDifRefreshTabla();
+};
+window._tasasDifMinImporte = function(v) {
+  window._tasasDifFiltros.minImporte = parseFloat(v) || 0;
   _tasasDifRefreshTabla();
 };
 
@@ -1996,7 +2012,7 @@ function renderModuloLiqTasas() {
 
     window._tasasDifActuales = difs;
     // Limpiar filtros y selección al cambiar procesadora
-    window._tasasDifFiltros   = { texto: '', tipos: new Set(), clasif: new Set() };
+    window._tasasDifFiltros   = { texto: '', tipos: new Set(), clasif: new Set(), minTasa: 0, minImporte: 0 };
     window._tasasDifSeleccion = new Set();
 
     const _fBtn = (id, label, onclick, extraStyle='') =>
@@ -2050,6 +2066,22 @@ function renderModuloLiqTasas() {
               font-weight:700" title="Reaplica los filtros activos">
             ↺ Actualizar
           </button>
+        </div>
+        <!-- Filtros por monto mínimo -->
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <span style="font-size:8px;color:var(--m2)">Dif. Tasa $&nbsp;≥</span>
+          <input type="number" min="0" step="100" placeholder="0"
+            oninput="_tasasDifMinTasa(this.value)"
+            style="width:110px;background:var(--s2);border:1px solid var(--b2);border-radius:4px;
+              padding:3px 8px;font-size:9px;color:var(--txt);font-family:var(--mono);outline:none">
+          <span style="font-size:8px;color:var(--m2);margin-left:4px">Dif. Importe $&nbsp;≥</span>
+          <input type="number" min="0" step="100" placeholder="0"
+            oninput="_tasasDifMinImporte(this.value)"
+            style="width:110px;background:var(--s2);border:1px solid var(--b2);border-radius:4px;
+              padding:3px 8px;font-size:9px;color:var(--txt);font-family:var(--mono);outline:none">
+          <span style="font-size:8px;color:var(--m2);margin-left:8px">
+            (dejá en 0 para ver todas)
+          </span>
         </div>
       </div>
       <!-- Bulk action bar (oculta hasta que haya selección) -->
