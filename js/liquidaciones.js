@@ -1659,6 +1659,7 @@ window._tasasDifToggleTipo = function(tipo) {
     btn.style.color      = on ? '#fff' : 'var(--m2)';
     btn.style.borderColor= on ? (colMap[tipo]||'var(--acc)') : 'var(--b2)';
   }
+  _tasasDdUpdateCounts();
   _tasasDifRefreshTabla();
 };
 
@@ -1673,6 +1674,7 @@ window._tasasDifToggleClasif = function(c) {
     btn.style.color       = on ? colMap[c] : 'var(--m2)';
     btn.style.fontWeight  = on ? '700' : '400';
   }
+  _tasasDdUpdateCounts();
   _tasasDifRefreshTabla();
 };
 
@@ -1682,11 +1684,55 @@ window._tasasDifBuscar = function(q) {
 };
 window._tasasDifMinTasa = function(v) {
   window._tasasDifFiltros.minTasa = parseFloat(v) || 0;
+  _tasasDdUpdateCounts();
   _tasasDifRefreshTabla();
 };
 window._tasasDifMinImporte = function(v) {
   window._tasasDifFiltros.minImporte = parseFloat(v) || 0;
+  _tasasDdUpdateCounts();
   _tasasDifRefreshTabla();
+};
+
+// ── Dropdowns de filtros ──────────────────────────────────────────────
+window._tasasDdToggle = function(name) {
+  if (event) event.stopPropagation();
+  const names = ['tipo','estado','montos'];
+  names.forEach(p => {
+    const panel = document.getElementById('tasas-dd-' + p + '-panel');
+    if (!panel) return;
+    panel.style.display = (p === name && panel.style.display === 'none') ? 'block' : 'none';
+  });
+  if (document.getElementById('tasas-dd-' + name + '-panel')?.style.display !== 'none') {
+    setTimeout(() => document.addEventListener('click', function _c() {
+      names.forEach(p => { const el = document.getElementById('tasas-dd-'+p+'-panel'); if(el) el.style.display='none'; });
+      document.removeEventListener('click', _c);
+    }), 0);
+  }
+};
+
+window._tasasDdUpdateCounts = function() {
+  const f = window._tasasDifFiltros;
+  const tBtn = document.getElementById('tasas-dd-tipo-btn');
+  const eBtn = document.getElementById('tasas-dd-estado-btn');
+  const mBtn = document.getElementById('tasas-dd-montos-btn');
+  if (tBtn) {
+    const n = f.tipos.size;
+    tBtn.innerHTML = `Tipo${n?' <b style="color:var(--acc)">('+n+')</b>':''} ▾`;
+    tBtn.style.borderColor = n ? 'var(--acc)' : 'var(--b2)';
+    tBtn.style.color       = n ? 'var(--acc)' : 'var(--m2)';
+  }
+  if (eBtn) {
+    const n = f.clasif.size;
+    eBtn.innerHTML = `Estado${n?' <b style="color:var(--acc)">('+n+')</b>':''} ▾`;
+    eBtn.style.borderColor = n ? 'var(--acc)' : 'var(--b2)';
+    eBtn.style.color       = n ? 'var(--acc)' : 'var(--m2)';
+  }
+  if (mBtn) {
+    const n = (f.minTasa > 0 ? 1 : 0) + (f.minImporte > 0 ? 1 : 0);
+    mBtn.innerHTML = `Montos${n?' <b style="color:var(--acc)">('+n+')</b>':''} ▾`;
+    mBtn.style.borderColor = n ? 'var(--acc)' : 'var(--b2)';
+    mBtn.style.color       = n ? 'var(--acc)' : 'var(--m2)';
+  }
 };
 
 // ── Selección masiva ──────────────────────────────────────────────────
@@ -2028,61 +2074,121 @@ function renderModuloLiqTasas() {
         border-bottom:1px solid var(--b1)">
         ${_kpisDif(difs, liqTotal)}
       </div>
-      <!-- Filtros -->
-      <div style="display:flex;flex-direction:column;gap:6px;padding:8px 14px;flex-shrink:0;
-        border-bottom:1px solid var(--b1);background:var(--s1)">
-        <!-- Búsqueda + export -->
-        <div style="display:flex;align-items:center;gap:8px">
-          <input id="tasas-buscar" type="text" placeholder="Buscar equipo, tarjeta, comercio, vendedor…"
-            oninput="_tasasDifBuscar(this.value)"
-            style="flex:1;background:var(--s2);border:1px solid var(--b2);border-radius:4px;
-              padding:4px 10px;font-size:9px;color:var(--txt);font-family:var(--sans);outline:none">
-          <span id="tasas-dif-count" style="font-size:9px;color:var(--m2);white-space:nowrap">
-            ${difs.length.toLocaleString('es-AR')} resultados
-          </span>
-          <button onclick="window._tasasExportarDifs(window._tasasDifActuales)"
-            style="background:none;border:1px solid var(--grn);color:var(--grn);border-radius:4px;
+      <!-- Filtros compactos con dropdowns -->
+      <div style="display:flex;align-items:center;gap:6px;padding:7px 14px;flex-shrink:0;
+        border-bottom:1px solid var(--b1);background:var(--s1);flex-wrap:wrap">
+        <!-- Búsqueda -->
+        <input id="tasas-buscar" type="text" placeholder="Buscar equipo, tarjeta, comercio, vendedor…"
+          oninput="_tasasDifBuscar(this.value)"
+          style="flex:1;min-width:180px;background:var(--s2);border:1px solid var(--b2);
+            border-radius:4px;padding:4px 10px;font-size:9px;color:var(--txt);
+            font-family:var(--sans);outline:none">
+
+        <!-- Dropdown: Tipo -->
+        <div style="position:relative">
+          <button id="tasas-dd-tipo-btn" onclick="_tasasDdToggle('tipo')"
+            style="background:none;border:1px solid var(--b2);color:var(--m2);border-radius:4px;
               padding:4px 12px;font-size:9px;cursor:pointer;font-family:var(--sans);white-space:nowrap">
-            ↓ Exportar Excel
+            Tipo ▾
           </button>
+          <div id="tasas-dd-tipo-panel" style="display:none;position:absolute;top:calc(100% + 4px);
+            left:0;z-index:200;background:var(--s2);border:1px solid var(--b1);border-radius:6px;
+            padding:10px 12px;min-width:220px;box-shadow:0 4px 16px rgba(0,0,0,.4)">
+            <div style="font-size:8px;color:var(--m2);margin-bottom:6px;font-weight:600">
+              TIPO DE DIFERENCIA
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+              ${[['COMERCIO','#9333ea'],['IMPORTE','#b45309'],['TARJETA','#dc2626'],
+                 ['CUOTAS','#d97706'],['TASA SKY','#7c3aed','TASA_SKY'],
+                 ['TASA PROC','#0891b2','TASA_PROC']].map(([lbl,col,key])=> {
+                const k = key||lbl;
+                return `<button id="tasas-ftipo-${k}" onclick="event.stopPropagation();_tasasDifToggleTipo('${k}')"
+                  style="background:none;border:1px solid var(--b2);color:var(--m2);border-radius:4px;
+                    padding:4px 12px;font-size:9px;cursor:pointer;font-family:var(--sans);
+                    text-align:left;width:100%">${lbl}</button>`;
+              }).join('')}
+            </div>
+          </div>
         </div>
-        <!-- Filtros por tipo de diferencia -->
-        <div style="display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-          <span style="font-size:8px;color:var(--m2);margin-right:4px">Tipo:</span>
-          ${_fBtn('tasas-ftipo-COMERCIO',  'COMERCIO',  "_tasasDifToggleTipo('COMERCIO')")}
-          ${_fBtn('tasas-ftipo-IMPORTE',   'IMPORTE',   "_tasasDifToggleTipo('IMPORTE')")}
-          ${_fBtn('tasas-ftipo-TARJETA',   'TARJETA',   "_tasasDifToggleTipo('TARJETA')")}
-          ${_fBtn('tasas-ftipo-CUOTAS',    'CUOTAS',    "_tasasDifToggleTipo('CUOTAS')")}
-          ${_fBtn('tasas-ftipo-TASA_SKY',  'TASA SKY',  "_tasasDifToggleTipo('TASA_SKY')")}
-          ${_fBtn('tasas-ftipo-TASA_PROC', 'TASA PROC', "_tasasDifToggleTipo('TASA_PROC')")}
-          <span style="font-size:8px;color:var(--m2);margin-left:10px;margin-right:4px">Estado:</span>
-          ${_fBtn('tasas-fclasif-sin',  'Sin clasificar', "_tasasDifToggleClasif('sin')")}
-          ${_fBtn('tasas-fclasif-vend', 'Vendedor',       "_tasasDifToggleClasif('vend')")}
-          ${_fBtn('tasas-fclasif-proc', 'Procesadora',    "_tasasDifToggleClasif('proc')")}
-          ${_fBtn('tasas-fclasif-ok',   '✓ Aceptado',    "_tasasDifToggleClasif('ok')")}
-          <button onclick="_tasasDifRefreshTabla()"
-            style="background:none;border:1px solid var(--acc);color:var(--acc);border-radius:4px;
-              padding:3px 12px;font-size:8px;cursor:pointer;font-family:var(--sans);margin-left:6px;
-              font-weight:700" title="Reaplica los filtros activos">
-            ↺ Actualizar
+
+        <!-- Dropdown: Estado -->
+        <div style="position:relative">
+          <button id="tasas-dd-estado-btn" onclick="_tasasDdToggle('estado')"
+            style="background:none;border:1px solid var(--b2);color:var(--m2);border-radius:4px;
+              padding:4px 12px;font-size:9px;cursor:pointer;font-family:var(--sans);white-space:nowrap">
+            Estado ▾
           </button>
+          <div id="tasas-dd-estado-panel" style="display:none;position:absolute;top:calc(100% + 4px);
+            left:0;z-index:200;background:var(--s2);border:1px solid var(--b1);border-radius:6px;
+            padding:10px 12px;min-width:180px;box-shadow:0 4px 16px rgba(0,0,0,.4)">
+            <div style="font-size:8px;color:var(--m2);margin-bottom:6px;font-weight:600">
+              CLASIFICACIÓN
+            </div>
+            <div style="display:flex;flex-direction:column;gap:5px">
+              ${[['sin','Sin clasificar','var(--m2)'],['vend','Vendedor','var(--yel)'],
+                 ['proc','Procesadora','var(--red)'],['ok','✓ Aceptado','var(--grn)']].map(([k,lbl,col])=>
+                `<button id="tasas-fclasif-${k}" onclick="event.stopPropagation();_tasasDifToggleClasif('${k}')"
+                  style="background:none;border:1px solid var(--b2);color:var(--m2);border-radius:4px;
+                    padding:4px 12px;font-size:9px;cursor:pointer;font-family:var(--sans);
+                    text-align:left;width:100%">${lbl}</button>`
+              ).join('')}
+            </div>
+          </div>
         </div>
-        <!-- Filtros por monto mínimo -->
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <span style="font-size:8px;color:var(--m2)">Dif. Tasa $&nbsp;≥</span>
-          <input type="number" min="0" step="100" placeholder="0"
-            oninput="_tasasDifMinTasa(this.value)"
-            style="width:110px;background:var(--s2);border:1px solid var(--b2);border-radius:4px;
-              padding:3px 8px;font-size:9px;color:var(--txt);font-family:var(--mono);outline:none">
-          <span style="font-size:8px;color:var(--m2);margin-left:4px">Dif. Importe $&nbsp;≥</span>
-          <input type="number" min="0" step="100" placeholder="0"
-            oninput="_tasasDifMinImporte(this.value)"
-            style="width:110px;background:var(--s2);border:1px solid var(--b2);border-radius:4px;
-              padding:3px 8px;font-size:9px;color:var(--txt);font-family:var(--mono);outline:none">
-          <span style="font-size:8px;color:var(--m2);margin-left:8px">
-            (dejá en 0 para ver todas)
-          </span>
+
+        <!-- Dropdown: Montos -->
+        <div style="position:relative">
+          <button id="tasas-dd-montos-btn" onclick="_tasasDdToggle('montos')"
+            style="background:none;border:1px solid var(--b2);color:var(--m2);border-radius:4px;
+              padding:4px 12px;font-size:9px;cursor:pointer;font-family:var(--sans);white-space:nowrap">
+            Montos ▾
+          </button>
+          <div id="tasas-dd-montos-panel" style="display:none;position:absolute;top:calc(100% + 4px);
+            left:0;z-index:200;background:var(--s2);border:1px solid var(--b1);border-radius:6px;
+            padding:12px 14px;min-width:230px;box-shadow:0 4px 16px rgba(0,0,0,.4)">
+            <div style="display:flex;flex-direction:column;gap:10px" onclick="event.stopPropagation()">
+              <div>
+                <div style="font-size:8px;color:var(--m2);margin-bottom:4px;font-weight:600">
+                  DIF. TASA $ ≥
+                </div>
+                <input type="number" min="0" step="100" placeholder="0"
+                  oninput="_tasasDifMinTasa(this.value)"
+                  style="width:100%;background:var(--s1);border:1px solid var(--b2);border-radius:4px;
+                    padding:4px 8px;font-size:9px;color:var(--txt);font-family:var(--mono);
+                    outline:none;box-sizing:border-box">
+              </div>
+              <div>
+                <div style="font-size:8px;color:var(--m2);margin-bottom:4px;font-weight:600">
+                  DIF. IMPORTE $ ≥
+                </div>
+                <input type="number" min="0" step="100" placeholder="0"
+                  oninput="_tasasDifMinImporte(this.value)"
+                  style="width:100%;background:var(--s1);border:1px solid var(--b2);border-radius:4px;
+                    padding:4px 8px;font-size:9px;color:var(--txt);font-family:var(--mono);
+                    outline:none;box-sizing:border-box">
+              </div>
+              <div style="font-size:8px;color:var(--m2)">(0 = sin filtro)</div>
+            </div>
+          </div>
         </div>
+
+        <!-- Actualizar -->
+        <button onclick="_tasasDifRefreshTabla()"
+          style="background:none;border:1px solid var(--acc);color:var(--acc);border-radius:4px;
+            padding:4px 12px;font-size:9px;cursor:pointer;font-family:var(--sans);
+            font-weight:700;white-space:nowrap">
+          ↺ Actualizar
+        </button>
+
+        <div style="flex:1"></div>
+        <span id="tasas-dif-count" style="font-size:9px;color:var(--m2);white-space:nowrap">
+          ${difs.length.toLocaleString('es-AR')} resultados
+        </span>
+        <button onclick="window._tasasExportarDifs(window._tasasDifActuales)"
+          style="background:none;border:1px solid var(--grn);color:var(--grn);border-radius:4px;
+            padding:4px 12px;font-size:9px;cursor:pointer;font-family:var(--sans);white-space:nowrap">
+          ↓ Exportar Excel
+        </button>
       </div>
       <!-- Bulk action bar (oculta hasta que haya selección) -->
       <div id="tasas-bulk-bar" style="display:none;align-items:center;gap:8px;
