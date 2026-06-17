@@ -171,8 +171,8 @@ function parseLiqCupones(wb) {
 
   console.log(`[LIQ] Parseados: ${out.length} cupones liquidados`);
   if (out.length > 0) {
-    console.debug('[LIQ] Muestra:', out.slice(0,5).map(r =>
-      `lote=${r.lote} cupon=${r.cupon} monto=${r.monto} cfo=${r.cfo} arancel=${r.arancel} cuotas=${r.cuotas}`).join('\n'));
+    console.log('[LIQ] Muestra cfo/arancel:', out.slice(0,5).map(r =>
+      `cuotas=${r.cuotas} monto=${r.monto} cfo=${r.cfo} arancel=${r.arancel}`).join(' | '));
   }
   return out;
 }
