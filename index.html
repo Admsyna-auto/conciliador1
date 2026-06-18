@@ -617,6 +617,70 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   font-family:var(--mono);font-size:9px;cursor:pointer;
 }
 .modal-close:hover{border-color:var(--acc);color:var(--acc)}
+/* == GUIA DE USO ============================================== */
+.gy-help-btn{padding:5px 10px;background:none;border:1px solid var(--b2);border-radius:5px;
+  color:var(--m2);font-family:var(--mono);font-size:10px;cursor:pointer;transition:all .15s;
+  font-weight:700;letter-spacing:.03em}
+.gy-help-btn:hover{border-color:var(--acc);color:var(--acc)}
+.modal-guia{background:var(--s2);border:1px solid var(--b2);border-radius:12px;
+  width:min(820px,95vw);max-height:88vh;display:flex;flex-direction:column;overflow:hidden}
+.gy-header{display:flex;align-items:center;justify-content:space-between;
+  padding:16px 20px 12px;border-bottom:1px solid var(--b1);flex-shrink:0}
+.gy-header-title{font-family:var(--head);font-size:13px;font-weight:700;
+  color:var(--txt);display:flex;align-items:center;gap:8px}
+.gy-close-btn{background:none;border:1px solid var(--b2);border-radius:5px;
+  color:var(--m2);font-size:11px;cursor:pointer;padding:4px 9px;transition:all .15s}
+.gy-close-btn:hover{border-color:var(--red);color:var(--red)}
+.gy-tabs{display:flex;flex-wrap:wrap;gap:4px;padding:10px 16px 8px;
+  border-bottom:1px solid var(--b1);flex-shrink:0;background:var(--s1)}
+.gy-tab-btn{padding:4px 11px;background:none;border:1px solid var(--b1);border-radius:4px;
+  color:var(--m2);font-family:var(--mono);font-size:8.5px;cursor:pointer;transition:all .12s}
+.gy-tab-btn:hover{color:var(--txt);border-color:var(--b2)}
+.gy-tab-btn.active{color:var(--acc);border-color:var(--acc);background:rgba(16,185,129,.07)}
+.gy-body{flex:1;overflow-y:auto;padding:18px 22px 22px;scroll-behavior:smooth}
+.gy-body h3{font-family:var(--head);font-size:13px;font-weight:700;color:var(--acc);
+  margin:0 0 10px}
+.gy-body p{font-size:10.5px;color:var(--m1);line-height:1.65;margin:0 0 10px}
+.gy-body ul,.gy-body ol{font-size:10.5px;color:var(--m1);line-height:1.65;
+  padding-left:18px;margin:6px 0 10px}
+.gy-body li{margin-bottom:4px}
+.gy-body b{color:var(--txt)}
+.gy-body code{font-family:var(--mono);font-size:9px;background:var(--s3);
+  padding:1px 5px;border-radius:3px;color:var(--cyn)}
+.gy-bloque{background:var(--s1);border:1px solid var(--b1);border-radius:7px;
+  padding:12px 14px;margin-bottom:12px}
+.gy-bloque-titulo{font-family:var(--head);font-size:10px;font-weight:700;
+  color:var(--txt);margin-bottom:8px;text-transform:uppercase;letter-spacing:.05em}
+.gy-tabla{width:100%;border-collapse:collapse;font-size:9.5px;color:var(--m1)}
+.gy-tabla th{text-align:left;color:var(--m2);font-weight:600;padding:4px 8px;
+  border-bottom:1px solid var(--b1);font-size:8.5px;text-transform:uppercase}
+.gy-tabla td{padding:5px 8px;border-bottom:1px solid rgba(255,255,255,.03);vertical-align:top}
+.gy-tabla tr:last-child td{border-bottom:none}
+.gy-tabla tr:hover td{background:var(--s3)}
+.gy-estado{padding:2px 8px;border-radius:3px;font-size:8px;font-family:var(--mono);
+  font-weight:700;white-space:nowrap}
+.gy-ok{background:rgba(52,211,153,.15);color:#34d399}
+.gy-sin{background:rgba(248,113,113,.15);color:#f87171}
+.gy-mal{background:rgba(251,191,36,.15);color:#fbbf24}
+.gy-com{background:rgba(168,85,247,.15);color:#a855f7}
+.gy-dif{background:rgba(56,189,248,.15);color:var(--cyn)}
+.gy-urg{background:rgba(249,115,22,.15);color:#f97316}
+.gy-ref{background:rgba(168,85,247,.1);color:#c084fc}
+.gy-dev{background:rgba(100,116,139,.15);color:#94a3b8}
+.gy-anul{background:rgba(239,68,68,.1);color:#ef4444}
+.gy-badge{padding:2px 9px;border-radius:3px;font-size:8px;font-family:var(--mono);
+  font-weight:600;display:inline-block}
+.gy-badge-fis{background:rgba(56,189,248,.12);color:var(--cyn)}
+.gy-badge-gp{background:rgba(52,211,153,.12);color:#34d399}
+.gy-badge-goc{background:rgba(168,85,247,.12);color:#a855f7}
+.gy-steps{display:flex;flex-direction:column;gap:10px}
+.gy-step{display:flex;gap:12px;align-items:flex-start}
+.gy-step-num{width:24px;height:24px;border-radius:50%;background:var(--acc);
+  color:#000;font-size:10px;font-weight:800;display:flex;align-items:center;
+  justify-content:center;flex-shrink:0;margin-top:1px}
+.gy-step-body{font-size:10.5px;color:var(--m1);line-height:1.6}
+.gy-step-body b{color:var(--txt)}
+.gy-step-body span{color:var(--m2);display:block;margin-top:2px}
 
 /* ══ DOWNBAR (inline dentro del tab-strip) ═══════════ */
 .dl-bar{display:flex;align-items:center;gap:5px}
@@ -1051,6 +1115,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
   </button>
 
   <!-- Config -->
+  <button class="gy-help-btn" onclick="abrirGuia()" title="Guia de uso">?</button>
   <button class="cfg-btn" id="cfg-btn" title="Configuración de apariencia" onclick="toggleCfgPanel()">⚙</button>
 </div>
 <!-- Barra de progreso ultra fina + procesadoras activas -->
@@ -2061,6 +2126,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 <script src="js/procesadoras.js"></script>
 <script src="js/liquidaciones.js"></script>
 <script src="js/historico.js?v=20260618b"></script>
+<script src="js/ayuda.js?v=20260618b"></script>
 <script src="js/dashboard.js?v=20260618a"></script>
 <script>
 
