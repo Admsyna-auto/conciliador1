@@ -6,13 +6,15 @@
 const _PROC_FILTROS = {
   FISERV: { suc:'', estado:'', search:'' },
   GETPOS: { suc:'', estado:'', search:'' },
+  PRISMA: { suc:'', estado:'', search:'' },
 };
 
 // ── Filtro de filas por procesadora ──────────────────────────────────
 function _procRows(procId) {
   if (typeof RESULTADO === 'undefined' || !RESULTADO.length) return [];
-  if (procId === 'FISERV') return RESULTADO.filter(r => !r.sky?.esGETPos && !r.sky?.esGOCUOTAS);
-  if (procId === 'GETPOS') return RESULTADO.filter(r =>  r.sky?.esGETPos && !r.sky?.esGOCUOTAS);
+  if (procId === 'FISERV') return RESULTADO.filter(r => !r.sky?.esGETPos && !r.sky?.esGOCUOTAS && !r.sky?.esPRISMA);
+  if (procId === 'GETPOS') return RESULTADO.filter(r =>  r.sky?.esGETPos && !r.sky?.esGOCUOTAS && !r.sky?.esPRISMA);
+  if (procId === 'PRISMA') return RESULTADO.filter(r =>  r.sky?.esPRISMA);
   return [];
 }
 
@@ -84,8 +86,8 @@ function _procRenderTabla(procId, tab) {
 // ── Render del módulo completo ────────────────────────────────────────
 function renderModuloProc(procId) {
   const p   = procId.toLowerCase();
-  const col = procId === 'FISERV' ? 'var(--acc)' : 'var(--grn)';
-  const icon = procId === 'FISERV' ? '🏦' : '🏧';
+  const col  = procId === 'FISERV' ? 'var(--acc)' : procId === 'PRISMA' ? '#06b6d4' : 'var(--grn)';
+  const icon = procId === 'FISERV' ? '🏦' : procId === 'PRISMA' ? '🌐' : '🏧';
   const panel = document.getElementById(`mod-${p}`);
   if (!panel) return;
 
@@ -256,5 +258,6 @@ function renderModuloProc(procId) {
 }
 
 // ── Wrappers por procesadora ──────────────────────────────────────────
-function renderModuloFiserv() { renderModuloProc('FISERV'); }
-function renderModuloGetpos() { renderModuloProc('GETPOS'); }
+function renderModuloFiserv()  { renderModuloProc('FISERV'); }
+function renderModuloGetpos()  { renderModuloProc('GETPOS'); }
+function renderModuloPrisma()  { renderModuloProc('PRISMA'); }

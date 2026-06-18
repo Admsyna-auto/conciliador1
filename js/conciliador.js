@@ -154,6 +154,7 @@ function parseSkylab(wb) {
       neto:     parseFloat(r['Neto a Cobrar'])||0,
       esGETPos:    String(r['Tarjeta']??'').trim().toUpperCase()==='GETPOS',
       esGOCUOTAS:  String(r['Tarjeta']??'').trim().toUpperCase()==='GO CUOTAS',
+      esPRISMA:    ['0053','0416','0322'].includes(String(r['Id']??'').trim()),
       esNeg:    (parseFloat(String(r['Venta Bruta']||'').replace(/,/g,''))||0) < 0,
       integrado,
     };
@@ -165,6 +166,7 @@ window._debugFisRows = null;
 window._debugGpRows  = null;
 // Índices globales para re-cruce manual
 let _FIS_NORM = [], _FIS_REV = [], _GP_NORM = [], _GP_REV = [];
+let _PRI_NORM = [], _PRI_REV = [];   // Prisma Ecommerce
 // Marcas de COM.ERRADO: {skyIdx: 'SIN_DIF' | 'CON_DIF'}
 let COM_ERRADO_MARCAS = {};
 
@@ -289,6 +291,70 @@ function parseGetpos(wb, nombre2suc) {
   return { norm:norm_r, rev:rev_r };
 }
 
+// ── PRISMA ECOMMERCE ─────────────────────────────────────
+// CSV con separador ';'. Fila 0 = título, fila 1 = encabezado, fila 2+ = datos.
+// IDs Skylab de ecommerce: 0053 · 0416 · 0322
+function parsePrisma(csvText) {
+  const lines = csvText.split(/\r?\n/);
+  const hIdx  = lines.findIndex(l => l.includes('NUM.CUPON') || l.includes('COMPRA'));
+  if (hIdx < 0) { console.warn('[PRISMA] No se encontró encabezado'); return { norm:[], rev:[] }; }
+  const headers = lines[hIdx].split(';').map(h => h.trim().replace(/^"|"$/g,''));
+  const norm_r=[], rev_r=[];
+  for (let i = hIdx+1; i < lines.length; i++) {
+    const line = lines[i].trim(); if (!line) continue;
+    const vals = line.split(';').map(v => v.trim().replace(/^"|"$/g,''));
+    const row  = {};
+    headers.forEach((h,j) => row[h] = vals[j] ?? '');
+    const tipo = String(row['TIPO'] || '');
+    if (!tipo) continue;
+    const esRev  = /devolu/i.test(tipo);
+    const montoR = String(row['MONTO_BRUTO'] || '').replace(',','.');
+    const monto  = Math.abs(parseFloat(montoR) || 0);
+    const cupon  = norm(row['NUM.CUPON']);
+    const obj = {
+      lote:    norm(row['LOTE']),
+      ticket:  cupon,
+      cupon,
+      aut:     norm(row['NRO_AUT']),
+      monto:   esRev ? -monto : monto,
+      montoN:  String(Math.round(monto)),
+      fecha:   normFecha(row['COMPRA']),   // DD/MM/YYYY
+      suc:     '',          // ecommerce sin sucursal física
+      equipo:  String(row['ESTABLECIMIENTO'] || '').trim(),
+      tarjeta: String(row['MARCA'] || ''),
+      cuotas:  parseInt(row['CANT.CUOTAS']) || 1,
+      tipo,
+      comFis:  '',
+      arancel: null, cfo: null,
+    };
+    (esRev ? rev_r : norm_r).push(obj);
+  }
+  console.log(`[PRISMA] ${norm_r.length} ventas · ${rev_r.length} devoluciones`);
+  return { norm: norm_r, rev: rev_r };
+}
+
+function loadPrisma(input) {
+  const file = input.files[0]; if (!file) return;
+  const st = document.getElementById('st-pri');
+  const fc = document.getElementById('fc-pri');
+  if (st) { st.textContent = '↻ Cargando...'; st.className = 'fc-st'; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const result = parsePrisma(e.target.result);
+      _PRI_NORM = result.norm; _PRI_REV = result.rev;
+      FILES.pri  = { name: file.name };
+      if (fc) fc.classList.add('ok');
+      if (st) { st.textContent = `✓ ${file.name} (${_PRI_NORM.length.toLocaleString()} ops)`; st.className='fc-st ok'; }
+      checkReady();
+    } catch(err) {
+      if (st) { st.textContent = '✗ Error al leer'; st.className = 'fc-st'; }
+      console.error('[PRISMA] Error cargando:', err);
+    }
+  };
+  reader.readAsText(file, 'UTF-8');
+}
+
 // ── ÍNDICES ──────────────────────────────────────────────
 
 // Busca en un índice tolerando diferencias de ±1 en montoN (centavos de redondeo)
@@ -352,6 +418,27 @@ function buildIndexGp(rows) {
   return idx;
 }
 
+// Índice Prisma: match por cupon+lote+fecha+monto (sin suc — ecommerce)
+function buildIndexPri(rows) {
+  const idx = {};
+  for (const r of rows) {
+    const mn = r.montoN;
+    const mnP = String(parseInt(mn)+1);
+    const mnM = String(Math.max(0,parseInt(mn)-1));
+    for (const m of [mn, mnP, mnM]) {
+      const keys = [
+        `MP1|${r.lote}|${r.ticket}|${r.fecha}|${m}`,   // lote+cupon+fecha+monto (primario)
+        `MP2|${r.lote}|${r.ticket}||${m}`,               // lote+cupon+monto (sin fecha)
+        `MP3|${r.ticket}|${r.fecha}|${m}`,               // cupon+fecha+monto
+        `MP4|${r.ticket}||${m}`,                         // cupon+monto
+        `MPN|${r.fecha}|${m}`,                           // reverso: fecha+monto
+      ];
+      for (const k of keys) (idx[k] = idx[k] || []).push(r);
+    }
+  }
+  return idx;
+}
+
 // ── VALIDAR COMERCIO ─────────────────────────────────────
 function normCom(v) {
   // Normaliza nro de comercio: quita ceros iniciales igual que norm()
@@ -379,9 +466,10 @@ function validarComercio(skyRow, procRow) {
 }
 
 // ── MOTOR PRINCIPAL ──────────────────────────────────────
-function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
+function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev, priNorm=[], priRev=[]) {
   const idxFN=buildIndexFis(fisNorm), idxFR=buildIndexFis(fisRev);
   const idxGN=buildIndexGp(gpNorm),   idxGR=buildIndexGp(gpRev);
+  const idxPN=buildIndexPri(priNorm),  idxPR=buildIndexPri(priRev);
   const used=new Set();
 
   // ── Índice Go Cuotas (cascada de 7 métodos)
@@ -430,16 +518,23 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
   return skyRows.map(s => {
     const idxFis = s.esNeg ? idxFR : idxFN;
     const idxGp  = s.esNeg ? idxGR : idxGN;
-    const procEsp = s.esGETPos    ? 'GETPOS'    :
+    const idxPri = s.esNeg ? idxPR : idxPN;
+    const procEsp = s.esPRISMA    ? 'PRISMA'    :
+                    s.esGETPos    ? 'GETPOS'    :
                     s.esGOCUOTAS  ? 'GOCUOTAS'  : 'FISERV';
     const {lote:ln,cupon:cn,suc:sn,fecha:fn,montoN:mn} = s;
 
-    // ── Devoluciones: MN1 y MN2
+    // ── Devoluciones: MN1 (Fiserv/Prisma) y MN2 (Getpos)
     if (s.esNeg) {
-      const mf=(idxGetTol(idxFis,`MN1|${sn}|${fn}|${mn}`)||[]).find(r=>!used.has(r));
-      if (mf) { used.add(mf); return armarFila(s, mf,'FISERV','MN1',procEsp); }
-      const mg=(idxGetTol(idxGp,`MN2|${mn}|${fn}|${sn}`)||[]).find(r=>!used.has(r));
-      if (mg) { used.add(mg); return armarFila(s, mg,'GETPOS','MN2',procEsp); }
+      if (s.esPRISMA) {
+        const mp=(idxGetTol(idxPri,`MPN|${fn}|${mn}`)||[]).find(r=>!used.has(r));
+        if (mp) { used.add(mp); return armarFila(s, mp,'PRISMA','MPN',procEsp); }
+      } else {
+        const mf=(idxGetTol(idxFis,`MN1|${sn}|${fn}|${mn}`)||[]).find(r=>!used.has(r));
+        if (mf) { used.add(mf); return armarFila(s, mf,'FISERV','MN1',procEsp); }
+        const mg=(idxGetTol(idxGp,`MN2|${mn}|${fn}|${sn}`)||[]).find(r=>!used.has(r));
+        if (mg) { used.add(mg); return armarFila(s, mg,'GETPOS','MN2',procEsp); }
+      }
       return { sky:s, proc:null, metodo:'SIN MATCH', estado:'SIN MATCH',
         procEncontrada:'', procEsperada:procEsp, comOK:'', sucOK:'',
         matchParcial:'', esDevolucion:'SI', esAnulSinCobro:'NO' };
@@ -460,7 +555,15 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
       [`M7|${cn}|${mn}|${fn}|${sn}`, idxGp,'GETPOS','M7'],
       [`M8|${cn}|${mn}||${sn}`,      idxGp,'GETPOS','M8'],
     ];
-    const intentos = s.esGETPos ? intentosGp : intentosFis;
+    // Prisma: ecommerce sin sucursal → match por lote+cupon+fecha+monto
+    const intentosPri=[
+      [`MP1|${ln}|${cn}|${fn}|${mn}`,  idxPri,'PRISMA','MP1'],
+      [`MP2|${ln}|${cn}||${mn}`,        idxPri,'PRISMA','MP2'],
+      [`MP3|${cn}|${fn}|${mn}`,         idxPri,'PRISMA','MP3'],
+      [`MP4|${cn}||${mn}`,              idxPri,'PRISMA','MP4'],
+    ];
+    const intentos = s.esPRISMA  ? intentosPri :
+                     s.esGETPos  ? intentosGp  : intentosFis;
 
     for (const [key, idx, procReal, met] of intentos) {
       const match=(idxGetTol(idx,key)||[]).find(r=>!used.has(r));
@@ -486,8 +589,8 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
       }
     }
 
-    // M12 — match parcial FISERV
-    if (!s.esGETPos) {
+    // M12 — match parcial FISERV (solo filas no-Prisma, no-Getpos)
+    if (!s.esGETPos && !s.esPRISMA) {
       const cands=fisNorm.filter(r=>!used.has(r)&&r.montoN===mn&&r.fecha===fn&&r.suc===sn);
       for (const r of cands) {
         if (cn.length>=3&&r.aut.length>=3&&(r.aut.includes(cn)||cn.includes(r.aut))) {
@@ -496,6 +599,17 @@ function conciliarRows(skyRows, fisNorm, fisRev, gpNorm, gpRev) {
           f.matchParcial=`SKY=${cn} ↔ FIS.Aut=${r.aut}`;
           return f;
         }
+      }
+    }
+
+    // MP5 — match parcial PRISMA por cupon+monto
+    if (s.esPRISMA) {
+      const cands=priNorm.filter(r=>!used.has(r)&&r.montoN===mn&&r.cupon===cn);
+      if (cands.length===1) {
+        used.add(cands[0]);
+        const f=armarFila(s, cands[0],'PRISMA','MP5',procEsp);
+        f.matchParcial=`SKY=${cn}/${mn} ↔ PRI.Cup=${cands[0].cupon}`;
+        return f;
       }
     }
 
@@ -900,6 +1014,18 @@ async function conciliar() {
     }
     _GP_NORM = gpNorm; _GP_REV = gpRev;
 
+    // ── PRISMA Ecommerce (si habilitado y CSV cargado)
+    let priNorm=_PRI_NORM, priRev=_PRI_REV;
+    if (isProcEnabled('PRISMA') && FILES.pri) {
+      log(`PRISMA: ${priNorm.length.toLocaleString()} ventas · ${priRev.length} devoluciones`,'ok');
+    } else if (isProcEnabled('PRISMA') && !FILES.pri) {
+      log('PRISMA: sin archivo CSV (ops ecommerce quedarán Sin Match)','warn');
+      priNorm=[]; priRev=[];
+    } else {
+      log('PRISMA: deshabilitado','warn');
+      priNorm=[]; priRev=[];
+    }
+
     // ── Go Cuotas (si habilitado y datos cargados)
     const gocCount = (typeof _GOC_PAGOS !== 'undefined') ? _GOC_PAGOS.length : 0;
     if (isProcEnabled('GOCUOTAS') && gocCount > 0) {
@@ -908,14 +1034,16 @@ async function conciliar() {
       log('Go Cuotas: sin archivo CSV (las ops quedarán Sin Match)','warn');
     }
 
-    log(`Aplicando cascada de cruce (FIS:${fisNorm.length} GP:${gpNorm.length} GoC:${gocCount})...`);
+    log(`Aplicando cascada de cruce (FIS:${fisNorm.length} GP:${gpNorm.length} GoC:${gocCount} PRI:${priNorm.length})...`);
     setP(58); await delay(20);
-    RESULTADO=conciliarRows(skyRows,fisNorm,fisRev,gpNorm,gpRev);
+    RESULTADO=conciliarRows(skyRows,fisNorm,fisRev,gpNorm,gpRev,priNorm,priRev);
     // Guardar operaciones de procesadora sin cruce con SKY
     const _usedFis = new Set(RESULTADO.filter(r=>r.proc&&r.procEncontrada==='FISERV').map(r=>r.proc));
     const _usedGp  = new Set(RESULTADO.filter(r=>r.proc&&r.procEncontrada==='GETPOS').map(r=>r.proc));
+    const _usedPri = new Set(RESULTADO.filter(r=>r.proc&&r.procEncontrada==='PRISMA').map(r=>r.proc));
     window._FIS_NO_CRUZADAS = fisNorm.filter(r => !_usedFis.has(r));
     window._GP_NO_CRUZADAS  = gpNorm.filter(r  => !_usedGp.has(r));
+    window._PRI_NO_CRUZADAS = priNorm.filter(r => !_usedPri.has(r));
     setP(74); await delay(20);
 
     log('Detectando anulaciones sin cobro...'); setP(82); await delay(20);
@@ -1230,8 +1358,9 @@ function poblarFiltros() {
   const _matchProc = (r, p) => {
     if (!p) return true;
     if (p === 'GOCUOTAS') return !!r.sky.esGOCUOTAS;
-    if (p === 'GETPOS')   return !!r.sky.esGETPos && !r.sky.esGOCUOTAS;
-    if (p === 'FISERV')   return !r.sky.esGETPos  && !r.sky.esGOCUOTAS;
+    if (p === 'GETPOS')   return !!r.sky.esGETPos && !r.sky.esGOCUOTAS && !r.sky.esPRISMA;
+    if (p === 'PRISMA')   return !!r.sky.esPRISMA;
+    if (p === 'FISERV')   return !r.sky.esGETPos  && !r.sky.esGOCUOTAS && !r.sky.esPRISMA;
     return true;
   };
 
@@ -1325,8 +1454,9 @@ function filtrarSinMatch() {
     const p = FILTROS_FIX.proc;
     rows = rows.filter(r =>
       (p === 'GOCUOTAS' && r.sky.esGOCUOTAS) ||
-      (p === 'GETPOS'   && r.sky.esGETPos && !r.sky.esGOCUOTAS) ||
-      (p === 'FISERV'   && !r.sky.esGETPos && !r.sky.esGOCUOTAS)
+      (p === 'GETPOS'   && r.sky.esGETPos && !r.sky.esGOCUOTAS && !r.sky.esPRISMA) ||
+      (p === 'PRISMA'   && r.sky.esPRISMA) ||
+      (p === 'FISERV'   && !r.sky.esGETPos && !r.sky.esGOCUOTAS && !r.sky.esPRISMA)
     );
   }
   if (FILTROS_FIX.plan)  rows=rows.filter(r=>r.sky.plan===FILTROS_FIX.plan);

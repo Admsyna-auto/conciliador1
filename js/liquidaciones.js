@@ -237,7 +237,7 @@ function _liqBuildIndexes() {
 function _cruzarLiqFiserv() {
   if (typeof RESULTADO === 'undefined' || !RESULTADO.length) return null;
 
-  const filasFis     = RESULTADO.filter(r => !r.sky?.esGETPos && !r.sky?.esGOCUOTAS);
+  const filasFis     = RESULTADO.filter(r => !r.sky?.esGETPos && !r.sky?.esGOCUOTAS && !r.sky?.esPRISMA);
   const sinConfirmar = [];
   const confirmadas  = [];
   for (const fila of filasFis) {
@@ -313,9 +313,10 @@ function _cruzarLiqFiserv() {
     }
   }
 
-  // Extras: filas del liq con lote+cupon que ningún proc reclamó
+  // Extras: filas del liq con lote+cupon que ningún proc reclamó (excluir filas Prisma)
   const extras = _LIQ_CUPONES.filter(r =>
-    r.lote && r.lote !== '0' && r.cupon && r.cupon !== '0' && !usadosLiq.has(r)
+    r.lote && r.lote !== '0' && r.cupon && r.cupon !== '0' && !usadosLiq.has(r) &&
+    !String(r.tarjeta||'').toUpperCase().includes('PRISMA')
   );
 
   const fueraPlazo      = liquidadas.filter(x => x.diasExtra !== null && x.diasExtra > 0);
@@ -691,7 +692,7 @@ function _liqRenderTable(tableId, cols, rows) {
 }
 
 // ── Cache de cruces para re-render de tabs ───────────────────────────
-const _liqCache = { fiserv:null, getpos:null, goc:null };
+const _liqCache = { fiserv:null, getpos:null, goc:null, prisma:null };
 
 function _liqRenderTab(proc, tab) {
   const c = _liqCache[proc];
@@ -2286,4 +2287,106 @@ function renderModuloLiqTasas() {
   // Restaurar estado
   const procActivo = window._liqTasasProc || 'fiserv';
   renderProcTab(procActivo);
+}
+
+// ── CRUCE: PRISMA Ecommerce ───────────────────────────────────────────
+// Igual que Fiserv pero filtrando por esPRISMA en RESULTADO y por
+// tarjeta "PRISMA..." en _LIQ_CUPONES. Match: cupon+lote+monto (sin equipo).
+function _cruzarLiqPrisma() {
+  if (typeof RESULTADO === 'undefined' || !RESULTADO.length) return null;
+
+  const filasPri     = RESULTADO.filter(r => r.sky?.esPRISMA);
+  const sinConfirmar = [];
+  const confirmadas  = [];
+  for (const fila of filasPri) {
+    const esConfirmada = fila.estado?.startsWith('OK') ||
+      fila.estado === 'DIF. CUOTAS' ||
+      fila.estado?.startsWith('COM. ERRADO') ||
+      fila.estado?.startsWith('MAL FACTURADO') ||
+      (fila.estado?.startsWith('CORREGIDO MANUAL') && !!fila.proc);
+    if (!esConfirmada || fila.esDevolucion === 'SI' || fila.sky?.esNeg) sinConfirmar.push(fila);
+    else confirmadas.push(fila);
+  }
+
+  // Filas de liquidación que son Prisma (tarjeta contiene "PRISMA")
+  const liqPrisma = typeof _LIQ_CUPONES !== 'undefined'
+    ? _LIQ_CUPONES.filter(r => String(r.tarjeta||'').toUpperCase().includes('PRISMA'))
+    : [];
+
+  if (!liqPrisma.length) {
+    return {
+      liquidadas: [], sinConfirmar, extras: [], fueraPlazo: [],
+      noLiquidadas: confirmadas.map(fila => ({
+        fila,
+        lote:  _liqNorm(fila.proc?.lote || ''),
+        cupon: _liqNorm(fila.proc?.ticket || fila.proc?.cupon || ''),
+        aut:   _liqNormAut(fila.proc?.aut || ''),
+        enLiq: null, liqRow: null,
+      })),
+      montoLiquidado:0, montoNoLiq: confirmadas.reduce((s,f)=>s+Math.abs(f.sky?.monto||0),0),
+      montoExtras:0, montoFueraPlazo:0,
+      totalOK: confirmadas.length, tieneLiq:false, tienePlazos:!!(TM?.plazos?.length),
+    };
+  }
+
+  // Índice Prisma: cupon|lote|monto|cuotas (sin equipo — device IDs no coinciden)
+  const liqIdx = {};
+  for (const r of liqPrisma) {
+    if (!r.lote || r.lote === '0' || !r.cupon || r.cupon === '0') continue;
+    const m  = Math.round(Math.abs(r.monto || 0));
+    const cu = r.cuotas || 0;
+    for (const mv of [m, m + 1, Math.max(0, m - 1)]) {
+      const k = `${r.cupon}|${r.lote}|${mv}|${cu}`;
+      (liqIdx[k] = liqIdx[k] || []).push(r);
+    }
+  }
+
+  const usadosLiq    = new Set();
+  const liquidadas   = [];
+  const noLiquidadas = [];
+
+  for (const fila of confirmadas) {
+    const pLote  = _liqNorm(fila.proc?.lote || '');
+    const pCupon = _liqNorm(fila.proc?.ticket || fila.proc?.cupon || '');
+    const pMonto = parseInt(fila.proc?.montoN) || Math.round(Math.abs(fila.sky?.monto || 0));
+    const pCuotas= parseInt(fila.proc?.cuotas || fila.sky?.cuotas) || 0;
+    const pAut   = _liqNormAut(fila.proc?.aut || '');
+
+    const k      = `${pCupon}|${pLote}|${pMonto}|${pCuotas}`;
+    const liqRow = (liqIdx[k] || []).find(r => !usadosLiq.has(r)) || null;
+
+    if (liqRow) {
+      usadosLiq.add(liqRow);
+      const fechaVenta = liqRow.fecha_venta || fila.sky?.fecha || '';
+      const fechaPago  = liqRow.fecha_pago  || '';
+      const plazoTM    = _buscarPlazoEnTM('PRISMA', liqRow.nro_comercio || '', liqRow.tarjeta || '', fechaVenta);
+      let diasHabiles = null, diasEsperados = null, diasExtra = null;
+      if (plazoTM && fechaVenta && fechaPago) {
+        diasHabiles   = _diasHabilesEntre(fechaVenta, fechaPago);
+        diasEsperados = parseInt(plazoTM.dias_habiles) || 0;
+        diasExtra     = diasHabiles - diasEsperados;
+      }
+      liquidadas.push({ fila, lote: pLote, cupon: pCupon, aut: pAut,
+        liqRow, diasHabiles, diasEsperados, diasExtra, plazoTM });
+    } else {
+      noLiquidadas.push({ fila, lote: pLote, cupon: pCupon, aut: pAut, enLiq: false, liqRow: null });
+    }
+  }
+
+  const extras = liqPrisma.filter(r =>
+    r.lote && r.lote !== '0' && r.cupon && r.cupon !== '0' && !usadosLiq.has(r)
+  );
+
+  const fueraPlazo      = liquidadas.filter(x => x.diasExtra !== null && x.diasExtra > 0);
+  const montoLiquidado  = liquidadas.reduce((s,x) => s + (x.liqRow?.monto || Math.abs(x.fila.sky?.monto||0)), 0);
+  const montoNoLiq      = noLiquidadas.reduce((s,x) => s + Math.abs(x.fila.sky?.monto||0), 0);
+  const montoExtras     = extras.reduce((s,r) => s + (r.monto||0), 0);
+  const montoFueraPlazo = fueraPlazo.reduce((s,x) => s + (x.liqRow?.monto||0), 0);
+
+  return {
+    liquidadas, noLiquidadas, sinConfirmar, extras, fueraPlazo,
+    montoLiquidado, montoNoLiq, montoExtras, montoFueraPlazo,
+    totalOK: liquidadas.length + noLiquidadas.length,
+    tieneLiq: true, tienePlazos: !!(TM?.plazos?.length),
+  };
 }

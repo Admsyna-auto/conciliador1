@@ -8,8 +8,8 @@ const APP_VERSION = '1.0.0';
 let PROCS_ENABLED = (function(){
   try {
     const saved = JSON.parse(localStorage.getItem('procs_enabled') || '{}');
-    return { FISERV: true, GETPOS: true, GOCUOTAS: false, ...saved };
-  } catch { return { FISERV: true, GETPOS: true, GOCUOTAS: false }; }
+    return { FISERV: true, GETPOS: true, GOCUOTAS: false, PRISMA: true, ...saved };
+  } catch { return { FISERV: true, GETPOS: true, GOCUOTAS: false, PRISMA: true }; }
 })();
 
 function toggleProc(id) {
@@ -38,7 +38,7 @@ const DB_NAME     = 'ConciliadorDB';
 const DB_VERSION  = 3;   // v3: added 'archivos' store (biblioteca de archivos)
 
 // ── Estado de archivos cargados
-const FILES = { sky: null, fis: null, gp: null, ter: null, enu: null, baj: null, liq: null };
+const FILES = { sky: null, fis: null, gp: null, ter: null, enu: null, baj: null, liq: null, pri: null };
 
 // ── Resultados de conciliación
 let RESULTADO   = [];   // filas conciliadas

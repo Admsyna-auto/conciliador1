@@ -1249,6 +1249,7 @@ tr.row-int td{background:rgba(52,211,153,.02)}
     <input type="file" id="i-ter"     accept=".xlsx,.xls" onchange="loadFile(this,'ter')">
     <input type="file" id="i-fis"     accept=".xlsx,.xls" onchange="loadFile(this,'fis')">
     <input type="file" id="i-gp"      accept=".xlsx,.xls" onchange="loadFile(this,'gp')">
+    <input type="file" id="i-pri"     accept=".csv,.txt"  onchange="loadPrisma(this)">
     <input type="file" id="i-liq"     accept=".xlsx,.xls" onchange="loadLiquidaciones(this)">
     <input type="file" id="i-goc-pag" accept=".csv,.txt"  onchange="loadGocPagos(this,'GOCUOTAS')">
     <input type="file" id="i-goc-cel" accept=".csv,.txt"  onchange="loadGocPagos(this,'GOCELULAR')">
@@ -1257,18 +1258,19 @@ tr.row-int td{background:rgba(52,211,153,.02)}
     <input type="file" id="i-ctr-gp"  accept=".xlsx,.xls" onchange="loadContracargos(this,'gp')">
     <!-- Status spans (actualizados por loadFile) -->
     <span id="st-sky"></span><span id="st-ter"></span><span id="st-fis"></span>
-    <span id="st-gp"></span><span id="st-liq"></span><span id="st-goc-pag"></span>
+    <span id="st-gp"></span><span id="st-pri"></span><span id="st-liq"></span><span id="st-goc-pag"></span>
     <span id="st-goc-cel"></span><span id="st-goc-ven"></span>
     <span id="st-ctr-fis"></span><span id="st-ctr-gp"></span>
     <!-- fc divs (classList.add('ok') por loadFile) -->
     <div id="fc-sky"></div><div id="fc-ter"></div><div id="fc-fis"></div>
-    <div id="fc-gp"></div><div id="fc-liq"></div><div id="fc-goc-pag"></div>
+    <div id="fc-gp"></div><div id="fc-pri"></div><div id="fc-liq"></div><div id="fc-goc-pag"></div>
     <div id="fc-goc-cel"></div><div id="fc-goc-ven"></div>
     <div id="fc-ctr-fis"></div><div id="fc-ctr-gp"></div>
     <!-- proc-group divs (usados por _initProcGroups / toggleProcUI) -->
     <div id="proc-grp-FISERV"   class="proc-group enabled"><div class="proc-dot"></div><span id="proc-chk-FISERV"></span></div>
     <div id="proc-grp-GETPOS"   class="proc-group enabled"><div class="proc-dot"></div><span id="proc-chk-GETPOS"></span></div>
     <div id="proc-grp-GOCUOTAS" class="proc-group enabled"><div class="proc-dot"></div><span id="proc-chk-GOCUOTAS"></span></div>
+    <div id="proc-grp-PRISMA"   class="proc-group enabled"><div class="proc-dot"></div><span id="proc-chk-PRISMA"></span></div>
   </div>
 
 
@@ -2115,18 +2117,18 @@ tr.row-int td{background:rgba(52,211,153,.02)}
 <!-- ══ SCRIPTS ═══════════════════════════════════════ -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
-<script src="js/state.js?v=20260618b"></script>
+<script src="js/state.js?v=20260618c"></script>
 <script src="js/biblioteca.js"></script>
 <script src="js/tablas-maestras.js?v=20260617c"></script>
 <script src="js/diferencias.js"></script>
-<script src="js/cobros.js?v=20260618b"></script>
-<script src="js/conciliador.js?v=20260618b"></script>
+<script src="js/cobros.js?v=20260618c"></script>
+<script src="js/conciliador.js?v=20260618c"></script>
 <script src="js/contracargos.js"></script>
 <script src="js/gocuotas.js"></script>
-<script src="js/procesadoras.js"></script>
-<script src="js/liquidaciones.js"></script>
-<script src="js/historico.js?v=20260618b"></script>
-<script src="js/ayuda.js?v=20260618b"></script>
+<script src="js/procesadoras.js?v=20260618c"></script>
+<script src="js/liquidaciones.js?v=20260618c"></script>
+<script src="js/historico.js?v=20260618c"></script>
+<script src="js/ayuda.js?v=20260618c"></script>
 <script src="js/dashboard.js?v=20260618a"></script>
 <script>
 

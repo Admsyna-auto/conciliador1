@@ -546,9 +546,10 @@ function renderModuloCobros() {
     if (!_liqCache.fiserv) _liqCache.fiserv = _cruzarLiqFiserv();
     if (!_liqCache.getpos) _liqCache.getpos = _cruzarLiqGetpos();
     if (!_liqCache.goc)    _liqCache.goc    = _cruzarLiqGoC();
+    if (!_liqCache.prisma) _liqCache.prisma = _cruzarLiqPrisma();
   }
 
-  const hayCache = _liqCache.fiserv || _liqCache.getpos || _liqCache.goc;
+  const hayCache = _liqCache.fiserv || _liqCache.getpos || _liqCache.goc || _liqCache.prisma;
   if (!hayCache) {
     cont.innerHTML = `<div class="cobros-empty">
       Cargá el archivo de <b style="color:var(--yel)">Liquidaciones</b> y ejecutá el cruce
@@ -561,11 +562,13 @@ function renderModuloCobros() {
     ...(_liqCache.fiserv?.noLiquidadas || []).map(x => ({ ...x, proc: 'FISERV' })),
     ...(_liqCache.getpos?.noLiquidadas || []).map(x => ({ ...x, proc: 'GETPOS' })),
     ...(_liqCache.goc?.noLiquidadas    || []).map(x => ({ ...x, proc: 'GoC'    })),
+    ...(_liqCache.prisma?.noLiquidadas || []).map(x => ({ ...x, proc: 'PRISMA' })),
   ];
   const extras = [
     ...(_liqCache.fiserv?.extras || []).map(r => ({ liqRow: r, proc: 'FISERV' })),
     ...(_liqCache.getpos?.extras || []).map(r => ({ liqRow: r, proc: 'GETPOS' })),
     ...(_liqCache.goc?.extras    || []).map(r => ({ liqRow: r, proc: 'GoC'    })),
+    ...(_liqCache.prisma?.extras || []).map(r => ({ liqRow: r, proc: 'PRISMA' })),
   ];
 
   const montoSinLiq = sinLiq.reduce((s, x) => s + Math.abs(x.fila?.sky?.monto || 0), 0);
@@ -601,6 +604,12 @@ function renderModuloCobros() {
         <div class="cob-kpi-n">${(_liqCache.getpos?.noLiquidadas?.length ?? '—').toLocaleString?.() ?? '—'}</div>
         <div class="cob-kpi-m">${_liqCache.getpos ? fmtARS(_liqCache.getpos.montoNoLiq||0) : '—'}</div>
         <div class="cob-kpi-pct">${_liqCache.getpos?.tieneLiq ? 'archivo cargado' : 'sin archivo liq'}</div>
+      </div>
+      <div class="cob-kpi" style="border-top:3px solid #06b6d4">
+        <div class="cob-kpi-lbl">PRISMA sin liquidar</div>
+        <div class="cob-kpi-n" style="color:#06b6d4">${(_liqCache.prisma?.noLiquidadas?.length ?? '—').toLocaleString?.() ?? '—'}</div>
+        <div class="cob-kpi-m" style="color:#06b6d4">${_liqCache.prisma ? fmtARS(_liqCache.prisma.montoNoLiq||0) : '—'}</div>
+        <div class="cob-kpi-pct">${_liqCache.prisma?.tieneLiq ? 'liq cargada' : 'sin liq Prisma'}</div>
       </div>
     </div>
 
