@@ -324,30 +324,80 @@ async function bibCrearLote() {
   }
 }
 
-// ── Subir archivos a un lote ─────────────────────────────────────────
-function bibAbrirUploadLote(periodoId, loteId) {
+// ── Subir archivos a un lote (+ gestión de existentes) ──────────────
+async function bibAbrirUploadLote(periodoId, loteId) {
   _PERIODO_ACTIVO_ID = periodoId;
   _LOTE_ACTIVO_ID    = loteId;
 
+  const archivosExistentes = await listarArchivosDeLote(loteId);
+
+  const listaHTML = archivosExistentes.length
+    ? archivosExistentes.map(a => {
+        const ti = _bibTipoInfo(a.tipo);
+        return `
+        <div id="bibarch-${a.id}" style="display:flex;align-items:center;gap:8px;
+          padding:5px 8px;background:var(--s3);border:1px solid var(--b1);
+          border-radius:5px;margin-bottom:4px">
+          <span style="font-size:8px;font-weight:700;color:${ti.color};
+            background:${ti.bg};border:1px solid ${ti.color}33;
+            border-radius:3px;padding:1px 6px;white-space:nowrap">${ti.badge}</span>
+          <span style="flex:1;font-size:9px;color:var(--m1);overflow:hidden;
+            text-overflow:ellipsis;white-space:nowrap" title="${a.nombre}">${a.nombre}</span>
+          <span style="font-size:8px;color:var(--m2);white-space:nowrap">${a.kb||0} KB</span>
+          <button onclick="bibEliminarArchivo('${a.id}','${periodoId}','${loteId}')"
+            style="background:none;border:1px solid var(--b2);border-radius:3px;
+              color:var(--m2);font-size:9px;padding:2px 7px;cursor:pointer;
+              transition:all .12s;white-space:nowrap"
+            onmouseover="this.style.borderColor='var(--red)';this.style.color='var(--red)'"
+            onmouseout="this.style.borderColor='var(--b2)';this.style.color='var(--m2)'">
+            ✕ Eliminar
+          </button>
+          <label style="background:none;border:1px solid var(--b2);border-radius:3px;
+              color:var(--m2);font-size:9px;padding:2px 7px;cursor:pointer;
+              transition:all .12s;white-space:nowrap;display:inline-block"
+            onmouseover="this.style.borderColor='var(--acc)';this.style.color='var(--acc)'"
+            onmouseout="this.style.borderColor='var(--b2)';this.style.color='var(--m2)'"
+            title="Reemplazar con otro archivo del mismo tipo">
+            ↺ Reemplazar
+            <input type="file" style="display:none" accept=".xlsx,.xls,.csv,.txt"
+              onchange="bibReemplazarArchivo(this,'${a.id}','${a.tipo}','${periodoId}','${loteId}')">
+          </label>
+        </div>`;
+      }).join('')
+    : `<div style="font-size:9px;color:var(--m2);padding:6px 0">Sin archivos guardados en este lote.</div>`;
+
+  const optsGrupos = (() => {
+    const grupos = [...new Set(_BIB_TIPOS.map(t => t.modulo))];
+    return grupos.map(grp => {
+      const items = _BIB_TIPOS.filter(t => t.modulo === grp);
+      return `<optgroup label="── ${grp} ──">${
+        items.map(t => `<option value="${t.id}">${t.label}</option>`).join('')
+      }</optgroup>`;
+    }).join('');
+  })();
+
   _bibShowForm(`
     <div class="bib-form-box">
-      <div class="bib-form-title">📎 Subir archivos al lote</div>
+      <div class="bib-form-title">📎 Archivos del lote</div>
       <input type="hidden" id="bib-upload-periodo" value="${periodoId}">
       <input type="hidden" id="bib-upload-lote"    value="${loteId}">
+
+      <!-- Archivos existentes -->
+      <div style="font-size:9px;font-weight:700;color:var(--m2);text-transform:uppercase;
+        letter-spacing:.05em;margin-bottom:6px">Archivos guardados</div>
+      <div id="bib-archivos-lista">${listaHTML}</div>
+
+      <div style="height:1px;background:var(--b1);margin:12px 0"></div>
+
+      <!-- Agregar nuevo -->
+      <div style="font-size:9px;font-weight:700;color:var(--m2);text-transform:uppercase;
+        letter-spacing:.05em;margin-bottom:8px">Agregar archivo</div>
       <div class="bib-form-row" style="flex-wrap:wrap">
         <div class="bib-field">
           <span class="bib-field-lbl">Tipo de archivo</span>
           <select class="bib-sel" id="bib-tipo">
             <option value="">— seleccionar —</option>
-            ${(() => {
-              const grupos = [...new Set(_BIB_TIPOS.map(t => t.modulo))];
-              return grupos.map(grp => {
-                const items = _BIB_TIPOS.filter(t => t.modulo === grp);
-                return `<optgroup label="── ${grp} ──">${
-                  items.map(t => `<option value="${t.id}">${t.label}</option>`).join('')
-                }</optgroup>`;
-              }).join('');
-            })()}
+            ${optsGrupos}
           </select>
         </div>
         <div class="bib-field" style="flex:2">
@@ -366,10 +416,44 @@ function bibAbrirUploadLote(periodoId, loteId) {
         <button class="bib-save-btn" id="bib-save-btn" onclick="guardarEnBiblioteca()">💾 Guardar archivo</button>
         <button class="bib-cancel-btn" onclick="bibCerrarForm()">Cerrar</button>
       </div>
-      <div style="font-size:8px;color:var(--m2);margin-top:6px">
-        Podés guardar varios archivos uno a uno para el mismo lote.
-      </div>
     </div>`);
+}
+
+// ── Eliminar un archivo individual del lote ──────────────────────────
+async function bibEliminarArchivo(archivoId, periodoId, loteId) {
+  const row = document.getElementById(`bibarch-${archivoId}`);
+  const nombre = row?.querySelector('span[title]')?.title || 'este archivo';
+  if (!confirm(`¿Eliminar "${nombre}" del lote?`)) return;
+  await eliminarArchivoBiblioteca(archivoId);
+  if (row) row.remove();
+  const lista = document.getElementById('bib-archivos-lista');
+  if (lista && !lista.querySelector('[id^=bibarch-]')) {
+    lista.innerHTML = `<div style="font-size:9px;color:var(--m2);padding:6px 0">Sin archivos guardados en este lote.</div>`;
+  }
+  await _renderBiblioteca();
+  await _actualizarBadgeBiblioteca();
+  if (typeof _showToast === 'function') _showToast('✓ Archivo eliminado');
+}
+
+// ── Reemplazar un archivo existente (eliminar + guardar nuevo) ────────
+async function bibReemplazarArchivo(input, archivoId, tipo, periodoId, loteId) {
+  const file = input.files?.[0]; if (!file) return;
+  const btn = input.parentElement;
+  const origText = btn.childNodes[0]?.textContent || '';
+  btn.style.opacity = '0.5';
+  try {
+    await eliminarArchivoBiblioteca(archivoId);
+    const bytes = await file.arrayBuffer();
+    await guardarArchivoBiblioteca({ tipo, periodoId, loteId, nombre: file.name, bytes });
+    if (typeof _showToast === 'function') _showToast(`✓ "${file.name}" reemplazado`);
+    // Refrescar el panel de archivos
+    await bibAbrirUploadLote(periodoId, loteId);
+    await _renderBiblioteca();
+    await _actualizarBadgeBiblioteca();
+  } catch(e) {
+    _bibAlert('Error al reemplazar: ' + e.message);
+    btn.style.opacity = '1';
+  }
 }
 
 // ── Guardar archivo vinculado al lote activo ─────────────────────────
