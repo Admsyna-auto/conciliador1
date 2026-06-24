@@ -19,8 +19,15 @@ let _GOC_LIQ_CELULAR= [];   // Go Celular CSV de LIQUIDACIONES
 function _gFmt(v)  { return typeof fmtARS === 'function' ? fmtARS(v) : '$'+v; }
 function _gNorm(v) { return String(v||'').trim().replace(/^0+/, '') || '0'; }
 function _gParseMonto(s) {
-  const clean = String(s||'0').replace(/\$/g,'').replace(/\s/g,'')
-    .replace(/\./g,'').replace(',','.').trim();
+  if (typeof s === 'number') return Math.abs(s);
+  let clean = String(s||'0').replace(/\$/g,'').replace(/\s/g,'').trim();
+  // AR: "1.234,56" → coma decimal
+  if (/^-?[\d.]+,\d{1,2}$/.test(clean)) {
+    clean = clean.replace(/\./g,'').replace(',','.');
+  } else {
+    // US: "1,234.56" o "1234.56" → punto decimal
+    clean = clean.replace(/,/g,'');
+  }
   return Math.abs(parseFloat(clean)||0);
 }
 
