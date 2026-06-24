@@ -510,13 +510,14 @@ async function bibCargarLote(periodoId, loteId) {
     _bibLimpiarUI();
   }
 
-  // Cargar archivos del lote en FILES (para poder re-conciliar)
+  // Cargar archivos del lote en FILES — await para garantizar que todos
+  // estén en memoria antes de que el usuario pueda ejecutar el cruce
   const archivos = await listarArchivosDeLote(loteId);
   let cargados = 0;
   for (const rec of archivos) {
     try {
       const loader = _bibMakeLoader(rec);
-      if (loader) { loader(); cargados++; }
+      if (loader) { await loader(); cargados++; }
     } catch(e) { console.warn('Error cargando archivo del lote:', rec.nombre, e); }
   }
 
