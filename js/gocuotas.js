@@ -221,7 +221,15 @@ function parseGocPagos(file, fuente) {
           const wb = XLSX.read(e.target.result, { type:'array', cellDates:false, raw:false });
           const ws = wb.Sheets[wb.SheetNames[0]];
           const jsonRows = XLSX.utils.sheet_to_json(ws, { defval:'', raw:false });
+          if (jsonRows.length > 0) {
+            const s0 = jsonRows[0];
+            const impKey = Object.keys(s0).find(k => /importe/i.test(k));
+            const ordKey = Object.keys(s0).find(k => /orden/i.test(k));
+            console.log(`[GOC-XLSX] Columnas detectadas: ${Object.keys(s0).join(' | ')}`);
+            console.log(`[GOC-XLSX] Fila[0] Orden=${s0[ordKey]} (${typeof s0[ordKey]}) Importe=${s0[impKey]} (${typeof s0[impKey]})`);
+          }
           const rows = _gocPagosMapRows(jsonRows);
+          if (rows.length > 0) console.log(`[GOC-XLSX] Parsed rows[0]:`, JSON.stringify(rows[0]));
           if (fuente === 'GOCELULAR') { _GOC_CELULAR = rows; console.log('[GOC-CELULAR] Parseados:', rows.length); }
           else                        { _GOC_PAGOS   = rows; console.log('[GOC-PAGOS] Parseados:', rows.length); }
           res(rows);
