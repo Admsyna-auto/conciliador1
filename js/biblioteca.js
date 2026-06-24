@@ -12,13 +12,13 @@ const _BIB_TIPOS = [
   { id:'FISERV_CTR',  label:'FISERV Contracargos',              modulo:'OPERACIONES', accept:'.xlsx,.xls', badge:'FC',  bg:'#0f1e44', color:'#f87171' },
   { id:'GETPOS',      label:'GETPOS Operaciones',               modulo:'OPERACIONES', accept:'.xlsx,.xls', badge:'GP',  bg:'#0f2d20', color:'#34d399' },
   { id:'GETPOS_CTR',  label:'GETPOS Contracargos',              modulo:'OPERACIONES', accept:'.xlsx,.xls', badge:'GC',  bg:'#0f2d20', color:'#f87171' },
-  { id:'GOC_PAGOS',   label:'Go Cuotas CSV',                    modulo:'OPERACIONES', accept:'.csv,.txt',  badge:'GQ',  bg:'#0f2d20', color:'#4ade80' },
-  { id:'GOC_CELULAR', label:'Go Celular CSV',                   modulo:'OPERACIONES', accept:'.csv,.txt',  badge:'GK',  bg:'#1a1040', color:'#a78bfa' },
-  { id:'GOC_VENTAS',  label:'GoC Ventas (IMEI)',                modulo:'OPERACIONES', accept:'.xlsx,.xls', badge:'GV',  bg:'#1a1f10', color:'#fbbf24' },
+  { id:'GOC_PAGOS',   label:'Go Cuotas Operaciones',             modulo:'OPERACIONES', accept:'.xlsx,.xls,.csv,.txt', badge:'GQ',  bg:'#0f2d20', color:'#4ade80' },
+  { id:'GOC_CELULAR', label:'Go Celular Operaciones',            modulo:'OPERACIONES', accept:'.xlsx,.xls,.csv,.txt', badge:'GK',  bg:'#1a1040', color:'#a78bfa' },
+  { id:'GOC_VENTAS',  label:'GoC Ventas (IMEI)',                 modulo:'OPERACIONES', accept:'.xlsx,.xls',          badge:'GV',  bg:'#1a1f10', color:'#fbbf24' },
   // ── LIQUIDACIONES: cruce ops confirmadas vs pagos de procesadora ─
-  { id:'LIQUIDACION',     label:'Cupones Liquidados (FISERV+GETPOS)', modulo:'LIQUIDACIONES', accept:'.xlsx,.xls', badge:'LIQ', bg:'#291000', color:'#fb923c' },
-  { id:'GOC_LIQ_PAGOS',  label:'Go Cuotas Liquidación CSV',           modulo:'LIQUIDACIONES', accept:'.csv,.txt',  badge:'GQL', bg:'#0a2018', color:'#4ade80' },
-  { id:'GOC_LIQ_CELULAR',label:'Go Celular Liquidación CSV',           modulo:'LIQUIDACIONES', accept:'.csv,.txt',  badge:'GCL', bg:'#130a30', color:'#a78bfa' },
+  { id:'LIQUIDACION',     label:'Cupones Liquidados (FISERV+GETPOS)', modulo:'LIQUIDACIONES', accept:'.xlsx,.xls',          badge:'LIQ', bg:'#291000', color:'#fb923c' },
+  { id:'GOC_LIQ_PAGOS',  label:'Go Cuotas Liquidación',               modulo:'LIQUIDACIONES', accept:'.xlsx,.xls,.csv,.txt', badge:'GQL', bg:'#0a2018', color:'#4ade80' },
+  { id:'GOC_LIQ_CELULAR',label:'Go Celular Liquidación',               modulo:'LIQUIDACIONES', accept:'.xlsx,.xls,.csv,.txt', badge:'GCL', bg:'#130a30', color:'#a78bfa' },
 ];
 
 // ── Loader: convierte un registro de la biblioteca en función de carga ─
