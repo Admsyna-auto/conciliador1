@@ -154,84 +154,98 @@ function parseGocSkylab(wb) {
 // fuente: 'GOCUOTAS' (estándar) | 'GOCELULAR' (Go Celular)
 function parseGocPagos(file, fuente) {
   fuente = fuente || 'GOCUOTAS';
+  const isXlsx = /\.(xlsx|xls)$/i.test(file.name);
+
+  // Función compartida: convierte filas (array de objetos) al formato interno
+  function _gocPagosMapRows(jsonRows) {
+    const fi = (obj, names) => {
+      const keys = Object.keys(obj);
+      for (const n of names) {
+        const k = keys.find(k => _normColName(k) === _normColName(n));
+        if (k !== undefined) return k;
+      }
+      return null;
+    };
+    if (!jsonRows.length) return [];
+    const sample = jsonRows[0];
+    const K = {
+      tipo:        fi(sample, ['Descripcion','Descripción','Tipo']),
+      fechaOrigen: fi(sample, ['Fecha Origen','Fecha']),
+      fechaPago:   fi(sample, ['Fecha Pago']),
+      orden:       fi(sample, ['Número de Orden','Numero de Orden','NroOrden','Orden']),
+      nombre:      fi(sample, ['ApellidoNombre','Nombre']),
+      cuotas:      fi(sample, ['Cuotas']),
+      importe:     fi(sample, ['Importe',' Importe ']),
+      totalCobrar: fi(sample, ['Total a cobrar',' Total a cobrar ']),
+      sucId:       fi(sample, ['Sucursal ID']),
+      sucNombre:   fi(sample, ['Sucursal Nombre']),
+      refExt:      fi(sample, ['Referencia Externa']),
+    };
+    console.log(`[GOC-${fuente}] Claves:`, K);
+    return jsonRows.map((r, i) => {
+      const g = k => k ? (r[k] ?? '') : '';
+      const tipo = String(g(K.tipo)).toLowerCase();
+      if (tipo.includes('total') || tipo.includes('subtotal')) return null;
+      return {
+        idx:         i,
+        tipo:        g(K.tipo),
+        fechaOrigen: _parseFechaGoC(String(g(K.fechaOrigen))),
+        fechaPago:   _parseFechaGoC(String(g(K.fechaPago))),
+        orden:       _gNorm(String(g(K.orden))),
+        nombre:      String(g(K.nombre)),
+        cuotas:      parseInt(g(K.cuotas)) || 0,
+        importe:     _gParseMonto(String(g(K.importe))),
+        totalCobrar: _gParseMonto(String(g(K.totalCobrar))),
+        sucId:       String(g(K.sucId)),
+        sucNombre:   String(g(K.sucNombre)),
+        refExt:      String(g(K.refExt)),
+        fuente,
+      };
+    }).filter(Boolean).filter(r => r.importe > 0 || r.orden !== '0');
+  }
+
   return new Promise((res, rej) => {
     const reader = new FileReader();
-    reader.onload = e => {
-      try {
-        // Quitar BOM (UTF-8 con BOM frecuente en Windows) y normalizar saltos
-        const text  = e.target.result.replace(/^﻿/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-        const lines = text.split('\n').filter(l => l.trim());
-        if (lines.length < 2) {
-          if (fuente === 'GOCELULAR') _GOC_CELULAR = []; else _GOC_PAGOS = [];
-          res([]); return;
-        }
+    reader.onerror = () => rej(new Error('Error leyendo archivo'));
 
-        // Detectar separador: ; o ,
-        const sep = lines[0].includes(';') ? ';' : ',';
-        const hdrRaw = lines[0].split(sep).map(h => h.trim().replace(/^"|"$/g,''));
-        console.log(`[GOC-${fuente}] Separador='${sep}' Columnas:`, hdrRaw);
-
-        // Mapeo flexible de columnas
-        const fi = (names) => {
-          for (const n of names) {
-            const idx = hdrRaw.findIndex(h => _normColName(h) === _normColName(n));
-            if (idx >= 0) return idx;
+    if (isXlsx) {
+      reader.onload = e => {
+        try {
+          const wb = XLSX.read(e.target.result, { type:'array', cellDates:false, raw:false });
+          const ws = wb.Sheets[wb.SheetNames[0]];
+          const jsonRows = XLSX.utils.sheet_to_json(ws, { defval:'', raw:false });
+          const rows = _gocPagosMapRows(jsonRows);
+          if (fuente === 'GOCELULAR') { _GOC_CELULAR = rows; console.log('[GOC-CELULAR] Parseados:', rows.length); }
+          else                        { _GOC_PAGOS   = rows; console.log('[GOC-PAGOS] Parseados:', rows.length); }
+          res(rows);
+        } catch(err) { console.error(`[GOC-${fuente}] Error XLSX:`, err); rej(err); }
+      };
+      reader.readAsArrayBuffer(file);
+    } else {
+      reader.onload = e => {
+        try {
+          const text  = e.target.result.replace(/^﻿/, '').replace(/\r\n/g,'\n').replace(/\r/g,'\n');
+          const lines = text.split('\n').filter(l => l.trim());
+          if (lines.length < 2) {
+            if (fuente === 'GOCELULAR') _GOC_CELULAR = []; else _GOC_PAGOS = [];
+            res([]); return;
           }
-          return -1;
-        };
-
-        const IDX = {
-          tipo:        fi(['Descripcion','Tipo']),
-          fechaOrigen: fi(['Fecha Origen','Fecha']),
-          fechaPago:   fi(['Fecha Pago']),
-          orden:       fi(['Número de Orden','Numero de Orden','NroOrden','Orden']),
-          nombre:      fi(['ApellidoNombre','Nombre']),
-          cuotas:      fi(['Cuotas']),
-          importe:     fi(['Importe',' Importe ']),
-          totalCobrar: fi(['Total a cobrar',' Total a cobrar ']),
-          sucId:       fi(['Sucursal ID']),
-          sucNombre:   fi(['Sucursal Nombre']),
-          refExt:      fi(['Referencia Externa']),
-        };
-        console.log('[GOC-PAGOS] Índices columnas:', IDX);
-
-        const rows = lines.slice(1).map((line, i) => {
-          const cols = line.split(sep).map(c => c.trim().replace(/^"|"$/g,''));
-          const g = (key) => IDX[key] >= 0 ? cols[IDX[key]] : '';
-          const tipo = g('tipo').toLowerCase();
-          if (tipo.includes('total') || tipo.includes('subtotal')) return null;
-          return {
-            idx:         i,
-            tipo:        g('tipo'),
-            fechaOrigen: _parseFechaGoC(g('fechaOrigen')),
-            fechaPago:   _parseFechaGoC(g('fechaPago')),
-            orden:       _gNorm(g('orden')),
-            nombre:      g('nombre'),
-            cuotas:      parseInt(g('cuotas'))||0,
-            importe:     _gParseMonto(g('importe')),
-            totalCobrar: _gParseMonto(g('totalCobrar')),
-            sucId:       g('sucId'),
-            sucNombre:   g('sucNombre'),
-            refExt:      g('refExt'),
-            fuente,
-          };
-        }).filter(Boolean).filter(r => r.importe > 0 || r.orden !== '0');
-
-        if (fuente === 'GOCELULAR') {
-          _GOC_CELULAR = rows;
-          console.log('[GOC-CELULAR] Parseados:', _GOC_CELULAR.length);
-        } else {
-          _GOC_PAGOS = rows;
-          console.log('[GOC-PAGOS] Parseados:', _GOC_PAGOS.length);
-        }
-        res(rows);
-      } catch(err) {
-        console.error(`[GOC-${fuente}] Error parseando CSV:`, err.message, err.stack);
-        rej(err);
-      }
-    };
-    reader.onerror = () => rej(new Error('Error leyendo CSV'));
-    reader.readAsText(file, 'utf-8');
+          const sep    = lines[0].includes(';') ? ';' : ',';
+          const hdrRaw = lines[0].split(sep).map(h => h.trim().replace(/^"|"$/g,''));
+          const jsonRows = lines.slice(1).map(line => {
+            const cols = line.split(sep).map(c => c.trim().replace(/^"|"$/g,''));
+            const obj = {};
+            hdrRaw.forEach((h, i) => { obj[h] = cols[i] ?? ''; });
+            return obj;
+          });
+          const rows = _gocPagosMapRows(jsonRows);
+          if (fuente === 'GOCELULAR') { _GOC_CELULAR = rows; console.log('[GOC-CELULAR] Parseados:', rows.length); }
+          else                        { _GOC_PAGOS   = rows; console.log('[GOC-PAGOS] Parseados:', rows.length); }
+          res(rows);
+        } catch(err) { console.error(`[GOC-${fuente}] Error CSV:`, err); rej(err); }
+      };
+      reader.readAsText(file, 'utf-8');
+    }
   });
 }
 
