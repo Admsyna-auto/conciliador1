@@ -1898,22 +1898,19 @@ async function loadGocPagos(input, fuente) {
   } catch(err) { if (st) { st.textContent = '✗ Error'; st.className = 'fc-st'; } console.error(err); }
 }
 
-// Carga GoC para LIQUIDACIONES — no pisa los arrays de OPERACIONES
+// Carga GoC para LIQUIDACIONES — también llena los arrays de OPERACIONES
 async function loadGocPagosLiq(input, fuente) {
   fuente = fuente || 'GOCUOTAS';
   const file = input.files[0]; if (!file) return;
-  // Guarda estado actual de OPERACIONES para restaurar después
-  const savedPagos   = _GOC_PAGOS.slice();
-  const savedCelular = _GOC_CELULAR.slice();
   try {
     const rows = await parseGocPagos(file, fuente);
-    // parseGocPagos escribió en _GOC_PAGOS/_GOC_CELULAR — captura en LIQ y restaura
+    // Poblar tanto liq como operaciones (mismo archivo, doble uso)
     if (fuente === 'GOCELULAR') {
       _GOC_LIQ_CELULAR = rows;
-      _GOC_CELULAR = savedCelular;
+      _GOC_CELULAR     = rows;
     } else {
       _GOC_LIQ_PAGOS = rows;
-      _GOC_PAGOS = savedPagos;
+      _GOC_PAGOS     = rows;
     }
     const label = fuente === 'GOCELULAR' ? 'Go Celular Liq' : 'Go Cuotas Liq';
     typeof _showToast === 'function'
